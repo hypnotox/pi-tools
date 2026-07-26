@@ -1,0 +1,21 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Logs and local environment
+*.log
+.env
+.env.*
+!.env.example
+
+# Pi's project-local package cache
+.pi/git/
+.pi/npm/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
