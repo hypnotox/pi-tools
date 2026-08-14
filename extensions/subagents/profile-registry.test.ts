@@ -22,7 +22,10 @@ const profile = (id: string, toolName = id): ProfileDefinition => ({
 describe("ProfileRegistry", () => {
   it("uses the default through the same registry and suppresses it atomically", () => {
     const registry = new ProfileRegistry(profile("default", "subagent"));
-    registry.register({ profiles: [profile("review")], suppressDefault: true });
+    const receipt = registry.collect({ profiles: [profile("review")], suppressDefault: true });
+    expect(receipt.state).toBe("pending");
+    registry.finalize();
+    expect(receipt.state).toBe("registered");
     expect(registry.profiles().map((entry) => entry.toolName)).toEqual(["review"]);
     expect(registry.profileTools()).toEqual(new Set(["subagent", "review"]));
   });
@@ -40,11 +43,21 @@ describe("ProfileRegistry", () => {
 
   it("rejects collisions with a visible default but permits atomic replacement", () => {
     const registry = new ProfileRegistry(profile("default", "subagent"));
-    expect(() => registry.register({ profiles: [profile("other", "subagent")] })).toThrow(
-      "Duplicate profile tool",
-    );
-    registry.register({ profiles: [profile("other", "subagent")], suppressDefault: true });
-    expect(registry.profiles().map((entry) => entry.id)).toEqual(["other"]);
+    const rejected = registry.collect({ profiles: [profile("other", "subagent")] });
+    registry.finalize();
+    expect(rejected).toMatchObject({
+      state: "rejected",
+      reason: "Profile tool collision: subagent",
+    });
+
+    const replacement = new ProfileRegistry(profile("default", "subagent"));
+    const receipt = replacement.collect({
+      profiles: [profile("other", "subagent")],
+      suppressDefault: true,
+    });
+    replacement.finalize();
+    expect(receipt.state).toBe("registered");
+    expect(replacement.profiles().map((entry) => entry.id)).toEqual(["other"]);
   });
 
   it("rejects malformed batches, callbacks, and concurrency before mutation", () => {

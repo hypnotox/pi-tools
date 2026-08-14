@@ -21,16 +21,35 @@ type Handler = (event: unknown, context: unknown) => unknown;
 function fakePi() {
   const tools: RegisteredTool[] = [];
   const handlers = new Map<string, Handler[]>();
+  const eventHandlers = new Map<string, Array<(data: unknown) => void>>();
   const api = {
     registerTool: (tool: RegisteredTool) => tools.push(tool),
-    getActiveTools: () => ["read", "subagent"],
+    getActiveTools: () => ["read"],
     on: (event: string, handler: Handler) => {
       const existing = handlers.get(event) ?? [];
       existing.push(handler);
       handlers.set(event, existing);
+      if (event === "session_start") handler({}, context());
+    },
+    events: {
+      on: (event: string, handler: (data: unknown) => void) => {
+        const existing = eventHandlers.get(event) ?? [];
+        existing.push(handler);
+        eventHandlers.set(event, existing);
+        return () => undefined;
+      },
+      emit: (event: string, data: unknown) => {
+        eventHandlers.get(event)?.forEach((handler) => {
+          handler(data);
+        });
+      },
     },
   };
-  return { api: api as unknown as ExtensionAPI, tools, handlers };
+  const start = () =>
+    handlers.get("session_start")?.forEach((handler) => {
+      handler({}, context());
+    });
+  return { api: api as unknown as ExtensionAPI, tools, handlers, start };
 }
 
 const runtimeModel = {

@@ -4,6 +4,11 @@
   "private": true,
   "description": "Personal extensions, skills, prompts, and themes for pi.",
   "type": "module",
+  "exports": {
+    "./subagent-profile": {
+      "types": "./extensions/subagents/api.ts"
+    }
+  },
   "keywords": [
     "pi-package"
   ],

@@ -1,3 +1,11 @@
 This topic records the active runtime and public integration contracts for the subagent toolkit.
 
 ## Claims
+
+### `rule: profile-runtime`
+
+The subagent toolkit provides one typed Pi tool per profile. Its built-in serialized, sibling-exclusive `subagent` profile remains visible unless a successfully finalized consumer batch suppresses it. Independently installed extensions negotiate protocol version 1 through the Pi event bus, correlate capability replies, and submit syntactically valid atomic profile batches during factory initialization; the toolkit freezes those batches at `session_start` against the complete existing tool snapshot. Invalid, colliding, duplicate, missing, incompatible, or late registration leaves a deterministic safe surface, and consumers provide dependencies and incompatibility policy.
+
+Profiles own their argument/result schemas, concrete model and requested-thinking callbacks, per-invocation CWD preparation, tool policy, and lifecycle state. The toolkit validates their outputs, runs a fresh Pi child with normal extension loading but no automatic context files or skills, propagates temporary trust only within the trusted parent tree, removes every known profile tool from child selection, and never activates profile tools in a marked child runtime. It persists only bounded final execution facts and schema-valid bounded JSON profile data, renders them without exposing that data to the model, and reports retry state from child Pi events without retrying a subprocess.
+
+Origin: ADR-subagent-profile-toolkit

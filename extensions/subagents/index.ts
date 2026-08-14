@@ -14,7 +14,13 @@ import {
   MAX_PROFILE_DATA_BYTES,
   PostRunResultSchema,
   PreparedRunSchema,
+  type ProfileCapabilityRequest,
   type ProfileDefinition,
+  type ProfileRegistration,
+  type ProfileRegistrationReceipt,
+  SUBAGENT_PROFILE_CAPABILITY_EVENT,
+  SUBAGENT_PROFILE_PROTOCOL_VERSION,
+  SUBAGENT_PROFILE_REQUEST_EVENT,
   type ThinkingLevel,
 } from "./api.js";
 import { ProfileRegistry } from "./profile-registry.js";
@@ -177,7 +183,37 @@ export function createSubagentToolkit(
   if (dependencies.profiles?.length)
     registry.register({ profiles: dependencies.profiles, suppressDefault: true });
 
-  // Child instances load providers and other extensions normally, but never expose toolkit tools.
+  // The bus is deliberately the only runtime bridge: package types never imply a shared module root.
+  const receipts = new WeakMap<object, ProfileRegistrationReceipt>();
+  const register = (batch: ProfileRegistration): ProfileRegistrationReceipt => {
+    if (typeof batch !== "object" || batch === null) return registry.collect(batch);
+    const known = receipts.get(batch);
+    if (known) return known;
+    const receipt = registry.collect(batch);
+    receipts.set(batch, receipt);
+    return receipt;
+  };
+  const events = pi.events;
+  events?.on(SUBAGENT_PROFILE_REQUEST_EVENT, (data) => {
+    const request = data as Partial<ProfileCapabilityRequest>;
+    if (
+      request.protocolVersion !== SUBAGENT_PROFILE_PROTOCOL_VERSION ||
+      typeof request.correlationId !== "string"
+    )
+      return;
+    events.emit(SUBAGENT_PROFILE_CAPABILITY_EVENT, {
+      protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
+      correlationId: request.correlationId,
+      register,
+    });
+  });
+  events?.emit(SUBAGENT_PROFILE_REQUEST_EVENT, {
+    protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
+    correlationId: `subagent-toolkit:${Date.now()}:${Math.random()}`,
+  } satisfies ProfileCapabilityRequest);
+
+  // Child instances still collect profile names through the handshake, so their inherited tool policy
+  // removes them, but never finalize or expose delegation tools.
   if (process.env[CHILD_MARKER] === "1") return;
 
   const scheduler = new ProfileScheduler();
@@ -360,29 +396,33 @@ export function createSubagentToolkit(
     }
   };
 
-  for (const profile of registry.profiles()) {
-    pi.registerTool({
-      name: profile.toolName,
-      label: profile.label,
-      description: profile.description,
-      parameters: profile.parameters,
-      execute: async (_id, params, signal, onUpdate, ctx) =>
-        executeProfile(profile, params, signal, onUpdate, ctx),
-      renderResult: (result, options, theme) =>
-        renderExecution(
-          Value.Check(ExecutionDetailsSchema, result.details) ? result.details : undefined,
-          options.expanded,
-          theme,
-        ),
-    });
-  }
-
-  const exclusiveTools = new Set(
-    registry
-      .profiles()
-      .filter((profile) => profile.exclusiveParentBatch)
-      .map((profile) => profile.toolName),
-  );
+  let exclusiveTools = new Set<string>();
+  pi.on("session_start", (_event, ctx) => {
+    // This is the only registration point: Pi's complete pre-existing tool snapshot makes
+    // collision decisions deterministic for the session.
+    const profiles = registry.finalize(pi.getActiveTools());
+    for (const profile of profiles) {
+      pi.registerTool({
+        name: profile.toolName,
+        label: profile.label,
+        description: profile.description,
+        parameters: profile.parameters,
+        execute: async (_id, params, signal, onUpdate, toolContext) =>
+          executeProfile(profile, params, signal, onUpdate, toolContext),
+        renderResult: (result, options, theme) =>
+          renderExecution(
+            Value.Check(ExecutionDetailsSchema, result.details) ? result.details : undefined,
+            options.expanded,
+            theme,
+          ),
+      });
+    }
+    exclusiveTools = new Set(
+      profiles.filter((profile) => profile.exclusiveParentBatch).map((profile) => profile.toolName),
+    );
+    // Keep ctx referenced so Pi's event contract remains explicit at this lifecycle boundary.
+    void ctx;
+  });
   pi.on("tool_call", (event, ctx) => {
     try {
       scheduler.validateExclusiveSiblingBatch(

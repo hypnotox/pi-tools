@@ -493,7 +493,7 @@
       "templateId": "",
       "templateHash": "",
       "configHash": "sha256:619a4dec6900da1feb21570a9a316b719f4802bf7686ce13e6cd6114d391b3e6",
-      "outputHash": "sha256:b5d0da14c04f6b1765155c06109d80f6eef9c53a66e2add7c6b26e90026e08e7",
+      "outputHash": "sha256:129bd757435759b09725f97e4def55c46830ad4c5493d7c956bddf027b151fda",
       "regenChecked": true
     },
     "docs/decisions/README.md": {
@@ -572,8 +572,8 @@
     "docs/testing.md": {
       "templateId": "docs/testing.md.tmpl",
       "templateHash": "sha256:a57a68e1550ff6762ec8021fb14948cf40b221bc228459e70af8e8be4ea16c51",
-      "configHash": "sha256:26a09e67ef7788967c1809d5480446931cf878df63379e8a5398eae81bff9569",
-      "outputHash": "sha256:6551a5a5f87d6ffef13c45c5b238a3bf20b412165fe15a7af0514c26daa5222b"
+      "configHash": "sha256:4140e1d6380d56c712a817b6be5d88aab14e79e97554afea99b06aedf641a102",
+      "outputHash": "sha256:f0665bf28e5370f442efd1b5adf36fcf8ed4443e9578aa28ee9eb9d294fb4591"
     },
     "docs/topics/development/extension-toolchain.md": {
       "templateId": "topics/topic.md.tmpl",
@@ -590,8 +590,8 @@
     "docs/topics/development/subagent-toolkit.md": {
       "templateId": "topics/topic.md.tmpl",
       "templateHash": "sha256:25b4ec23c7a22667f9d78b1e5883af8702d82f67896c3a42ac0ad19032d7c7bb",
-      "configHash": "sha256:b45882e2d6d2856d68962e86da5f0e621921c07c9d5a92f137e985d3ff026dbe",
-      "outputHash": "sha256:7d0d0cd94c40d382d9e0f163bf5ba32486e8bfc66df027a5b30b8281e49d7077"
+      "configHash": "sha256:3b328208c31be66f3e49a559292966d49ef514ec8cea4a310fce553d851d5282",
+      "outputHash": "sha256:2806af06509a75b89d266538977ee30a24e6e72797eaaa99167162b59ddf7be3"
     },
     "docs/workflow.md": {
       "templateId": "docs/workflow.md.tmpl",

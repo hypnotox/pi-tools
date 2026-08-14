@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-- [ADR-subagent-profile-toolkit: Subagent Profile Toolkit](subagent-profile-toolkit.md) (Accepted)
+- [ADR-subagent-profile-toolkit: Subagent Profile Toolkit](subagent-profile-toolkit.md) (Implementing)
 
 ## History
 

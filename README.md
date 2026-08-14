@@ -23,6 +23,23 @@ Each call runs a fresh Pi child with a minimal task prompt, the selected CWD/mod
 
 The child owns transient request retries; the toolkit never retries a whole process. Reports, failures, and retained stderr are limited to 16 KiB of UTF-8 text. Activity retains 32 entries of 1 KiB each and reports the omitted count; malformed JSONL is ignored and a line over 1 MiB is discarded without corrupting later events. Persisted profile data must be finite, acyclic JSON matching the profile schema and is limited to 16 KiB after serialization. Final execution details persist for TUI rendering while profile data remains out of model-visible content unless a profile deliberately transforms its final report. Run `/reload` after updating the toolkit.
 
+### Profile integration
+
+An extension that wants a purpose-specific delegation surface imports **types only** from `pi-tools/subagent-profile`; it does not import toolkit runtime code. At factory initialization it listens for `pi-tools:subagent-profiles:capability`, emits a `pi-tools:subagent-profiles:request` containing a unique correlation id and protocol version `1`, and accepts only a matching capability reply. The capability's `register()` queues one atomic profile batch:
+
+```ts
+import type { ProfileDefinition, ProfileRegistration } from "pi-tools/subagent-profile";
+
+const registration: ProfileRegistration = {
+  suppressDefault: true,
+  profiles: [reviewProfile satisfies ProfileDefinition],
+};
+// On a matching version and correlation id:
+// capability.register(registration);
+```
+
+Both sides may listen before requesting, so either extension load order works. Registration receipts are initially `pending` and become `registered` or `rejected` when `session_start` freezes the complete tool snapshot. A successful batch alone suppresses `subagent`; invalid, colliding, replayed, or late batches leave a deterministic safe surface. Profiles own model/thinking selection, preparation, lifecycle hooks, and bounded JSON result data; consumers own dependency provisioning and their policy for missing or incompatible capabilities.
+
 ## Layout
 
 - `extensions/` - TypeScript extensions

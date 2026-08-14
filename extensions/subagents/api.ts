@@ -30,7 +30,6 @@ export type JsonValue =
   | null
   | JsonValue[]
   | { [key: string]: JsonValue };
-// Nested JSON validity is enforced by the cycle-safe validator before persistence.
 export const JsonValueSchema = Type.Union([
   Type.Null(),
   Type.Boolean(),
@@ -85,7 +84,6 @@ export const ExecutionUsageSchema = Type.Object(
   { additionalProperties: false },
 );
 export type ExecutionUsage = Static<typeof ExecutionUsageSchema>;
-
 export const ExecutionActivitySchema = Type.Object(
   {
     kind: Type.Union([
@@ -100,7 +98,6 @@ export const ExecutionActivitySchema = Type.Object(
   { additionalProperties: false },
 );
 export type ExecutionActivity = Static<typeof ExecutionActivitySchema>;
-
 export interface ExecutionOutcome {
   state: "running" | "completed" | "failed" | "cancelled";
   report?: string;
@@ -123,12 +120,8 @@ export interface ProfileContext<TArgs> {
   };
   signal: AbortSignal;
 }
-
 export const PostRunResultSchema = Type.Object(
-  {
-    report: Type.Optional(Type.String()),
-    profileData: Type.Optional(JsonValueSchema),
-  },
+  { report: Type.Optional(Type.String()), profileData: Type.Optional(JsonValueSchema) },
   { additionalProperties: false },
 );
 export interface PostRunResult<TProfileData extends JsonValue = JsonValue> {
@@ -166,6 +159,25 @@ export interface ProfileRegistration {
   profiles: ProfileDefinition[];
   suppressDefault?: boolean;
 }
+export type ProfileRegistrationState = "pending" | "registered" | "rejected" | "late";
+export interface ProfileRegistrationReceipt {
+  state: ProfileRegistrationState;
+  reason?: string;
+}
+
+/** Stable event-bus protocol. Consumers import these types only; runtime integration uses pi.events. */
+export const SUBAGENT_PROFILE_PROTOCOL_VERSION = 1;
+export const SUBAGENT_PROFILE_REQUEST_EVENT = "pi-tools:subagent-profiles:request";
+export const SUBAGENT_PROFILE_CAPABILITY_EVENT = "pi-tools:subagent-profiles:capability";
+export interface ProfileCapabilityRequest {
+  protocolVersion: number;
+  correlationId: string;
+}
+export interface ProfileCapability {
+  protocolVersion: number;
+  correlationId: string;
+  register(batch: ProfileRegistration): ProfileRegistrationReceipt;
+}
 
 export const ExecutionDetailsSchema = Type.Object(
   {
@@ -193,6 +205,5 @@ export const ExecutionDetailsSchema = Type.Object(
   { additionalProperties: false },
 );
 export type ExecutionDetails = Static<typeof ExecutionDetailsSchema>;
-
 export const CHILD_MARKER = "PI_TOOLS_SUBAGENT_CHILD";
 export const MAX_PROFILE_DATA_BYTES = 16 * 1024;
