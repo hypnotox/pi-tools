@@ -234,15 +234,22 @@ describe("subagent toolkit adapter", () => {
 
   it("protects runner outcomes and detaches validated profile data from callback aliases", async () => {
     const harness = fakePi();
-    const retained = { summary: "bounded" };
+    const originalOutcome = completedOutcome();
+    let callbackOutcome: ExecutionOutcome | undefined;
+    const retained = { summary: "bounded", nested: { value: "original" } };
     createSubagentToolkit(harness.api, {
       runner: {
-        run: vi.fn(async () => completedOutcome()),
+        run: vi.fn(async () => originalOutcome),
         shutdown: vi.fn(async () => undefined),
       },
       profiles: [
         customProfile({
+          profileDataSchema: Type.Object({
+            summary: Type.String(),
+            nested: Type.Object({ value: Type.String() }),
+          }),
           afterRun: (outcome) => {
+            callbackOutcome = outcome;
             Reflect.set(outcome, "report", "tampered");
             Reflect.set(outcome.activity[0] ?? {}, "text", "tampered");
             return { profileData: retained };
@@ -258,13 +265,22 @@ describe("subagent toolkit adapter", () => {
       undefined,
       context(),
     );
+    expect(callbackOutcome).not.toBe(originalOutcome);
+    expect(Object.isFrozen(callbackOutcome)).toBe(true);
+    expect(Object.isFrozen(callbackOutcome?.activity)).toBe(true);
+    expect(Object.isFrozen(callbackOutcome?.activity[0])).toBe(true);
+    originalOutcome.report = "runner remains mutable";
+    if (originalOutcome.activity[0]) originalOutcome.activity[0].text = "runner remains mutable";
     retained.summary = "mutated later";
+    retained.nested.value = "mutated later";
     expect(result?.details).toMatchObject({
       report: "done",
       activity: [{ kind: "tool_end", text: "read" }],
-      profileData: { summary: "bounded" },
+      profileData: { summary: "bounded", nested: { value: "original" } },
     });
-    expect(Object.isFrozen(result?.details.profileData)).toBe(true);
+    const persisted = result?.details.profileData as typeof retained | undefined;
+    expect(Object.isFrozen(persisted)).toBe(true);
+    expect(Object.isFrozen(persisted?.nested)).toBe(true);
   });
 
   it("normalizes callback failures and profile-data schema mismatches", async () => {
@@ -529,11 +545,14 @@ describe("subagent toolkit adapter", () => {
     expect(correlatedReplies).toBe(1);
   });
 
-  it("removes discovered profile names from marked child runtimes", () => {
+  it("removes discovered profile names and releases marked-child bus listeners", async () => {
     process.env[CHILD_MARKER] = "1";
-    const child = fakePi(["read", "subagent", "custom_agent"]);
+    const sharedBus = new Map<string, Array<(data: unknown) => void>>();
+    const child = fakePi(["read", "subagent", "custom_agent"], sharedBus);
+    let correlatedReplies = 0;
     child.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
       const capability = data as ProfileCapability;
+      if (capability.correlationId === "after-child-shutdown") correlatedReplies++;
       capability.register({
         registrationId: "child-consumer",
         profiles: [customProfile()],
@@ -546,6 +565,18 @@ describe("subagent toolkit adapter", () => {
     child.start();
     expect(child.tools).toEqual([]);
     expect(child.activeTools()).toEqual(["read"]);
+    await child.shutdown();
+
+    delete process.env[CHILD_MARKER];
+    const replacement = fakePi(["read"], sharedBus);
+    createSubagentToolkit(replacement.api, {
+      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+    });
+    replacement.api.events.emit(SUBAGENT_PROFILE_REQUEST_EVENT, {
+      protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
+      correlationId: "after-child-shutdown",
+    });
+    expect(correlatedReplies).toBe(1);
   });
 
   it("does not override configured inactive tools during finalization", () => {

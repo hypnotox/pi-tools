@@ -44,10 +44,13 @@ describe("ProfileRegistry", () => {
     const registry = new ProfileRegistry(profile("default", "subagent"));
     const first = registry.collect(batch("consumer", [profile("review")], true));
     const replay = registry.collect(batch("consumer", [profile("different")], false));
+    const rejected = registry.collect({ registrationId: "invalid", profiles: [] });
     expect(replay).toBe(first);
+    expect(rejected.state).toBe("rejected");
     registry.finalize();
     expect(first.state).toBe("registered");
     expect(registry.collect(batch("consumer", [profile("ignored")]))).toBe(first);
+    expect(registry.collect(batch("invalid", [profile("ignored")]))).toBe(rejected);
     expect(registry.profiles().map((entry) => entry.toolName)).toEqual(["review"]);
     expect(registry.collect(batch("late", [profile("late")]))).toMatchObject({ state: "late" });
   });

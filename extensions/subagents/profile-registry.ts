@@ -92,6 +92,13 @@ export class ProfileRegistry {
     } catch (error) {
       receipt.state = "rejected";
       receipt.reason = error instanceof Error ? error.message : String(error);
+      if (
+        batch &&
+        typeof batch === "object" &&
+        typeof batch.registrationId === "string" &&
+        batch.registrationId.trim()
+      )
+        this.#receipts.set(batch.registrationId, receipt);
       return receipt;
     }
     const snapshot = Object.freeze({
