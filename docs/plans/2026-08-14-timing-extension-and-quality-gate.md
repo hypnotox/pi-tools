@@ -2,7 +2,7 @@
 format: plan-v2
 date: 2026-08-14
 adrs: [typescript-extension-quality-toolchain]
-status: Proposed
+status: Implemented
 ---
 # Plan: Timing Extension and Quality Gate
 
