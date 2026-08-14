@@ -134,26 +134,34 @@ export class ProfileRegistry {
       }
       const ids = new Set<string>();
       const tools = new Set<string>();
+      let collisionKind: "id" | "tool" | undefined;
       const collision = pending.batch.profiles.find((profile) => {
         if (
           ids.has(profile.id) ||
           knownIds.has(profile.id) ||
           (profile.id === this.#defaultProfile.id && !pending.batch.suppressDefault)
-        )
+        ) {
+          collisionKind = "id";
           return true;
+        }
         ids.add(profile.id);
         if (
           tools.has(profile.toolName) ||
           knownTools.has(profile.toolName) ||
           (profile.toolName === this.#defaultProfile.toolName && !pending.batch.suppressDefault)
-        )
+        ) {
+          collisionKind = "tool";
           return true;
+        }
         tools.add(profile.toolName);
         return false;
       });
       if (collision) {
         pending.receipt.state = "rejected";
-        pending.receipt.reason = `Profile tool collision: ${collision.toolName}`;
+        pending.receipt.reason =
+          collisionKind === "id"
+            ? `Duplicate profile id: ${collision.id}`
+            : `Profile tool collision: ${collision.toolName}`;
         continue;
       }
       pending.receipt.state = "registered";

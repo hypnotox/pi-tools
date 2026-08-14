@@ -47,6 +47,7 @@ describe("ProfileRegistry", () => {
     const rejected = registry.collect({ registrationId: "invalid", profiles: [] });
     expect(replay).toBe(first);
     expect(rejected.state).toBe("rejected");
+    expect(registry.collect(batch("invalid", [profile("ignored")]))).toBe(rejected);
     registry.finalize();
     expect(first.state).toBe("registered");
     expect(registry.collect(batch("consumer", [profile("ignored")]))).toBe(first);
@@ -72,11 +73,16 @@ describe("ProfileRegistry", () => {
     const rejected = registry.collect(
       batch("colliding", [profile("second"), profile("third", "first")], true),
     );
+    const duplicateId = registry.collect(batch("duplicate-id", [profile("first", "other")]));
     registry.finalize();
     expect(accepted.state).toBe("registered");
     expect(rejected).toMatchObject({
       state: "rejected",
       reason: "Profile tool collision: first",
+    });
+    expect(duplicateId).toMatchObject({
+      state: "rejected",
+      reason: "Duplicate profile id: first",
     });
     expect(registry.profiles().map((entry) => entry.toolName)).toEqual(["subagent", "first"]);
 
