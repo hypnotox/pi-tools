@@ -1,0 +1,7 @@
+paths:
+  - extensions/**
+  - package.json
+  - package-lock.json
+  - tsconfig.json
+  - biome.json
+  - knip.json

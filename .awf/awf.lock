@@ -578,8 +578,8 @@
     "docs/topics/development/extension-toolchain.md": {
       "templateId": "topics/topic.md.tmpl",
       "templateHash": "sha256:25b4ec23c7a22667f9d78b1e5883af8702d82f67896c3a42ac0ad19032d7c7bb",
-      "configHash": "sha256:9bdb8d50950d52648ba278681accc164f79599a7fa28a0520637dd5cee9cd030",
-      "outputHash": "sha256:51eab87ae6f143c1d156f2d84179b67e74fce7c659ba3a43f1b85e3d6229b061"
+      "configHash": "sha256:972a1920c47fedad61b666e69bb04b9f0079ca5f7420cb53e3da0517cc485be9",
+      "outputHash": "sha256:24dbc1ea48a2dd863f43b99353237c089a68944d1bf1a846e701bf5c2858a777"
     },
     "docs/topics/development/index.md": {
       "templateId": "topics/index.md.tmpl",
