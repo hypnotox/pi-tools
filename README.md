@@ -4,10 +4,10 @@ Private, personal tooling for [pi](https://pi.dev): extensions, skills, prompt t
 
 ## Layout
 
-- `extensions/` — TypeScript extensions
-- `skills/` — Agent Skills (`<name>/SKILL.md`)
-- `prompts/` — Markdown prompt templates
-- `themes/` — JSON themes
+- `extensions/` - TypeScript extensions
+- `skills/` - Agent Skills (`<name>/SKILL.md`)
+- `prompts/` - Markdown prompt templates
+- `themes/` - JSON themes
 
 The resource directories are declared in `package.json`, so this repository can be installed directly as a pi package.
 

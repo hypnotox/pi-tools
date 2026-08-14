@@ -1,0 +1,1 @@
+`pi-tools` is a private, pre-1.0 Pi package of portable personal extensions, Agent Skills, prompt templates, and themes for the `@earendil-works/pi-coding-agent` ecosystem; its TypeScript and Markdown resources are installed directly from this repository and serve the owner's Pi environments across multiple systems.

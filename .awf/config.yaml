@@ -1,0 +1,9 @@
+prefix: pi-tools
+integrationBranch: main
+vars:
+  activeMdRegenCmd: ./awf render
+  checkCmd: ./awf check
+  commitGateCmd: ./awf check staged commit
+  gateCmd: ./awf check
+bootstrap:
+  enabled: true
