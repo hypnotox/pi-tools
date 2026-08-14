@@ -4,7 +4,7 @@ slug: subagent-profile-toolkit
 status: Implementing
 date: 2026-08-14
 ---
-# ADR-subagent-profile-toolkit: Subagent Profile Toolkit
+# ADR-0002: Subagent Profile Toolkit
 
 ## Context
 
