@@ -66,7 +66,7 @@ declined; the generic prose renders).
 - `commitGateCmd`: Command that validates one commit message (the commit-msg hook payload appends the message-file argument). Leave empty to run through the always-rendered `./awf` wrapper. Consumed by the always-rendered commit-msg hook payload.
   State: set (`./awf check staged commit`). Consumed by: hooks commit-msg.
 - `testCmd`: Command that runs the test suite. Consumed while a rendered artifact's template references it.
-  State: absent, declined; the generic prose renders. Consumed by: doc workflow, skill tdd.
+  State: absent, declined; the generic prose renders. Consumed by: skill tdd.
 - `activeMdRegenCmd`: Command that regenerates the generated ADR decision index (INDEX.md). Consumed while a rendered artifact's template references it (the decision-index regeneration steps in the chain skills).
   State: set (`./awf render`). Consumed by: skill adr-lifecycle, skill proposing-adr.
 - `invariantTestPath`: Path or glob where invariant-backing tests live. Consumed while a rendered artifact's template references it (the invariant-backing guidance in the decision docs and skills).

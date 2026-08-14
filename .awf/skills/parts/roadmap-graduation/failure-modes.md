@@ -1,0 +1,1 @@
+Do not graduate a generic section placeholder or an item that no longer exists. If an entry lacks enough context to identify a concrete outcome, refine it in the roadmap before moving it; if its destination requires a material design choice, use the ordinary ADR or planning workflow rather than treating graduation as approval.

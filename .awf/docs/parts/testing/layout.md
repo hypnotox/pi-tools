@@ -1,0 +1,1 @@
+No test directory exists because the package resource directories currently contain only scaffolding. Place future tests beside a resource when they are narrowly coupled, or under `tests/` when they exercise package loading or interactions across resources. Name regression tests for the behavior they protect and ensure the documented gate runs them.

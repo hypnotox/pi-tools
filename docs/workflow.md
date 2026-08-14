@@ -162,19 +162,12 @@ Use Conventional Commits, one concern per commit. Stage files explicitly rather 
 
 Documentation travels with the change that makes it true. When you change behaviour, update the affected docs (this file, the agent guide, ADRs, and any reference tables) in the same commit.
 
-<!-- awf:edit composing-the-gate: default; create .awf/parts/workflow/composing-the-gate.md to override -->
+<!-- awf:edit composing-the-gate: from .awf/parts/workflow/composing-the-gate.md -->
 ## Composing the gate
+The current gate is `./awf check`. It covers awf configuration, generated-file drift, documentation links and prose, and workflow state. Keep it deterministic and fast.
 
-The gate is one command (`./awf check`) that must be green before every commit. Compose it from three layers:
+When executable package resources are added, extend the gate with the cheapest reliable tests, type checks, and formatting checks required by that stack. The gate documentation and command must change in the same commit.
 
-
-- **Minimum:** the test suite, the language's standard linter, and `./awf check`: so behaviour, style, and rendered-file drift all block a commit.
-
-- **As the project grows:** add what your stack makes cheap: a build step, a coverage threshold, type checking, formatting verification. Each addition must be deterministic: same tree in, same verdict out.
-
-- **Keep it fast.** The per-commit gate should run in seconds.
-
-A script or task-runner alias makes the gate one word to run and one place to grow. To preserve long gate output, use a direct log redirect and capture the command status separately. Run `project-gate >gate.log 2>&1; gate_status=$?` before inspecting the log, then finish with `exit "$gate_status"`; do not rely on a status-losing pipeline. Substitute the project's actual gate command for `project-gate`.
 
 <!-- awf:edit local-hooks: default; create .awf/parts/workflow/local-hooks.md to override -->
 ## Local git hooks

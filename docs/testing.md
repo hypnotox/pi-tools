@@ -3,17 +3,18 @@
 
 A deterministic pre-commit gate runs the project's checks. The documented lanes include minimum-runtime smoke tests.
 
-<!-- awf:edit gate: default; create .awf/docs/parts/testing/gate.md to override -->
+<!-- awf:edit gate: from .awf/docs/parts/testing/gate.md -->
 ## Gate
+Run `./awf check` before every commit. It verifies rendered-file drift, awf configuration, links, prose rules, and workflow state. A failing check blocks the commit.
 
-A single gate command runs the project's checks and must be green before every commit. A red gate blocks the commit: fix the cause or revert.
+The package has no executable resource implementation or automated runtime test suite yet. Add focused tests and include them in the gate when executable package resources are introduced.
 
-<!-- awf:edit tiers: default; create .awf/docs/parts/testing/tiers.md to override -->
+
+<!-- awf:edit tiers: from .awf/docs/parts/testing/tiers.md -->
 ## Tiers and lanes
+The repository currently has one verification tier: `./awf check`. There is no separate fast, full, minimum-Node, or Pi-runtime lane. Document and automate a new lane before relying on it.
 
-A gate may have fast and full tiers. Put generated runtime lanes in a consistently enforced tier, never an undocumented manual exception.
 
-<!-- awf:edit layout: stub; replace by creating .awf/docs/parts/testing/layout.md -->
+<!-- awf:edit layout: from .awf/docs/parts/testing/layout.md -->
 ## Layout and test shape
-
-_Describe where tests live and how they map to the code: the directory convention, how unit, integration, and regression tests are named and separated, where generated runtime and cross-language protocol tests live, and where a new test for a given change belongs._
+No test directory exists because the package resource directories currently contain only scaffolding. Place future tests beside a resource when they are narrowly coupled, or under `tests/` when they exercise package loading or interactions across resources. Name regression tests for the behavior they protect and ensure the documented gate runs them.

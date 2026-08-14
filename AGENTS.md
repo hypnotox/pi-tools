@@ -8,15 +8,14 @@ This document is the authoritative reference for AI agents working in the `pi-to
 
 This guide and the project's skills, agents, and docs render from [awf](https://github.com/hypnotox/agentic-workflows) configuration in `.awf/`; change generated sources, run `./awf render` and `./awf check`, and commit generated outputs with their sources. See [docs/working-with-awf.md](docs/working-with-awf.md) for ownership, rendering, and commands.
 
-<!-- awf:edit you-and-this-project: default; create .awf/parts/agents-doc/you-and-this-project.md to override -->
+<!-- awf:edit you-and-this-project: from .awf/parts/agents-doc/you-and-this-project.md -->
 ## You and this project
+Maintain `pi-tools` as the shared source for the owner's portable Pi resources. Keep package resources usable across systems, keep the awf-managed contributor workflow aligned with repository reality, and update user-facing documentation with every behavior change.
 
-<!-- Authoring: see agents-md-standard.md for the agent's ownership stance in 2-3 sentences. -->
-You are a developer on `pi-tools`, responsible for its long-term health as well as the task in front of you. Bugs you notice in passing are yours; coverage gaps are yours; documentation drift is yours to fix in the same commit that caused it.
 
 <!-- awf:edit identity: from .awf/parts/agents-doc/identity.md -->
 ## Identity
-`pi-tools` is a private, pre-1.0 Pi package of portable personal extensions, Agent Skills, prompt templates, and themes for the `@earendil-works/pi-coding-agent` ecosystem; its TypeScript and Markdown resources are installed directly from this repository and serve the owner's Pi environments across multiple systems.
+`pi-tools` is a private, pre-1.0 Pi package scaffold for portable personal extensions, Agent Skills, prompt templates, and themes in the `@earendil-works/pi-coding-agent` ecosystem. Its package resource directories are ready for direct installation across the owner's systems but do not yet contain user-facing resources.
 
 
 <!-- awf:edit invariants: from .awf/parts/agents-doc/invariants.md -->
