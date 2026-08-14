@@ -121,11 +121,15 @@ export function formatTimestamp(timestamp: number): string {
 
 export function formatCompletedDuration(durationMs: number): string {
   const safeMs = Math.max(0, durationMs);
-  if (safeMs < 1_000) return `${Math.round(safeMs)}ms`;
-  if (safeMs < 60_000) return `${(safeMs / 1_000).toFixed(2)}s`;
+  const roundedMs = Math.round(safeMs);
+  if (roundedMs < 1_000) return `${roundedMs}ms`;
 
-  const minutes = Math.floor(safeMs / 60_000);
-  const seconds = ((safeMs % 60_000) / 1_000).toFixed(1).padStart(4, "0");
+  const roundedCentiseconds = Math.round(safeMs / 10);
+  if (roundedCentiseconds < 6_000) return `${(roundedCentiseconds / 100).toFixed(2)}s`;
+
+  const roundedTenths = Math.round(safeMs / 100);
+  const minutes = Math.floor(roundedTenths / 600);
+  const seconds = ((roundedTenths % 600) / 10).toFixed(1).padStart(4, "0");
   return `${minutes}m ${seconds}s`;
 }
 

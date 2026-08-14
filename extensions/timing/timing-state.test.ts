@@ -109,11 +109,16 @@ describe("timing formatting", () => {
 
   it.each([
     [884, "884ms"],
-    [999.6, "1000ms"],
+    [999.4, "999ms"],
+    [999.6, "1.00s"],
     [1_000, "1.00s"],
     [8_491, "8.49s"],
+    [59_999, "1m 00.0s"],
     [60_000, "1m 00.0s"],
     [62_340, "1m 02.3s"],
+    [119_949, "1m 59.9s"],
+    [119_950, "2m 00.0s"],
+    [119_999, "2m 00.0s"],
     [-10, "0ms"],
   ])("formats %s completed milliseconds as %s", (duration, expected) => {
     expect(formatCompletedDuration(duration)).toBe(expected);

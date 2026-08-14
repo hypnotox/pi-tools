@@ -94,6 +94,19 @@ describe("timing extension", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("restores the native message when turn persistence throws", async () => {
+    const harness = createHarness();
+    await harness.emit("turn_start", { turnIndex: 0, timestamp: Date.now() });
+    harness.appendEntry.mockImplementationOnce(() => {
+      throw new Error("persistence failed");
+    });
+
+    await expect(harness.emit("turn_end")).rejects.toThrow("persistence failed");
+
+    expect(harness.setWorkingMessage).toHaveBeenLastCalledWith();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("cleans up idempotently on shutdown", async () => {
     const harness = createHarness();
     await harness.emit("turn_start", { turnIndex: 0, timestamp: Date.now() });

@@ -39,13 +39,14 @@ export default function timingExtension(pi: ExtensionAPI): void {
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
   let workingContext: WorkingContext | undefined;
 
-  const restoreWorkingMessage = (): void => {
-    if (workingContext?.mode === "tui") workingContext.ui.setWorkingMessage();
+  const restoreWorkingMessage = (fallbackContext?: WorkingContext): void => {
+    const context = workingContext ?? fallbackContext;
     workingContext = undefined;
     if (refreshTimer) {
       clearInterval(refreshTimer);
       refreshTimer = undefined;
     }
+    if (context?.mode === "tui") context.ui.setWorkingMessage();
   };
 
   const refreshWorkingMessage = (): void => {
@@ -78,9 +79,11 @@ export default function timingExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("session_start", (_event, ctx) => {
-    restoreWorkingMessage();
-    state.reset();
-    if (ctx.mode === "tui") ctx.ui.setWorkingMessage();
+    try {
+      restoreWorkingMessage(ctx);
+    } finally {
+      state.reset();
+    }
   });
 
   pi.on("turn_start", (event, ctx) => {
@@ -99,13 +102,18 @@ export default function timingExtension(pi: ExtensionAPI): void {
 
   pi.on("turn_end", (_event, ctx) => {
     const completion = state.endTurn();
-    if (completion) appendCompletion(completion, ctx);
-    restoreWorkingMessage();
+    try {
+      if (completion) appendCompletion(completion, ctx);
+    } finally {
+      restoreWorkingMessage(ctx);
+    }
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
-    restoreWorkingMessage();
-    state.reset();
-    if (ctx.mode === "tui") ctx.ui.setWorkingMessage();
+    try {
+      restoreWorkingMessage(ctx);
+    } finally {
+      state.reset();
+    }
   });
 }
