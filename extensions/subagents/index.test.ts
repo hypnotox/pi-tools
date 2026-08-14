@@ -228,6 +228,37 @@ describe("subagent toolkit adapter", () => {
     expect(failed?.details).toMatchObject({ state: "failed", failure: "callback failed" });
   });
 
+  it("rejects duplicate prepared tool names before launching", async () => {
+    const harness = fakePi();
+    const run = vi.fn(async () => completedOutcome());
+    createSubagentToolkit(harness.api, {
+      runner: { run, shutdown: vi.fn(async () => undefined) },
+      profiles: [
+        customProfile({
+          prepare: ({ parent }) =>
+            ({
+              cwd: parent.cwd,
+              systemPrompt: "custom system",
+              prompt: "focus",
+              toolPolicy: { mode: "allowlist", tools: ["child_only", "child_only"] },
+            }) as never,
+        }),
+      ],
+    });
+    const result = await harness.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(result?.details).toMatchObject({
+      state: "failed",
+      failure: "Profile prepared an invalid run",
+    });
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it("normalizes unknown models and marks terminal results as errors", async () => {
     const harness = fakePi();
     createSubagentToolkit(harness.api, {
