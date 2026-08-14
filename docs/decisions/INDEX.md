@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-_No decisions are in flight._
+- [ADR-subagent-profile-toolkit: Subagent Profile Toolkit](subagent-profile-toolkit.md) (Proposed)
 
 ## History
 
