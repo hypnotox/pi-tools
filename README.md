@@ -13,7 +13,7 @@ The timing extension adds local `HH:mm:ss.SSS` timestamps and monotonic duration
   ↳ turn 4 · 14:32:06.411 → 14:32:14.902 · 8.49s
 ```
 
-While a turn runs, its elapsed time appears beside Pi's native working spinner. Tool durations appear only after completion. Timing history uses custom session entries, which render in the TUI but never enter model context. Run `/reload` after editing or updating the extension.
+While a turn runs, its elapsed time appears beside Pi's native working spinner. Tool durations appear directly beneath completed tool output without an extra blank line. Timing history uses custom session entries, which render in the TUI but never enter model context. Run `/reload` after editing or updating the extension.
 
 ## Layout
 

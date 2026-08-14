@@ -10,6 +10,7 @@ function createHarness() {
   let renderer:
     | ((entry: { data: unknown }, options: unknown, theme: unknown) => unknown)
     | undefined;
+  let rendererOptions: unknown;
 
   const pi = {
     appendEntry,
@@ -18,8 +19,9 @@ function createHarness() {
       existing.push(handler);
       handlers.set(event, existing);
     },
-    registerEntryRenderer(_type: string, nextRenderer: typeof renderer) {
+    registerEntryRenderer(_type: string, nextRenderer: typeof renderer, options?: unknown) {
       renderer = nextRenderer;
+      rendererOptions = options;
     },
   } as unknown as ExtensionAPI;
 
@@ -37,7 +39,14 @@ function createHarness() {
     }
   };
 
-  return { appendEntry, context, emit, getRenderer: () => renderer, setWorkingMessage };
+  return {
+    appendEntry,
+    context,
+    emit,
+    getRenderer: () => renderer,
+    getRendererOptions: () => rendererOptions,
+    setWorkingMessage,
+  };
 }
 
 describe("timing extension", () => {
@@ -131,9 +140,10 @@ describe("timing extension", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("registers a renderer for restored timing entries", () => {
+  it("registers restored timing entries without leading spacing", () => {
     const harness = createHarness();
     expect(harness.getRenderer()).toBeTypeOf("function");
+    expect(harness.getRendererOptions()).toEqual({ spacingBefore: 0 });
   });
 });
 
