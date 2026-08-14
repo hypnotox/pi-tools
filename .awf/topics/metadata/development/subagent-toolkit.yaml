@@ -1,0 +1,4 @@
+title: Subagent Toolkit
+summary: Runtime and public profile integration contracts for general-purpose subagent delegation.
+paths:
+    - extensions/subagents/**
