@@ -5,4 +5,4 @@
 #   exec bash .awf/hooks/pre-commit.sh "$@"
 set -euo pipefail
 ./awf check
-./awf check
+npm run check

@@ -43,7 +43,7 @@ Dispatch the `code-reviewer` once as an independent target-native fresh-context 
 3. Surface the digest. Diagnose each finding against repository and current-state authority, then route by classification rather than severity: apply `mechanical` corrections directly; apply `reasoned` corrections with a one-line rationale; route a `user-decision` finding or consensus deviation through `pi-tools-brainstorming` with the cited affected authority, and wait at its pre-artifact approval boundary.
 
 <!-- awf:edit apply-fixes-commit: default; create .awf/skills/parts/reviewing-impl/apply-fixes-commit.md to override -->
-4. Apply mechanical and authority-determined reasoned fixes in new commits, never amend the implementation commit, and run `./awf check` before each commit.
+4. Apply mechanical and authority-determined reasoned fixes in new commits, never amend the implementation commit, and run `npm run check` before each commit.
 
 <!-- awf:edit run-audit: default; create .awf/skills/parts/reviewing-impl/run-audit.md to override -->
 5. Run `./awf audit ${baseSha}..${headSha}` and `./x audit-local ${baseSha}..${headSha}` after findings settle, over the complete final range including settlement commits. Diagnose and resolve Error findings before assurance concludes; surface advisory Warnings. Audit never replaces the gate or drift check.

@@ -56,4 +56,4 @@ done
 if ((${#targets[@]})); then
   ./awf check commit-policy "${targets[@]}"
 fi
-./awf check
+npm run check

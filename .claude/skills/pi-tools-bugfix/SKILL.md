@@ -45,7 +45,7 @@ No safety bypasses. No incidental refactors riding along; one concern per commit
    Before writing the fix, read the compact generated pitfall index at `docs/pitfalls.md`, then open only relevant linked leaves for known-tricky areas; verify the fix is not re-introducing one that bit before.
 
 
-3. **Verify via the gates.** `./awf check` is the default.
+3. **Verify via the gates.** `npm run check` is the default.
 
 4. **Commit** with Conventional Commits, typically `fix(<scope>): ...`; the body explains the *why*. Per `docs/workflow.md`, fixes ship with a regression test.
 

@@ -3,7 +3,7 @@
 
 <!-- awf:edit setup: from .awf/docs/parts/development/setup.md -->
 ## Setup
-Use Git, Bash, Node.js 20 or newer, and a compatible Pi installation. Clone the repository and open it in Pi; trust the project so Pi can load the generated project-local workflow resources. No dependency installation, build step, service, or environment variable is currently required.
+Use Git, Bash, Node.js 20 or newer, npm, and a compatible Pi installation. Clone the repository, run `npm ci`, and open it in Pi; trust the project so Pi can load the generated project-local workflow resources. No build step, service, or environment variable is required.
 
 The awf wrapper uses the cached pinned binary when available. First use on Linux or macOS requires an amd64 or arm64 system, network access to GitHub, `curl`, `tar`, and either `sha256sum` or `shasum`; installing the pinned awf version on `PATH` avoids the download.
 
@@ -12,7 +12,13 @@ GitHub SSH access is required only to clone the private remote or install it as 
 
 <!-- awf:edit command-runner: from .awf/docs/parts/development/command-runner.md -->
 ## Command runner
-There is no project build or task runner. Use the root `./awf` wrapper for governed workflow maintenance:
+npm scripts run executable-resource checks:
+
+- `npm run format`: format authored code and configuration.
+- `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run deadcode`, and `npm test`: run focused non-mutating checks.
+- `npm run check`: run the complete executable-resource gate.
+
+Use the root `./awf` wrapper for governed workflow maintenance:
 
 - `./awf render`: regenerate awf-owned files after editing `.awf/`.
 - `./awf check`: verify the repository, generated-file drift, and workflow state.
@@ -23,6 +29,6 @@ See [Working with awf](working-with-awf.md) for the full command reference.
 
 <!-- awf:edit dependencies: from .awf/docs/parts/development/dependencies.md -->
 ## Dependencies
-`package.json` declares Node.js 20 or newer and currently contains no package dependencies. The awf bootstrap pins the repository workflow tool independently of npm.
+`package.json` declares Node.js 20 or newer. Run `npm ci` to install the lockfile-pinned TypeScript, Biome, Knip, and Vitest development toolchain. The awf bootstrap pins the repository workflow tool independently of npm.
 
 When an extension imports a third-party runtime package, add it to `dependencies`. When it imports Pi core APIs, add the corresponding package to `peerDependencies` with a `*` range. Do not add dependencies for Markdown skills, prompts, or JSON themes unless their helpers require them.

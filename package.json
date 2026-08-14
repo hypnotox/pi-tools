@@ -10,6 +10,26 @@
   "engines": {
     "node": ">=20"
   },
+  "scripts": {
+    "format": "biome check --write .",
+    "format:check": "biome check --linter-enabled=false .",
+    "lint": "biome lint .",
+    "typecheck": "tsc --noEmit",
+    "deadcode": "knip",
+    "test": "vitest run",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run deadcode && npm test"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.8",
+    "@types/node": "20.19.37",
+    "knip": "5.88.1",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  },
   "pi": {
     "extensions": [
       "./extensions"

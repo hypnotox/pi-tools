@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: typescript-extension-quality-toolchain
-status: Proposed
+status: Implementing
 date: 2026-08-14
 ---
 # ADR-0001: TypeScript Extension Quality Toolchain
@@ -56,3 +56,5 @@ verification against supported Pi versions.
 ## Status history
 
 - 2026-08-14: Proposed
+- 2026-08-14: Implementing; content-sha256: 7f1b1cb462cf98e0d3fa7aabca67bb5c407ecb2f579ffd2a164f49abc9dfaa33
+- 2026-08-14: Applied; operations: add `development/extension-toolchain:typescript-quality-gate`

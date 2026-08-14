@@ -39,7 +39,7 @@ An observation is a **promotion candidate** when the main thread saw it recur wi
 Route each recurring, codifiable observation to the **strongest** rung it can support:
 
 1. **Invariant**: a load-bearing rule the project must remember. Record the decision via `pi-tools-proposing-adr` with a `State changes` `add` of a new invariant claim (`invariant: <slug>`) in the owning current-state topic, and back it with `Backing: test` plus a `<marker> invariant: <domain>/<topic>:<slug> (<name>)` proof comment on a test, or declare it `Backing: unbacked` with a `Verify:` note when no automatic test fits. The `<name>` is free text naming whatever proves the claim, a test function or a case label, and it must appear on a line of the same file that does not itself open with the marker token, so the marker fails once that unit is deleted or renamed. The marker and globs are config-driven, so this works in any language.
-2. **Gate test or lint rule**: an ordinary mechanically-checkable rule that does not rise to an invariant. Add a test or linter rule so `./awf check` catches it; no decision record needed.
+2. **Gate test or lint rule**: an ordinary mechanically-checkable rule that does not rise to an invariant. Add a test or linter rule so `npm run check` catches it; no decision record needed.
 3. **Code-review focus item**: a rule that needs per-case judgment. Add a persistent project-focus item to the code-review agent's checklist: still probabilistic, but now applied on every review.
 4. **Pitfalls note**: tricky knowledge that is not mechanically checkable. Run `./awf new pitfall "<Title>"`, then edit the reported authored source under `.awf/docs/pitfalls/`; never edit the generated pitfall index or generated leaves.
 

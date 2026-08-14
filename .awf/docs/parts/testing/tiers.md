@@ -1,1 +1,1 @@
-The repository currently has one verification tier: `./awf check`. There is no separate fast, full, minimum-Node, or Pi-runtime lane. Document and automate a new lane before relying on it.
+Focused npm scripts provide fast format, lint, type, dead-code, and test lanes. `npm run check` is the aggregate executable-resource tier, while `./awf check` is the repository-workflow tier. Minimum-Node and Pi-load smoke checks are release-of-change evidence rather than part of every local aggregate run.

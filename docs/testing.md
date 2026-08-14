@@ -5,18 +5,16 @@ A deterministic pre-commit gate runs the project's checks. The documented lanes 
 
 <!-- awf:edit gate: from .awf/docs/parts/testing/gate.md -->
 ## Gate
-The catalog introduction above does not describe the repository's current lanes: no minimum-runtime smoke test exists yet.
+Run `npm run check` before every commit. It verifies formatting, lint, strict types, dead code and dependencies, and Vitest tests. The pre-commit payload also runs `./awf check` for rendered drift, awf configuration, links, prose rules, and workflow state. A failure in either layer blocks the commit.
 
-Run `./awf check` before every commit. It verifies rendered-file drift, awf configuration, links, prose rules, and workflow state. A failing check blocks the commit.
-
-The package has no executable resource implementation or automated runtime test suite yet. Add focused tests and include them in the gate when executable package resources are introduced.
+Minimum-runtime evidence uses a clean `npm ci` and `npm run check` under Node.js 20. Pi extension smoke evidence loads the entry point with `pi -e ./extensions/timing/index.ts --list-models` and requires a clean exit without extension diagnostics.
 
 
 <!-- awf:edit tiers: from .awf/docs/parts/testing/tiers.md -->
 ## Tiers and lanes
-The repository currently has one verification tier: `./awf check`. There is no separate fast, full, minimum-Node, or Pi-runtime lane. Document and automate a new lane before relying on it.
+Focused npm scripts provide fast format, lint, type, dead-code, and test lanes. `npm run check` is the aggregate executable-resource tier, while `./awf check` is the repository-workflow tier. Minimum-Node and Pi-load smoke checks are release-of-change evidence rather than part of every local aggregate run.
 
 
 <!-- awf:edit layout: from .awf/docs/parts/testing/layout.md -->
 ## Layout and test shape
-No test directory exists because the package resource directories currently contain only scaffolding. Place future tests beside a resource when they are narrowly coupled, or under `tests/` when they exercise package loading or interactions across resources. Name regression tests for the behavior they protect and ensure the documented gate runs them.
+Timing-extension tests live beside their implementation under `extensions/timing/`. Keep narrowly coupled tests beside a resource; place package-loading or cross-resource tests under `tests/`. Name regression tests for the behavior they protect and ensure `npm run check` runs them.

@@ -1,0 +1,134 @@
+export interface Clock {
+  wallNow(): number;
+  monotonicNow(): number;
+}
+
+export interface TimingCompletion {
+  kind: "tool" | "turn";
+  label: string;
+  startedAt: number;
+  endedAt: number;
+  durationMs: number;
+  toolIndex?: number;
+}
+
+interface ActiveTiming {
+  label: string;
+  startedAt: number;
+  startedMono: number;
+}
+
+interface ActiveTool extends ActiveTiming {
+  index: number;
+}
+
+const systemClock: Clock = {
+  wallNow: Date.now,
+  monotonicNow: () => performance.now(),
+};
+
+export class TimingState {
+  readonly #clock: Clock;
+  readonly #tools = new Map<string, ActiveTool>();
+  #turn: ActiveTiming | undefined;
+  #nextToolIndex = 1;
+
+  constructor(clock: Clock = systemClock) {
+    this.#clock = clock;
+  }
+
+  startTurn(turnIndex: number, startedAt = this.#clock.wallNow()): void {
+    this.#turn = {
+      label: `turn ${turnIndex + 1}`,
+      startedAt,
+      startedMono: this.#clock.monotonicNow(),
+    };
+    this.#tools.clear();
+    this.#nextToolIndex = 1;
+  }
+
+  endTurn(): TimingCompletion | undefined {
+    const turn = this.#turn;
+    if (!turn) return undefined;
+
+    const completion = this.#complete("turn", turn);
+    this.#turn = undefined;
+    this.#tools.clear();
+    return completion;
+  }
+
+  startTool(toolCallId: string, toolName: string): number {
+    const existing = this.#tools.get(toolCallId);
+    if (existing) return existing.index;
+
+    const index = this.#nextToolIndex++;
+    this.#tools.set(toolCallId, {
+      index,
+      label: toolName,
+      startedAt: this.#clock.wallNow(),
+      startedMono: this.#clock.monotonicNow(),
+    });
+    return index;
+  }
+
+  endTool(toolCallId: string): TimingCompletion | undefined {
+    const tool = this.#tools.get(toolCallId);
+    if (!tool) return undefined;
+
+    this.#tools.delete(toolCallId);
+    return {
+      ...this.#complete("tool", tool),
+      toolIndex: tool.index,
+    };
+  }
+
+  getLiveTurn(): { label: string; durationMs: number } | undefined {
+    if (!this.#turn) return undefined;
+    return {
+      label: this.#turn.label,
+      durationMs: this.#elapsed(this.#turn.startedMono),
+    };
+  }
+
+  reset(): void {
+    this.#turn = undefined;
+    this.#tools.clear();
+    this.#nextToolIndex = 1;
+  }
+
+  #complete(kind: TimingCompletion["kind"], timing: ActiveTiming): TimingCompletion {
+    return {
+      kind,
+      label: timing.label,
+      startedAt: timing.startedAt,
+      endedAt: this.#clock.wallNow(),
+      durationMs: this.#elapsed(timing.startedMono),
+    };
+  }
+
+  #elapsed(startedMono: number): number {
+    return Math.max(0, this.#clock.monotonicNow() - startedMono);
+  }
+}
+
+export function formatTimestamp(timestamp: number): string {
+  const date = new Date(timestamp);
+  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((value) => String(value).padStart(2, "0"))
+    .join(":")
+    .concat(`.${String(date.getMilliseconds()).padStart(3, "0")}`);
+}
+
+export function formatCompletedDuration(durationMs: number): string {
+  const safeMs = Math.max(0, durationMs);
+  if (safeMs < 1_000) return `${Math.round(safeMs)}ms`;
+  if (safeMs < 60_000) return `${(safeMs / 1_000).toFixed(2)}s`;
+
+  const minutes = Math.floor(safeMs / 60_000);
+  const seconds = ((safeMs % 60_000) / 1_000).toFixed(1).padStart(4, "0");
+  return `${minutes}m ${seconds}s`;
+}
+
+export function formatLiveDuration(durationMs: number): string {
+  return `${(Math.max(0, durationMs) / 1_000).toFixed(1)}s`;
+}

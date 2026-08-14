@@ -1,6 +1,19 @@
 # pi-tools
 
-Private, personal tooling for [Pi](https://pi.dev): portable extensions, skills, prompt templates, and themes shared across systems. The package resource directories are currently scaffolds; no user-facing resources ship yet.
+Private, personal tooling for [Pi](https://pi.dev): portable extensions, skills, prompt templates, and themes shared across systems.
+
+## Extensions
+
+### Timing
+
+The timing extension adds local `HH:mm:ss.SSS` timestamps and monotonic durations to completed Pi turns and tool calls. Tool lines use a one-based index matching their source order, so parallel completion remains identifiable:
+
+```text
+  ↳ tool 2 · bash · 14:32:08.210 → 14:32:11.940 · 3.73s
+  ↳ turn 4 · 14:32:06.411 → 14:32:14.902 · 8.49s
+```
+
+While a turn runs, its elapsed time appears beside Pi's native working spinner. Tool durations appear only after completion. Timing history uses custom session entries, which render in the TUI but never enter model context. Run `/reload` after editing or updating the extension.
 
 ## Layout
 
@@ -41,6 +54,17 @@ pi update git:git@github.com:hypnotox/pi-tools
 - Theme: add `themes/<name>.json`.
 
 Keep secrets and machine-specific configuration out of the repository. Use environment variables or ignored `.env` files instead.
+
+## Development checks
+
+Install the lockfile-pinned development tools and run the aggregate gate:
+
+```bash
+npm ci
+npm run check
+```
+
+Focused scripts are available as `format`, `format:check`, `lint`, `typecheck`, `deadcode`, and `test`. `npm run format` is the only mutating check. The pre-commit flow runs `./awf check` alongside the npm gate.
 
 ## Maintaining the repository
 

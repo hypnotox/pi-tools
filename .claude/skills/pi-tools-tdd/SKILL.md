@@ -26,7 +26,7 @@ TDD may run without an effort. If continuity materially helps, invoke `pi-tools-
 1. Run `./awf context <the implementation and test paths>`, then write the failing test capturing the wrong (bug) or missing (feature) behaviour. Ground tests, checks, seams, and harness work only in changed behavior, a demonstrated regression, an existing documented contract, or a clearly applicable project invariant; reject speculative test or policy machinery.
 Start by querying the explicit paths named above without `--show` or `--full` detail flags, then drill down with `./awf topic` where the work touches a claimed surface.
 On an exact two-line `AWF_CONTEXT_SPILL_V1` notice, consume the packet per the working-with-awf doc's Context spill notices contract; treat any other output as the context packet itself.
-2. Run it and confirm it fails for the right reason.
+2. Run it and confirm it fails for the right reason: `npm test`.
 3. Before implementing, per `docs/maintainable-code-design.md`, assess whether a bounded enabling refactor prevents duplication, coupling, representation leakage, or a workaround.
 **Authority-guided implementation autonomy.**
 
@@ -39,7 +39,7 @@ Route materially larger work through `pi-tools-brainstorming` to
 perform it first, include it in the current effort, defer it in a durable project-owned record, or decline it with the trade-off stated.
 Choose the smallest behavior-proving, model-supporting seam; reject tests that force representation leakage or needless indirection.
 4. Implement the minimal change to pass.
-5. Run the gate: `./awf check`.
+5. Run the gate: `npm run check`.
 
 <!-- awf:edit notes: default; create .awf/skills/parts/tdd/notes.md to override -->
 ## Notes

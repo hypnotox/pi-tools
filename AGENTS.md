@@ -15,7 +15,7 @@ Maintain `pi-tools` as the shared source for the owner's portable Pi resources. 
 
 <!-- awf:edit identity: from .awf/parts/agents-doc/identity.md -->
 ## Identity
-`pi-tools` is a private, pre-1.0 Pi package scaffold for portable personal extensions, Agent Skills, prompt templates, and themes in the `@earendil-works/pi-coding-agent` ecosystem. Its package resource directories are ready for direct installation across the owner's systems but do not yet contain user-facing resources.
+`pi-tools` is a private, pre-1.0 Pi package for portable personal extensions, Agent Skills, prompt templates, and themes in the `@earendil-works/pi-coding-agent` ecosystem. It ships a timing extension and keeps its package resources ready for direct installation across the owner's systems.
 
 
 <!-- awf:edit invariants: from .awf/parts/agents-doc/invariants.md -->
@@ -26,7 +26,7 @@ Hard rules every change must respect:
 
 - **Append-only ADRs.** Preserve decision history; change current-state claims forward. See `docs/decisions/` and `docs/decisions/INDEX.md`.
 - **Docs travel with the change.** Update reality and its documentation together.
-- **Stage and gate each commit.** Stage the complete transaction; run `./awf check staged` and `./awf check`. A wired pre-commit hook enforces both; run them manually only in a clone without wired hooks.
+- **Stage and gate each commit.** Stage the complete transaction; run `./awf check staged` and `npm run check`. A wired pre-commit hook enforces both; run them manually only in a clone without wired hooks.
 
 - **Focused, portable resources.** Keep resources focused and portable, and document user-facing behavior in `README.md`.
 - **No private machine state.** Never commit credentials, tokens, session data, or machine-specific absolute paths.

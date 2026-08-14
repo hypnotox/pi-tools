@@ -40,7 +40,7 @@ Per `docs/workflow.md`: use a plan when sequencing, coordination, or resumabilit
 - **No placeholders:** no "TBD", "implement later", "as needed", vague "similar to task N" deferral, outcome-only summary, or hidden design choice. A step supplies change-specific outcome, authority, boundary, ordering, evidence, and necessary confinement; use optional aids only when they clarify a load-bearing detail. A batch supplies `Paths:` and `Post-check:` (see Tasks).
 
 <!-- awf:edit gate-tier-note: default; create .awf/skills/parts/writing-plans/gate-tier-note.md to override -->
-- **Gate cost:** `./awf check` runs before every commit. Batch closely-related same-shape changes that share one rationale into a single commit; keep genuinely independent concerns separate. A docs-only commit still runs the gate; it just passes quickly with no code to test. See `docs/workflow.md`.
+- **Gate cost:** `npm run check` runs before every commit. Batch closely-related same-shape changes that share one rationale into a single commit; keep genuinely independent concerns separate. A docs-only commit still runs the gate; it just passes quickly with no code to test. See `docs/workflow.md`.
 
 <!-- awf:edit conventions-test-first: default; create .awf/skills/parts/writing-plans/conventions-test-first.md to override -->
 - **Test-first for bugs:** add a failing test as its own task before the fix task.

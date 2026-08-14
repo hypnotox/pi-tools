@@ -7,4 +7,3 @@ paths:
   - tsconfig.json
   - biome.json
   - knip.json
-  - vitest.config.ts

@@ -4,8 +4,14 @@
 
 Shared language, quality, and verification contracts for executable Pi extensions.
 
-**Applicability:** Owning domain selectors: none. Topic selectors: `biome.json`, `extensions/**`, `knip.json`, `package-lock.json`, `package.json`, `tsconfig.json`, `vitest.config.ts`. Both domain and topic selectors must match. Run `awf topic development/extension-toolchain --coverage` for current applicable and owned paths and marker sites.
+**Applicability:** Owning domain selectors: none. Topic selectors: `biome.json`, `extensions/**`, `knip.json`, `package-lock.json`, `package.json`, `tsconfig.json`. Both domain and topic selectors must match. Run `awf topic development/extension-toolchain --coverage` for current applicable and owned paths and marker sites.
 
 This topic records the active language, quality, and verification contracts for executable Pi extensions.
 
 ## Claims
+
+### `rule: typescript-quality-gate`
+
+Executable extensions use the shared strict TypeScript configuration, Biome formatting, import organization, and linting, Knip dead-code and dependency analysis, and Vitest tests. `npm run check` runs those non-mutating checks as the project gate; the pre-commit flow runs it alongside `./awf check`. Imported Pi core packages remain wildcard peer dependencies, development tools remain development dependencies, and the npm lockfile is committed.
+
+Origin: ADR-0001

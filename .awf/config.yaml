@@ -4,7 +4,8 @@ vars:
   activeMdRegenCmd: ./awf render
   checkCmd: ./awf check
   commitGateCmd: ./awf check staged commit
-  gateCmd: ./awf check
+  gateCmd: npm run check
+  testCmd: npm test
 bootstrap:
   enabled: true
 domains:

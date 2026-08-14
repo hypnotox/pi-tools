@@ -65,7 +65,7 @@ This skill may run without an effort. Pick the status transition first. If conti
 4. **Regenerate INDEX.md.** Run `./awf render` to regenerate `docs/decisions/INDEX.md`. Stage the result. Do not hand-edit `INDEX.md`; always regenerate and commit it alongside any ADR status change.
 
 <!-- awf:edit procedure-gate: default; create .awf/skills/parts/adr-lifecycle/procedure-gate.md to override -->
-5. **Validate the staged transaction.** Stage the complete transaction; the commit requires `./awf check staged` and `./awf check` to pass. A wired pre-commit hook enforces both at commit time; run them manually first only in a clone without wired hooks (checkable with `git config core.hooksPath`; when in doubt, run both manually). If either command fails, fix the cause and re-stage before retrying.
+5. **Validate the staged transaction.** Stage the complete transaction; the commit requires `./awf check staged` and `npm run check` to pass. A wired pre-commit hook enforces both at commit time; run them manually first only in a clone without wired hooks (checkable with `git config core.hooksPath`; when in doubt, run both manually). If either command fails, fix the cause and re-stage before retrying.
 
 <!-- awf:edit commit-templates: default; create .awf/skills/parts/adr-lifecycle/commit-templates.md to override -->
 ## Commit subject templates

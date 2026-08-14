@@ -164,9 +164,9 @@ Documentation travels with the change that makes it true. When you change behavi
 
 <!-- awf:edit composing-the-gate: from .awf/parts/workflow/composing-the-gate.md -->
 ## Composing the gate
-The current gate is `./awf check`. It covers awf configuration, generated-file drift, documentation links and prose, and workflow state. Keep it deterministic and fast.
+The project gate is `npm run check`. It runs non-mutating formatting, lint, type, dead-code, dependency, and test checks for executable resources. The pre-commit payload runs `./awf check` first for configuration, generated-file drift, documentation links and prose, and workflow state, then runs the project gate.
 
-When executable package resources are added, extend the gate with the cheapest reliable tests, type checks, and formatting checks required by that stack. The gate documentation and command must change in the same commit.
+Keep both layers deterministic and fast. Add the cheapest reliable check for each new executable-resource failure mode, and update the gate documentation and command in the same commit.
 
 
 <!-- awf:edit local-hooks: default; create .awf/parts/workflow/local-hooks.md to override -->
