@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ExecutionDetails, ExecutionOutcome } from "./api.js";
+import type { ExecutionDetails, ExecutionOutcome, ProfileDefinition } from "./api.js";
 import { CHILD_MARKER } from "./api.js";
 import { createSubagentToolkit, validateProfileData } from "./index.js";
 
@@ -50,6 +51,25 @@ function context(branch: unknown[] = []) {
         provider === runtimeModel.provider && id === runtimeModel.id ? runtimeModel : undefined,
     },
     sessionManager: { getBranch: () => branch },
+  };
+}
+
+function customProfile(overrides: Partial<ProfileDefinition> = {}): ProfileDefinition {
+  return {
+    id: "custom",
+    toolName: "custom_agent",
+    label: "Custom",
+    description: "Custom profile",
+    parameters: Type.Object({ task: Type.String() }),
+    profileDataSchema: Type.Object({ summary: Type.String() }, { additionalProperties: false }),
+    selectModel: ({ parent }) => parent.model,
+    prepare: ({ args, parent }) => ({
+      cwd: parent.cwd,
+      systemPrompt: "custom system",
+      prompt: (args as { task: string }).task,
+      toolPolicy: { mode: "allowlist", tools: [] },
+    }),
+    ...overrides,
   };
 }
 
@@ -122,6 +142,84 @@ describe("subagent toolkit adapter", () => {
       usage: { input: 1, output: 2, cost: 0.5 },
     });
     expect(updates).toHaveLength(1);
+  });
+
+  it("transfers callback state, transforms reports, and persists schema-validated data", async () => {
+    const harness = fakePi();
+    const beforeRun = vi.fn(() => ({ token: "prepared" }));
+    const afterRun = vi.fn((_outcome, state) => ({
+      report: `transformed ${String((state as { token: string }).token)}`,
+      profileData: { summary: "bounded" },
+    }));
+    createSubagentToolkit(harness.api, {
+      runner: {
+        run: vi.fn(async () => completedOutcome()),
+        shutdown: vi.fn(async () => undefined),
+      },
+      profiles: [customProfile({ beforeRun, afterRun })],
+    });
+    const result = await harness.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(beforeRun).toHaveBeenCalledTimes(1);
+    expect(afterRun).toHaveBeenCalledWith(expect.objectContaining({ report: "done" }), {
+      token: "prepared",
+    });
+    expect(result?.content).toEqual([{ type: "text", text: "transformed prepared" }]);
+    expect(result?.details.profileData).toEqual({ summary: "bounded" });
+  });
+
+  it("normalizes callback failures and profile-data schema mismatches", async () => {
+    const harness = fakePi();
+    createSubagentToolkit(harness.api, {
+      runner: {
+        run: vi.fn(async () => completedOutcome()),
+        shutdown: vi.fn(async () => undefined),
+      },
+      profiles: [
+        customProfile({
+          afterRun: () => ({ profileData: { summary: 42 } }) as never,
+        }),
+      ],
+    });
+    const invalid = await harness.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(invalid?.details).toMatchObject({
+      state: "failed",
+      failure: "Profile returned data that does not match its schema",
+    });
+
+    const throwing = fakePi();
+    createSubagentToolkit(throwing.api, {
+      runner: {
+        run: vi.fn(async () => completedOutcome()),
+        shutdown: vi.fn(async () => undefined),
+      },
+      profiles: [
+        customProfile({
+          beforeRun: () => {
+            throw new Error("callback failed");
+          },
+        }),
+      ],
+    });
+    const failed = await throwing.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(failed?.details).toMatchObject({ state: "failed", failure: "callback failed" });
   });
 
   it("normalizes unknown models and marks terminal results as errors", async () => {

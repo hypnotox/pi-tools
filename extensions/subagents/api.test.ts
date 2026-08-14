@@ -15,30 +15,35 @@ describe("profile API", () => {
   it("preserves TypeBox parameter inference in callbacks", () => {
     const parameters = Type.Object({ task: Type.String(), count: Type.Optional(Type.Number()) });
     const profileData = Type.Object({ summary: Type.String() });
-    const definition: ProfileDefinition<typeof parameters, typeof profileData> = {
-      id: "typed",
-      toolName: "typed",
-      label: "Typed",
-      description: "Typed profile",
-      parameters,
-      profileDataSchema: profileData,
-      selectModel(context) {
-        expectTypeOf(context).toMatchTypeOf<ProfileContext<{ task: string; count?: number }>>();
-        return { provider: "p", id: "m", thinkingLevels: ["off"] };
-      },
-      prepare(context) {
-        expectTypeOf(context.args.task).toEqualTypeOf<string>();
-        return {
-          cwd: "/tmp",
-          systemPrompt: "system",
-          prompt: context.args.task,
-          toolPolicy: { mode: "allowlist", tools: [] },
-        };
-      },
-      afterRun() {
-        return { report: "done", profileData: { summary: "typed" } };
-      },
-    };
+    const definition: ProfileDefinition<typeof parameters, typeof profileData, { token: string }> =
+      {
+        id: "typed",
+        toolName: "typed",
+        label: "Typed",
+        description: "Typed profile",
+        parameters,
+        profileDataSchema: profileData,
+        selectModel(context) {
+          expectTypeOf(context).toMatchTypeOf<ProfileContext<{ task: string; count?: number }>>();
+          return { provider: "p", id: "m", thinkingLevels: ["off"] };
+        },
+        prepare(context) {
+          expectTypeOf(context.args.task).toEqualTypeOf<string>();
+          return {
+            cwd: "/tmp",
+            systemPrompt: "system",
+            prompt: context.args.task,
+            toolPolicy: { mode: "allowlist", tools: [] },
+          };
+        },
+        beforeRun() {
+          return { token: "state" };
+        },
+        afterRun(_outcome, state) {
+          expectTypeOf(state).toEqualTypeOf<{ token: string } | undefined>();
+          return { report: state?.token ?? "done", profileData: { summary: "typed" } };
+        },
+      };
     expect(definition.toolName).toBe("typed");
   });
 

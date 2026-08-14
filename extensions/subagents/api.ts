@@ -155,7 +155,7 @@ export interface ProfileDefinition<
   beforeRun?(context: ProfileContext<Static<TParameters>>): Promise<TState> | TState;
   afterRun?(
     outcome: ExecutionOutcome,
-    state: TState,
+    state: TState | undefined,
   ):
     | Promise<PostRunResult<Static<TProfileData> & JsonValue> | undefined>
     | PostRunResult<Static<TProfileData> & JsonValue>

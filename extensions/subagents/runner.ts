@@ -124,6 +124,8 @@ function defaultSignalTree(child: ChildProcess, signal: NodeJS.Signals): void {
 export class SubprocessRunner {
   #deps: Required<RunnerDependencies>;
   #terminations = new Set<() => Promise<void>>();
+  #runs = new Set<Promise<void>>();
+  #disposed = false;
 
   constructor(deps: RunnerDependencies = {}) {
     this.#deps = {
@@ -141,11 +143,25 @@ export class SubprocessRunner {
   }
 
   async run(request: RunRequest): Promise<ExecutionOutcome> {
-    if (request.signal?.aborted)
+    let finishRun = (): void => undefined;
+    const trackedRun = new Promise<void>((resolve) => {
+      finishRun = resolve;
+    });
+    this.#runs.add(trackedRun);
+    try {
+      return await this.#run(request);
+    } finally {
+      finishRun();
+      this.#runs.delete(trackedRun);
+    }
+  }
+
+  async #run(request: RunRequest): Promise<ExecutionOutcome> {
+    if (this.#disposed || request.signal?.aborted)
       return {
         ...initialOutcome(),
         state: "cancelled",
-        failure: "Cancelled before launch",
+        failure: this.#disposed ? "Subagent runner is shut down" : "Cancelled before launch",
       };
 
     const outcome = initialOutcome();
@@ -157,20 +173,28 @@ export class SubprocessRunner {
       emit();
     };
 
-    const childCwd = await this.#deps.canonicalize(path.resolve(request.prepared.cwd));
-    const parentCwd = await this.#deps.canonicalize(path.resolve(request.parentCwd));
-    const promptDir = await this.#deps.mkdtemp(path.join(tmpdir(), "pi-tools-subagent-"));
-    const promptPath = path.join(promptDir, "system-prompt.txt");
+    let childCwd = "";
+    let parentCwd = "";
+    let promptDir: string | undefined;
+    let promptPath = "";
     let child: ChildProcess | undefined;
     let removeAbort = (): void => undefined;
     let removeChildListeners = (): void => undefined;
     let terminate = async (): Promise<void> => undefined;
 
     try {
+      childCwd = await this.#deps.canonicalize(path.resolve(request.prepared.cwd));
+      if (this.#disposed) throw new Error("Subagent runner is shut down");
+      parentCwd = await this.#deps.canonicalize(path.resolve(request.parentCwd));
+      if (this.#disposed) throw new Error("Subagent runner is shut down");
+      promptDir = await this.#deps.mkdtemp(path.join(tmpdir(), "pi-tools-subagent-"));
+      promptPath = path.join(promptDir, "system-prompt.txt");
+      if (this.#disposed) throw new Error("Subagent runner is shut down");
       await this.#deps.writeFile(promptPath, request.prepared.systemPrompt, {
         encoding: "utf8",
         mode: 0o600,
       });
+      if (this.#disposed) throw new Error("Subagent runner is shut down");
       const invocation = this.#deps.executable();
       const args = [
         ...invocation.prefix,
@@ -189,13 +213,12 @@ export class SubprocessRunner {
         ...(request.tools.length > 0 ? ["--tools", request.tools.join(",")] : ["--no-tools"]),
       ];
       if (request.parentTrusted && isPathWithin(parentCwd, childCwd)) args.push("--approve");
-      args.push(request.prepared.prompt);
 
       child = this.#deps.spawn(invocation.command, args, {
         cwd: childCwd,
         detached: true,
         shell: false,
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, [CHILD_MARKER]: "1" },
       });
 
@@ -234,6 +257,12 @@ export class SubprocessRunner {
         return terminating;
       };
       this.#terminations.add(terminate);
+      const handleStdinError = (error: Error): void => {
+        outcome.failure ??= truncateUtf8(`Failed to send subagent prompt: ${error.message}`);
+        void terminate();
+      };
+      child.stdin?.on("error", handleStdinError);
+      child.stdin?.end(request.prepared.prompt, "utf8");
       const abort = (): void => {
         void terminate();
       };
@@ -339,6 +368,7 @@ export class SubprocessRunner {
       child.stdout?.on("data", readStdout);
       child.stderr?.on("data", readStderr);
       removeChildListeners = () => {
+        child?.stdin?.removeListener("error", handleStdinError);
         child?.stdout?.removeListener("data", readStdout);
         child?.stderr?.removeListener("data", readStderr);
         child?.removeListener("close", settleClose);
@@ -348,9 +378,9 @@ export class SubprocessRunner {
       const code = await closePromise;
       feedStdout(stdoutDecoder.end(), true);
       stderr = truncateUtf8(stderr + stderrDecoder.end());
-      if (request.signal?.aborted) {
+      if (request.signal?.aborted || this.#disposed) {
         outcome.state = "cancelled";
-        outcome.failure = "Cancelled";
+        outcome.failure = this.#disposed ? "Cancelled by shutdown" : "Cancelled";
       } else if (code !== 0 || outcome.failure) {
         outcome.state = "failed";
         outcome.failure = outcome.failure ?? truncateUtf8(stderr || "Child process failed");
@@ -360,7 +390,7 @@ export class SubprocessRunner {
       return outcome;
     } catch (error) {
       await terminate();
-      outcome.state = request.signal?.aborted ? "cancelled" : "failed";
+      outcome.state = request.signal?.aborted || this.#disposed ? "cancelled" : "failed";
       outcome.retryActive = false;
       outcome.failure = truncateUtf8(error instanceof Error ? error.message : String(error));
       emit();
@@ -370,7 +400,7 @@ export class SubprocessRunner {
       removeChildListeners();
       this.#terminations.delete(terminate);
       try {
-        await this.#deps.rm(promptDir, { recursive: true, force: true });
+        if (promptDir) await this.#deps.rm(promptDir, { recursive: true, force: true });
       } catch (error) {
         outcome.state = "failed";
         outcome.failure = truncateUtf8(
@@ -382,7 +412,9 @@ export class SubprocessRunner {
   }
 
   async shutdown(): Promise<void> {
+    this.#disposed = true;
     await Promise.all([...this.#terminations].map((terminate) => terminate()));
+    await Promise.all([...this.#runs]);
     this.#terminations.clear();
   }
 }

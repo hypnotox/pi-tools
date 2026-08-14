@@ -1,4 +1,4 @@
-import { clampThinkingLevel, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import { clampThinkingLevel, getSupportedThinkingLevels, StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
@@ -41,15 +41,7 @@ const DEFAULT_PARAMETERS = Type.Object(
     task: Type.String({ minLength: 1, description: "Focused task for a fresh subagent." }),
     model: Type.Optional(Type.String({ description: "Exact provider/model selection." })),
     thinkingLevel: Type.Optional(
-      Type.Union([
-        Type.Literal("off"),
-        Type.Literal("minimal"),
-        Type.Literal("low"),
-        Type.Literal("medium"),
-        Type.Literal("high"),
-        Type.Literal("xhigh"),
-        Type.Literal("max"),
-      ]),
+      StringEnum(["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const),
     ),
   },
   { additionalProperties: false },
@@ -148,6 +140,8 @@ function detailsFromOutcome(
 
 export interface ToolkitDependencies {
   runner?: Pick<SubprocessRunner, "run" | "shutdown">;
+  /** Internal composition seam used to exercise profile callbacks before Phase 2 transport exists. */
+  profiles?: ProfileDefinition[];
 }
 
 export function createSubagentToolkit(
@@ -180,6 +174,8 @@ export function createSubagentToolkit(
     },
   };
   const registry = new ProfileRegistry(defaultProfile);
+  if (dependencies.profiles?.length)
+    registry.register({ profiles: dependencies.profiles, suppressDefault: true });
 
   // Child instances load providers and other extensions normally, but never expose toolkit tools.
   if (process.env[CHILD_MARKER] === "1") return;

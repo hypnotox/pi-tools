@@ -6,6 +6,7 @@ import { isPathWithin, SubprocessRunner, truncateUtf8 } from "./runner.js";
 
 function fakeChild(pid = 123): EventEmitter & {
   pid: number;
+  stdin: EventEmitter & { end: ReturnType<typeof vi.fn> };
   stdout: EventEmitter;
   stderr: EventEmitter;
   kill: ReturnType<typeof vi.fn>;
@@ -13,11 +14,20 @@ function fakeChild(pid = 123): EventEmitter & {
 } {
   return Object.assign(new EventEmitter(), {
     pid,
+    stdin: Object.assign(new EventEmitter(), { end: vi.fn() }),
     stdout: new EventEmitter(),
     stderr: new EventEmitter(),
     kill: vi.fn(),
     killed: false,
   });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 function request(overrides: Partial<RunRequest> = {}): RunRequest {
@@ -95,15 +105,34 @@ describe("SubprocessRunner", () => {
       "--tools",
       "read",
       "--approve",
-      "task",
     ]);
+    expect(deps.child.stdin.end).toHaveBeenCalledWith("task", "utf8");
     expect(deps.spawn.mock.calls[0]?.[2]).toMatchObject({
       cwd: "/parent/child",
       detached: true,
+      stdio: ["pipe", "pipe", "pipe"],
       env: expect.objectContaining({ PI_TOOLS_SUBAGENT_CHILD: "1" }),
     });
     expect(deps.rm).toHaveBeenCalled();
   });
+
+  it.each(["--approve", "-a", "--no-tools", "--help", "@secret", "-arbitrary"])(
+    "passes parser-sensitive prompt %s only through stdin",
+    async (prompt) => {
+      const deps = dependencies();
+      const { promise } = await launch(
+        deps,
+        request({
+          prepared: { ...request().prepared, cwd: "/outside", prompt },
+          parentTrusted: false,
+        }),
+      );
+      deps.child.emit("close", 0);
+      await promise;
+      expect(deps.spawn.mock.calls[0]?.[1]).not.toContain(prompt);
+      expect(deps.child.stdin.end).toHaveBeenCalledWith(prompt, "utf8");
+    },
+  );
 
   it("does not trust siblings, prefix collisions, or cross-volume Windows paths", async () => {
     expect(isPathWithin("/parent", "/parentish/child")).toBe(false);
@@ -179,6 +208,17 @@ describe("SubprocessRunner", () => {
     await expect(promise).resolves.toMatchObject({ state: "cancelled" });
   });
 
+  it("normalizes prompt pipe failures and terminates the child tree", async () => {
+    const deps = dependencies();
+    const { promise } = await launch(deps);
+    deps.child.stdin.emit("error", new Error("broken pipe"));
+    await expect(promise).resolves.toMatchObject({
+      state: "failed",
+      failure: "Failed to send subagent prompt: broken pipe",
+    });
+    expect(deps.signalTree).toHaveBeenCalledWith(deps.child, "SIGTERM");
+  });
+
   it("settles close/error races once and cleans up", async () => {
     const deps = dependencies();
     const { promise } = await launch(deps);
@@ -208,6 +248,43 @@ describe("SubprocessRunner", () => {
     deps.child.emit("close", 0);
     await shutdown;
     await promise;
+  });
+
+  it("prevents spawn and awaits a run interrupted during pre-launch setup", async () => {
+    const gate = deferred<string>();
+    const deps = dependencies();
+    deps.canonicalize = vi.fn(() => gate.promise);
+    const runner = new SubprocessRunner(deps as never);
+    const run = runner.run(request());
+    const shutdown = runner.shutdown();
+    let shutdownFinished = false;
+    void shutdown.then(() => {
+      shutdownFinished = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(shutdownFinished).toBe(false);
+    gate.resolve("/parent/child");
+    await expect(run).resolves.toMatchObject({ state: "cancelled" });
+    await shutdown;
+    expect(deps.spawn).not.toHaveBeenCalled();
+  });
+
+  it("awaits delayed prompt cleanup before shutdown completes", async () => {
+    const cleanup = deferred<void>();
+    const deps = dependencies();
+    deps.rm = vi.fn(() => cleanup.promise);
+    const { runner, promise } = await launch(deps);
+    deps.child.emit("close", 0);
+    const shutdown = runner.shutdown();
+    let shutdownFinished = false;
+    void shutdown.then(() => {
+      shutdownFinished = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(shutdownFinished).toBe(false);
+    cleanup.resolve();
+    await promise;
+    await shutdown;
   });
 
   it("truncates UTF-8 without splitting a code point", () => {
