@@ -4,11 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   ExecutionDetails,
   ExecutionOutcome,
+  ExecutionUsage,
   ProfileCapability,
   ProfileDefinition,
 } from "./api.js";
 import {
   CHILD_MARKER,
+  MAX_EXECUTION_FACT_BYTES,
   SUBAGENT_PROFILE_CAPABILITY_EVENT,
   SUBAGENT_PROFILE_PROTOCOL_VERSION,
   SUBAGENT_PROFILE_REQUEST_EVENT,
@@ -23,7 +25,11 @@ interface RegisteredTool {
     signal: AbortSignal | undefined,
     onUpdate: ((result: unknown) => void) | undefined,
     context: unknown,
-  ) => Promise<{ content: Array<{ type: "text"; text: string }>; details: ExecutionDetails }>;
+  ) => Promise<{
+    content: Array<{ type: "text"; text: string }>;
+    details: ExecutionDetails;
+    usage?: ExecutionUsage;
+  }>;
 }
 
 type Handler = (event: unknown, context: unknown) => unknown;
@@ -132,7 +138,15 @@ function completedOutcome(): ExecutionOutcome {
   return {
     state: "completed",
     report: "done",
-    usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 0.5 },
+    usage: {
+      input: 1,
+      output: 2,
+      cacheRead: 3,
+      cacheWrite: 4,
+      reasoning: 1,
+      totalTokens: 10,
+      cost: { input: 0.1, output: 0.2, cacheRead: 0.1, cacheWrite: 0.1, total: 0.5 },
+    },
     activity: [{ kind: "tool_end", text: "read" }],
     omittedActivity: 0,
     retries: 1,
@@ -197,8 +211,9 @@ describe("subagent toolkit adapter", () => {
     expect(result?.details).toMatchObject({
       state: "completed",
       retries: 1,
-      usage: { input: 1, output: 2, cost: 0.5 },
+      usage: { input: 1, output: 2, reasoning: 1, cost: { total: 0.5 } },
     });
+    expect(result?.usage).toEqual(result?.details.usage);
     expect(updates).toHaveLength(1);
   });
 
@@ -311,7 +326,13 @@ describe("subagent toolkit adapter", () => {
       report: "done",
       retries: 1,
       activity: [{ kind: "tool_end", text: "read" }],
-      usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 0.5 },
+      usage: {
+        input: 1,
+        output: 2,
+        cacheRead: 3,
+        cacheWrite: 4,
+        cost: { total: 0.5 },
+      },
       failure: "Profile returned data that does not match its schema",
     });
 
@@ -370,6 +391,64 @@ describe("subagent toolkit adapter", () => {
       failure: "Profile prepared an invalid run",
     });
     expect(run).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid thinking callback output before launching", async () => {
+    const harness = fakePi();
+    const run = vi.fn(async () => completedOutcome());
+    createSubagentToolkit(harness.api, {
+      runner: { run, shutdown: vi.fn(async () => undefined) },
+      profiles: [customProfile({ selectThinkingLevel: () => "invalid" as never })],
+    });
+    harness.start();
+    const result = await harness.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(result?.details).toMatchObject({
+      state: "failed",
+      failure: "Profile selected an invalid thinking level",
+    });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("bounds persisted profile and CWD execution facts", async () => {
+    const harness = fakePi();
+    const oversized = "é".repeat(MAX_EXECUTION_FACT_BYTES);
+    createSubagentToolkit(harness.api, {
+      runner: {
+        run: vi.fn(async () => completedOutcome()),
+        shutdown: vi.fn(async () => undefined),
+      },
+      profiles: [
+        customProfile({
+          id: oversized,
+          prepare: ({ args }) => ({
+            cwd: oversized,
+            systemPrompt: "system",
+            prompt: (args as { task: string }).task,
+            toolPolicy: { mode: "allowlist", tools: [] },
+          }),
+        }),
+      ],
+    });
+    harness.start();
+    const result = await harness.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(Buffer.byteLength(result?.details.profileId ?? "", "utf8")).toBeLessThanOrEqual(
+      MAX_EXECUTION_FACT_BYTES,
+    );
+    expect(Buffer.byteLength(result?.details.cwd ?? "", "utf8")).toBeLessThanOrEqual(
+      MAX_EXECUTION_FACT_BYTES,
+    );
   });
 
   it("normalizes unknown models and marks terminal results as errors", async () => {

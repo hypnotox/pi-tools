@@ -174,7 +174,7 @@ describe("SubprocessRunner", () => {
     deps.child.stdout.emit(
       "data",
       Buffer.from(
-        `${JSON.stringify({ type: "tool_execution_start", toolName: "read" })}\n${JSON.stringify({ type: "auto_retry_end", success: true })}\n${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "done" }], usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: { total: 0.5 } } } })}`,
+        `${JSON.stringify({ type: "tool_execution_start", toolName: "read" })}\n${JSON.stringify({ type: "auto_retry_end", success: true })}\n${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "done" }], usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cacheWrite1h: 2, reasoning: 1, totalTokens: 10, cost: { input: 0.1, output: 0.2, cacheRead: 0.05, cacheWrite: 0.15, total: 0.5 } } } })}`,
       ),
     );
     deps.child.emit("close", 0);
@@ -184,7 +184,16 @@ describe("SubprocessRunner", () => {
       report: "done",
       retries: 1,
       retryActive: false,
-      usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 0.5 },
+      usage: {
+        input: 1,
+        output: 2,
+        cacheRead: 3,
+        cacheWrite: 4,
+        cacheWrite1h: 2,
+        reasoning: 1,
+        totalTokens: 10,
+        cost: { input: 0.1, output: 0.2, cacheRead: 0.05, cacheWrite: 0.15, total: 0.5 },
+      },
     });
     expect(result.activity.map((entry) => entry.kind)).toEqual([
       "retry_start",

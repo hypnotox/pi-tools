@@ -11,6 +11,8 @@ import {
   type ExecutionOutcome,
   type ExecutionUsage,
   JsonValueSchema,
+  MAX_EXECUTION_FACT_BYTES,
+  MAX_EXECUTION_FACT_CHARACTERS,
   MAX_PROFILE_DATA_BYTES,
   PostRunResultSchema,
   PreparedRunSchema,
@@ -21,6 +23,7 @@ import {
   SUBAGENT_PROFILE_CAPABILITY_EVENT,
   SUBAGENT_PROFILE_PROTOCOL_VERSION,
   SUBAGENT_PROFILE_REQUEST_EVENT,
+  THINKING_LEVELS,
   type ThinkingLevel,
 } from "./api.js";
 import { ProfileRegistry } from "./profile-registry.js";
@@ -58,7 +61,8 @@ const EMPTY_USAGE: ExecutionUsage = {
   output: 0,
   cacheRead: 0,
   cacheWrite: 0,
-  cost: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
 
 function assertJsonValue(value: unknown): asserts value is ExecutionDetails["profileData"] {
@@ -128,6 +132,26 @@ function assistantBatchToolNames(
   return [fallback];
 }
 
+function boundedExecutionFact(value: string): string {
+  return truncateUtf8(value.slice(0, MAX_EXECUTION_FACT_CHARACTERS), MAX_EXECUTION_FACT_BYTES);
+}
+
+function boundedExecutionIdentity(
+  profileId: string,
+  cwd: string,
+  model: ConcreteModel,
+): Pick<ExecutionDetails, "profileId" | "cwd" | "model"> {
+  return {
+    profileId: boundedExecutionFact(profileId),
+    cwd: boundedExecutionFact(cwd),
+    model: {
+      ...model,
+      provider: boundedExecutionFact(model.provider),
+      id: boundedExecutionFact(model.id),
+    },
+  };
+}
+
 function detailsFromOutcome(
   profileId: string,
   cwd: string,
@@ -137,10 +161,8 @@ function detailsFromOutcome(
   extra: { queuePosition?: number; profileData?: ExecutionDetails["profileData"] } = {},
 ): ExecutionDetails {
   return {
-    profileId,
+    ...boundedExecutionIdentity(profileId, cwd, model),
     state: outcome.state,
-    cwd,
-    model,
     thinkingLevel,
     retryActive: outcome.retryActive,
     retries: outcome.retries,
@@ -267,19 +289,21 @@ export function createSubagentToolkit(
             failure,
           })
         : {
-            profileId: profile.id,
+            ...boundedExecutionIdentity(profile.id, cwd, selectedModel),
             state: signal?.aborted ? "cancelled" : "failed",
-            cwd,
-            model: selectedModel,
             thinkingLevel,
             retryActive: false,
             retries: 0,
             activity: [],
             omittedActivity: 0,
-            usage: { ...EMPTY_USAGE },
+            usage: { ...EMPTY_USAGE, cost: { ...EMPTY_USAGE.cost } },
             failure,
           };
-      return { content: [{ type: "text" as const, text: failure }], details };
+      return {
+        content: [{ type: "text" as const, text: failure }],
+        details,
+        ...(outcome === undefined ? {} : { usage: outcome.usage }),
+      };
     };
 
     try {
@@ -315,6 +339,8 @@ export function createSubagentToolkit(
       };
       const requestedThinking =
         profile.selectThinkingLevel?.(profileContext) ?? parent.thinkingLevel;
+      if (!THINKING_LEVELS.includes(requestedThinking as ThinkingLevel))
+        throw new Error("Profile selected an invalid thinking level");
       thinkingLevel = clampThinkingLevel(runtimeModel, requestedThinking) as ThinkingLevel;
       const prepared = await profile.prepare(profileContext);
       if (!Value.Check(PreparedRunSchema, prepared))
@@ -388,6 +414,7 @@ export function createSubagentToolkit(
                 },
               ],
               details,
+              usage: outcome.usage,
             };
           } catch (error) {
             return failureResult(error, outcome);
@@ -395,17 +422,15 @@ export function createSubagentToolkit(
         },
         (queuePosition) => {
           const details: ExecutionDetails = {
-            profileId: profile.id,
+            ...boundedExecutionIdentity(profile.id, prepared.cwd, selectedModel),
             state: "queued",
-            cwd: prepared.cwd,
-            model: selectedModel,
             thinkingLevel,
             queuePosition,
             retryActive: false,
             retries: 0,
             activity: [],
             omittedActivity: 0,
-            usage: { ...EMPTY_USAGE },
+            usage: { ...EMPTY_USAGE, cost: { ...EMPTY_USAGE.cost } },
           };
           onUpdate?.({ content: [{ type: "text", text: `Queued (${queuePosition})` }], details });
         },

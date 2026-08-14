@@ -1,9 +1,10 @@
 import { Text } from "@earendil-works/pi-tui";
-import type { ExecutionDetails } from "./api.js";
+import { type ExecutionDetails, MAX_PROFILE_DATA_BYTES } from "./api.js";
+import { truncateUtf8 } from "./runner.js";
 
 function usageLine(details: ExecutionDetails): string {
   const usage = details.usage;
-  return `usage ${usage.input} in / ${usage.output} out / ${usage.cacheRead} cache read / ${usage.cacheWrite} cache write · $${usage.cost.toFixed(4)}`;
+  return `usage ${usage.input} in / ${usage.output} out / ${usage.cacheRead} cache read / ${usage.cacheWrite} cache write · $${usage.cost.total.toFixed(4)}`;
 }
 
 export function renderExecution(
@@ -37,7 +38,10 @@ export function renderExecution(
     if (details.omittedActivity > 0)
       text += `\n${theme.fg("dim", `${details.omittedActivity} activity entries omitted`)}`;
     if (details.profileData !== undefined)
-      text += `\n${theme.fg("dim", JSON.stringify(details.profileData, null, 2))}`;
+      text += `\n${theme.fg(
+        "dim",
+        truncateUtf8(JSON.stringify(details.profileData, null, 2), MAX_PROFILE_DATA_BYTES),
+      )}`;
   }
   return new Text(text, 0, 0);
 }

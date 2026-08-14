@@ -1,6 +1,8 @@
 import { type Static, Type, type TSchema as TypeBoxSchema } from "typebox";
 
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export const MAX_EXECUTION_FACT_BYTES = 16 * 1024;
+export const MAX_EXECUTION_FACT_CHARACTERS = MAX_EXECUTION_FACT_BYTES / 4;
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 const ThinkingLevelSchema = Type.Union([
@@ -15,8 +17,8 @@ const ThinkingLevelSchema = Type.Union([
 
 export const ConcreteModelSchema = Type.Object(
   {
-    provider: Type.String({ minLength: 1 }),
-    id: Type.String({ minLength: 1 }),
+    provider: Type.String({ minLength: 1, maxLength: MAX_EXECUTION_FACT_CHARACTERS }),
+    id: Type.String({ minLength: 1, maxLength: MAX_EXECUTION_FACT_CHARACTERS }),
     thinkingLevels: Type.Array(ThinkingLevelSchema, { minItems: 1, uniqueItems: true }),
   },
   { additionalProperties: false },
@@ -79,7 +81,19 @@ export const ExecutionUsageSchema = Type.Object(
     output: Type.Number({ minimum: 0 }),
     cacheRead: Type.Number({ minimum: 0 }),
     cacheWrite: Type.Number({ minimum: 0 }),
-    cost: Type.Number({ minimum: 0 }),
+    cacheWrite1h: Type.Optional(Type.Number({ minimum: 0 })),
+    reasoning: Type.Optional(Type.Number({ minimum: 0 })),
+    totalTokens: Type.Number({ minimum: 0 }),
+    cost: Type.Object(
+      {
+        input: Type.Number({ minimum: 0 }),
+        output: Type.Number({ minimum: 0 }),
+        cacheRead: Type.Number({ minimum: 0 }),
+        cacheWrite: Type.Number({ minimum: 0 }),
+        total: Type.Number({ minimum: 0 }),
+      },
+      { additionalProperties: false },
+    ),
   },
   { additionalProperties: false },
 );
@@ -184,7 +198,7 @@ export interface ProfileCapability {
 
 export const ExecutionDetailsSchema = Type.Object(
   {
-    profileId: Type.String(),
+    profileId: Type.String({ maxLength: MAX_EXECUTION_FACT_CHARACTERS }),
     state: Type.Union([
       Type.Literal("queued"),
       Type.Literal("running"),
@@ -192,7 +206,7 @@ export const ExecutionDetailsSchema = Type.Object(
       Type.Literal("failed"),
       Type.Literal("cancelled"),
     ]),
-    cwd: Type.String(),
+    cwd: Type.String({ maxLength: MAX_EXECUTION_FACT_CHARACTERS }),
     model: ConcreteModelSchema,
     thinkingLevel: ThinkingLevelSchema,
     queuePosition: Type.Optional(Type.Integer({ minimum: 1 })),

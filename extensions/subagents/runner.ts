@@ -72,7 +72,14 @@ function finiteNonnegative(value: unknown): number {
 function initialOutcome(): ExecutionOutcome {
   return {
     state: "running",
-    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
     activity: [],
     omittedActivity: 0,
     retries: 0,
@@ -319,11 +326,24 @@ export class SubprocessRunner {
           );
           const usage = message.usage;
           if (usage) {
-            for (const key of ["input", "output", "cacheRead", "cacheWrite"] as const)
+            for (const key of [
+              "input",
+              "output",
+              "cacheRead",
+              "cacheWrite",
+              "totalTokens",
+            ] as const)
               outcome.usage[key] += finiteNonnegative(usage[key]);
+            for (const key of ["cacheWrite1h", "reasoning"] as const) {
+              if (usage[key] !== undefined)
+                outcome.usage[key] = (outcome.usage[key] ?? 0) + finiteNonnegative(usage[key]);
+            }
             const cost = usage.cost;
-            if (cost && typeof cost === "object")
-              outcome.usage.cost += finiteNonnegative((cost as { total?: unknown }).total);
+            if (cost && typeof cost === "object") {
+              const costRecord = cost as Record<string, unknown>;
+              for (const key of ["input", "output", "cacheRead", "cacheWrite", "total"] as const)
+                outcome.usage.cost[key] += finiteNonnegative(costRecord[key]);
+            }
           }
           if (message.errorMessage) outcome.failure = truncateUtf8(message.errorMessage);
           emit();

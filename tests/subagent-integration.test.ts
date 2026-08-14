@@ -131,7 +131,14 @@ describe("subagent profile package contract", () => {
         run: vi.fn(async () => ({
           state: "completed" as const,
           report: "raw",
-          usage: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0, cost: 0 },
+          usage: {
+            input: 1,
+            output: 2,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 3,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
           activity: [],
           omittedActivity: 0,
           retries: 0,
