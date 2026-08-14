@@ -542,8 +542,14 @@
     "docs/pitfalls.md": {
       "templateId": "docs/pitfalls.md.tmpl",
       "templateHash": "sha256:d6475aaeadbbed6f56bfc85c4716b8636fea0d5922661201890334a6429b4f85",
-      "configHash": "sha256:a2c4f72513d4f0fae72545ea436b90c6cd5755f791d1332637b661f67bf131b4",
-      "outputHash": "sha256:906a8129b95bf84462ec2b8145a2bca859fa340aec0e4059e34f67cd265202b3"
+      "configHash": "sha256:aaac9a6c34e4b5e251ea8e18fa96634edbc92736cdc04d7dcc58b5b99dd36316",
+      "outputHash": "sha256:6eb933f15fa728eeba2588e737bc37be075832de9734ea744798e1d33b65736a"
+    },
+    "docs/pitfalls/managed-worktree-biome-exclusion.md": {
+      "templateId": "pitfalls/entry.md.tmpl",
+      "templateHash": "sha256:23ea7baa4f2cd0e3a7319448093f2612ca5a7beab8cb0bfc631015eef99be786",
+      "configHash": "sha256:e0c372174cb32356ac0bce225248a4a9f4687af586bb19c3e877a07c5b5f6aaf",
+      "outputHash": "sha256:bd61093326d33e6909a8168da16b9b3d13e3e861989378d660918cedbd87b11d"
     },
     "docs/plans/README.md": {
       "templateId": "plans-readme/README.md.tmpl",

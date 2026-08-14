@@ -7,7 +7,16 @@
 
 Pitfalls are durable hazards, not backlog items. Author sources under `.awf/docs/pitfalls/*.md`.
 
-_No pitfalls recorded yet. Add a Markdown source under `.awf/docs/pitfalls/`._
+| Pitfall | Domains | Tags | Related ADRs |
+| --- | --- | --- | --- |
+| [Managed Worktree Biome Exclusion](pitfalls/managed-worktree-biome-exclusion.md) | Unassigned |  |  |
+
+## By domain
+
+### Unassigned
+
+- [Managed Worktree Biome Exclusion](pitfalls/managed-worktree-biome-exclusion.md)
+
 
 <!-- awf:edit append: default; create .awf/docs/parts/pitfalls/append.md to override -->
 
