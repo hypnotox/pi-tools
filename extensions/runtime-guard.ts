@@ -23,7 +23,11 @@ export function versionSupported(value: string): boolean {
   return true;
 }
 
-export function guardRuntime(pi: ExtensionAPI, required: readonly RequiredAPI[]): boolean {
+export function guardRuntime(
+  pi: ExtensionAPI,
+  required: readonly RequiredAPI[],
+  runtimeVersion = VERSION,
+): boolean {
   const available: Record<RequiredAPI, boolean> = {
     on: typeof pi.on === "function",
     registerTool: typeof pi.registerTool === "function",
@@ -31,7 +35,7 @@ export function guardRuntime(pi: ExtensionAPI, required: readonly RequiredAPI[])
     queueCommand: typeof (pi as QueueingAPI).queueCommand === "function",
   };
   const missing = required.filter((api) => !available[api]);
-  if (versionSupported(VERSION) && missing.length === 0) return true;
+  if (versionSupported(runtimeVersion) && missing.length === 0) return true;
   if (typeof pi.on !== "function") return false;
 
   pi.on("session_start", (_event, ctx) => {
@@ -40,7 +44,7 @@ export function guardRuntime(pi: ExtensionAPI, required: readonly RequiredAPI[])
     globalState[NOTICE_KEY] = true;
     const missingMessage = missing.length > 0 ? ` Missing APIs: ${missing.join(", ")}.` : "";
     ctx.ui.notify(
-      `These extensions require Pi ${MIN_PI_VERSION} or newer; found ${VERSION}.${missingMessage} Upgrade Pi and reload.`,
+      `These extensions require Pi ${MIN_PI_VERSION} or newer; found ${runtimeVersion}.${missingMessage} Upgrade Pi and reload.`,
       "error",
     );
   });

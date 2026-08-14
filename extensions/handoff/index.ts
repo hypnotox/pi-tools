@@ -166,11 +166,11 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
                 { customType: "session-handoff", content: envelope, display: true },
                 { triggerTurn: true },
               );
-            } catch {
+            } catch (deliveryError) {
               try {
                 replacement.ui.setEditorText(envelope);
               } catch {
-                // The replacement context is the only safe recovery target.
+                throw deliveryError;
               }
               try {
                 replacement.ui.notify(
@@ -178,7 +178,7 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
                   "warning",
                 );
               } catch {
-                // Recovery UI is optional after replacement.
+                // The prepared editor text remains available without a notification.
               }
             }
           },

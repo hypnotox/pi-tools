@@ -21,6 +21,7 @@ function createHarness(
     newFails?: boolean;
     newCancelled?: boolean;
     staleAfterFailure?: boolean;
+    replacementEditorFails?: boolean;
   } = {},
 ) {
   const hooks = new Map<string, Hook>();
@@ -113,7 +114,10 @@ function createHarness(
       await handoffRequest.withSession({
         ui: {
           notify: (...args: unknown[]) => notices.push(args),
-          setEditorText: (text: string) => replacementEditor.push(text),
+          setEditorText: (text: string) => {
+            if (options.replacementEditorFails) throw new Error("replacement editor failed");
+            replacementEditor.push(text);
+          },
         },
         sendMessage: async (...args: unknown[]) => {
           sent.push(args);
@@ -229,6 +233,17 @@ describe("fresh-session handoff extension", () => {
     expect(h.notices).toEqual([
       ["Automatic kickoff failed; submit the prepared editor text.", "warning"],
     ]);
+  });
+
+  it("reports delivery failure when replacement editor recovery also fails", async () => {
+    const h = createHarness({ sendFails: true, replacementEditorFails: true });
+    await h.execute("cannot recover");
+    const pending = h.continue();
+    h.finish();
+
+    await expect(pending).rejects.toThrow("send failed");
+    expect(h.replacementEditor).toEqual([]);
+    expect(h.notices).toEqual([]);
   });
 
   it("recovers in the original editor when session replacement is cancelled", async () => {

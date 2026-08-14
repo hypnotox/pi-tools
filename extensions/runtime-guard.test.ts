@@ -47,6 +47,31 @@ describe("runtime compatibility guard", () => {
     expect(notify).toHaveBeenCalledWith(expect.stringContaining(missingApi), "error");
   });
 
+  it.each(["0.81.0", "invalid"])(
+    "refuses registration and notifies once for unsupported runtime %s",
+    (runtimeVersion) => {
+      let sessionStart: Handler | undefined;
+      const pi = {
+        on(name: string, handler: Handler) {
+          if (name === "session_start") sessionStart = handler;
+        },
+        registerTool: vi.fn(),
+        registerCommand: vi.fn(),
+        queueCommand: vi.fn(),
+      } as unknown as ExtensionAPI;
+
+      expect(guardRuntime(pi, REQUIRED_APIS, runtimeVersion)).toBe(false);
+      const notify = vi.fn();
+      sessionStart?.({}, { ui: { notify } });
+      sessionStart?.({}, { ui: { notify } });
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify).toHaveBeenCalledWith(
+        expect.stringContaining(`found ${runtimeVersion}`),
+        "error",
+      );
+    },
+  );
+
   it("accepts the installed runtime when requested APIs are present", () => {
     const pi = {
       on: vi.fn(),
