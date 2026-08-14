@@ -7,7 +7,7 @@ type Tool = { execute: (...args: unknown[]) => Promise<unknown> };
 type CountdownComponent = { handleInput(data: string): void };
 type NewSessionRequest = {
   parentSession?: string;
-  setup(manager: { cleanup(): Promise<void> }): Promise<void>;
+  setup?(manager: { cleanup(): Promise<void> }): Promise<void>;
   withSession(context: {
     ui: { notify(...args: unknown[]): void; setEditorText(text: string): void };
     sendMessage(...args: unknown[]): Promise<void>;
@@ -15,7 +15,13 @@ type NewSessionRequest = {
 };
 
 function createHarness(
-  options: { queueFails?: boolean; sendFails?: boolean; newFails?: boolean } = {},
+  options: {
+    queueFails?: boolean;
+    sendFails?: boolean;
+    newFails?: boolean;
+    newCancelled?: boolean;
+    staleAfterFailure?: boolean;
+  } = {},
 ) {
   const hooks = new Map<string, Hook>();
   const commands = new Map<string, { handler(token: string, context: unknown): Promise<void> }>();
@@ -26,6 +32,12 @@ function createHarness(
   const replacementEditor: string[] = [];
   const sent: unknown[][] = [];
   const sessions: NewSessionRequest[] = [];
+  const clearInterval = vi.fn();
+  const clearTimeout = vi.fn();
+  let intervalCallback: (() => void) | undefined;
+  let timeoutCallback: (() => void) | undefined;
+  let oldContextStale = false;
+  let oldUiCalls = 0;
   let done: ((result: boolean) => void) | undefined;
   let component: CountdownComponent | undefined;
   let queueFails = options.queueFails ?? false;
@@ -62,8 +74,16 @@ function createHarness(
       getLeafEntry: () => leaf,
     },
     ui: {
-      notify: (...args: unknown[]) => notices.push(args),
-      setEditorText: (text: string) => editor.push(text),
+      notify: (...args: unknown[]) => {
+        oldUiCalls += 1;
+        if (oldContextStale) throw new Error("stale context");
+        notices.push(args);
+      },
+      setEditorText: (text: string) => {
+        oldUiCalls += 1;
+        if (oldContextStale) throw new Error("stale context");
+        editor.push(text);
+      },
       custom: (factory: unknown) =>
         new Promise<boolean>((resolve) => {
           const createComponent = factory as (
@@ -84,8 +104,12 @@ function createHarness(
     newSession: async (request: unknown) => {
       const handoffRequest = request as NewSessionRequest;
       sessions.push(handoffRequest);
-      await handoffRequest.setup({ cleanup: vi.fn(async () => undefined) });
-      if (options.newFails) throw new Error("new session failed");
+      if (options.newCancelled) return { cancelled: true };
+      await handoffRequest.setup?.({ cleanup: vi.fn(async () => undefined) });
+      if (options.newFails) {
+        oldContextStale = options.staleAfterFailure ?? false;
+        throw new Error("new session failed");
+      }
       await handoffRequest.withSession({
         ui: {
           notify: (...args: unknown[]) => notices.push(args),
@@ -96,14 +120,21 @@ function createHarness(
           if (options.sendFails) throw new Error("send failed");
         },
       });
+      return { cancelled: false };
     },
   };
   const dependencies: HandoffDependencies = {
     randomUUID: () => "request-id",
-    setInterval: vi.fn(() => "interval"),
-    clearInterval: vi.fn(),
-    setTimeout: vi.fn(() => "timeout"),
-    clearTimeout: vi.fn(),
+    setInterval: vi.fn((callback) => {
+      intervalCallback = callback;
+      return "interval";
+    }),
+    clearInterval,
+    setTimeout: vi.fn((callback) => {
+      timeoutCallback = callback;
+      return "timeout";
+    }),
+    clearTimeout,
   };
   registerHandoff(pi, dependencies);
   return {
@@ -120,7 +151,14 @@ function createHarness(
       tool?.execute("call", { kickoff }, undefined, undefined, context),
     continue: () => commands.get("handoff-session-continue")?.handler("request-id", context),
     finish: (value = true) => done?.(value),
+    expireCountdown: () => timeoutCallback?.(),
+    tickCountdown: () => intervalCallback?.(),
     cancel: () => component?.handleInput("escape"),
+    clearInterval,
+    clearTimeout,
+    get oldUiCalls() {
+      return oldUiCalls;
+    },
     setQueueFails: (value: boolean) => {
       queueFails = value;
     },
@@ -193,13 +231,26 @@ describe("fresh-session handoff extension", () => {
     ]);
   });
 
-  it("recovers exact text in the original editor when replacement fails", async () => {
-    const h = createHarness({ newFails: true });
+  it("recovers in the original editor when session replacement is cancelled", async () => {
+    const h = createHarness({ newCancelled: true });
+    await h.execute("recover exactly");
+    const pending = h.continue();
+    h.finish();
+    await pending;
+
+    expect(h.editor).toEqual([handoffEnvelope("recover exactly")]);
+    expect(h.notices).toEqual([
+      ["Fresh-session handoff canceled; recovery text is in the editor.", "warning"],
+    ]);
+  });
+
+  it("never touches the stale original context after replacement teardown", async () => {
+    const h = createHarness({ newFails: true, staleAfterFailure: true });
     await h.execute("recover exactly");
     const pending = h.continue();
     h.finish();
     await expect(pending).rejects.toThrow("new session failed");
-    expect(h.editor).toEqual([handoffEnvelope("recover exactly")]);
+    expect(h.oldUiCalls).toBe(0);
   });
 
   it("rejects invalid kickoff, unsupported context, mixed batches, and queue failures", async () => {
@@ -225,6 +276,27 @@ describe("fresh-session handoff extension", () => {
     const fresh = createHarness();
     fresh.dropSession();
     await expect(fresh.execute()).rejects.toThrow("persisted interactive");
+  });
+
+  it("completes automatically after five seconds and clears both timers", async () => {
+    const h = createHarness();
+    await h.execute();
+    const pending = h.continue();
+    h.tickCountdown();
+    h.expireCountdown();
+    await pending;
+
+    expect(h.sessions).toHaveLength(1);
+    expect(h.clearInterval).toHaveBeenCalledWith("interval");
+    expect(h.clearTimeout).toHaveBeenCalledWith("timeout");
+  });
+
+  it("enforces the 1,000 UTF-16 code-unit kickoff boundary", async () => {
+    await expect(createHarness().execute("x".repeat(1_000))).resolves.toMatchObject({
+      terminate: true,
+    });
+    await expect(createHarness().execute("x".repeat(1_001))).rejects.toThrow("1000");
+    await expect(createHarness().execute("😀".repeat(501))).rejects.toThrow("1000");
   });
 
   it("clears pending state when shutdown or command completion occurs", async () => {

@@ -150,8 +150,6 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
       const request = pending;
       if (!request || token !== request.id) throw new Error("No matching pending handoff request");
       const envelope = handoffEnvelope(request.kickoff);
-      let prepared: { cleanup?(): Promise<void> } | undefined;
-      let replacementStarted = false;
       try {
         if (!(await countdown(context, deps))) {
           context.ui.notify("Fresh-session handoff canceled.");
@@ -160,14 +158,9 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
         if (pending !== request) throw new Error("No matching pending handoff request");
         const parentSession = context.sessionManager.getSessionFile();
         if (!parentSession) throw new Error("The active session is no longer persisted");
-        await context.newSession({
+        const result = await context.newSession({
           parentSession,
-          async setup(manager) {
-            prepared = manager as unknown as { cleanup?(): Promise<void> };
-          },
           async withSession(replacement) {
-            replacementStarted = true;
-            prepared = undefined;
             try {
               await replacement.sendMessage(
                 { customType: "session-handoff", content: envelope, display: true },
@@ -190,24 +183,13 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
             }
           },
         });
-      } catch (error) {
-        try {
-          await prepared?.cleanup?.();
-        } catch {
-          // Preserve the original handoff error.
+        if (result.cancelled) {
+          context.ui.setEditorText(envelope);
+          context.ui.notify(
+            "Fresh-session handoff canceled; recovery text is in the editor.",
+            "warning",
+          );
         }
-        if (!replacementStarted) {
-          try {
-            context.ui.setEditorText(envelope);
-            context.ui.notify(
-              "Fresh-session handoff failed; recovery text is in the editor.",
-              "error",
-            );
-          } catch {
-            // The original context may be unavailable during teardown.
-          }
-        }
-        throw error;
       } finally {
         if (pending?.id === request.id) pending = undefined;
         suppressThresholdCompaction = false;
