@@ -2,7 +2,7 @@
 format: plan-v2
 date: 2026-08-14
 adrs: [subagent-profile-toolkit]
-status: Proposed
+status: Implemented
 ---
 # Plan: Subagent Profile Toolkit
 

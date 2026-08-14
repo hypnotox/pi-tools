@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: subagent-profile-toolkit
-status: Implementing
+status: Implemented
 date: 2026-08-14
 ---
 # ADR-0002: Subagent Profile Toolkit
@@ -56,3 +56,4 @@ The first implementation should serve known integration requirements without pre
 - 2026-08-14: Accepted; content-sha256: ccf778ae90b07f593f60e21609ff3fde7d5bdb6b5ea6c235de91565865daf8c1
 - 2026-08-14: Implementing; content-sha256: ccf778ae90b07f593f60e21609ff3fde7d5bdb6b5ea6c235de91565865daf8c1
 - 2026-08-14: Applied; operations: add `development/subagent-toolkit:profile-runtime`
+- 2026-08-14: Implemented; content-sha256: ccf778ae90b07f593f60e21609ff3fde7d5bdb6b5ea6c235de91565865daf8c1
