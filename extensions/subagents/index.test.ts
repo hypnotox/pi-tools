@@ -11,6 +11,7 @@ import type {
 import {
   CHILD_MARKER,
   MAX_EXECUTION_FACT_BYTES,
+  MAX_EXECUTION_FACT_CHARACTERS,
   SUBAGENT_PROFILE_CAPABILITY_EVENT,
   SUBAGENT_PROFILE_PROTOCOL_VERSION,
   SUBAGENT_PROFILE_REQUEST_EVENT,
@@ -335,6 +336,7 @@ describe("subagent toolkit adapter", () => {
       },
       failure: "Profile returned data that does not match its schema",
     });
+    expect(invalid?.usage).toEqual(invalid?.details.usage);
 
     const throwing = fakePi();
     createSubagentToolkit(throwing.api, {
@@ -359,6 +361,7 @@ describe("subagent toolkit adapter", () => {
       context(),
     );
     expect(failed?.details).toMatchObject({ state: "failed", failure: "callback failed" });
+    expect(failed?.usage).toBeUndefined();
   });
 
   it("rejects duplicate prepared tool names before launching", async () => {
@@ -391,6 +394,7 @@ describe("subagent toolkit adapter", () => {
       failure: "Profile prepared an invalid run",
     });
     expect(run).not.toHaveBeenCalled();
+    expect(result?.usage).toBeUndefined();
   });
 
   it("rejects invalid thinking callback output before launching", async () => {
@@ -413,11 +417,13 @@ describe("subagent toolkit adapter", () => {
       failure: "Profile selected an invalid thinking level",
     });
     expect(run).not.toHaveBeenCalled();
+    expect(result?.usage).toBeUndefined();
   });
 
   it("bounds persisted profile and CWD execution facts", async () => {
     const harness = fakePi();
     const oversized = "é".repeat(MAX_EXECUTION_FACT_BYTES);
+    const characterBoundary = `${"a".repeat(MAX_EXECUTION_FACT_CHARACTERS - 1)}😀z`;
     createSubagentToolkit(harness.api, {
       runner: {
         run: vi.fn(async () => completedOutcome()),
@@ -425,7 +431,7 @@ describe("subagent toolkit adapter", () => {
       },
       profiles: [
         customProfile({
-          id: oversized,
+          id: characterBoundary,
           prepare: ({ args }) => ({
             cwd: oversized,
             systemPrompt: "system",
@@ -446,9 +452,34 @@ describe("subagent toolkit adapter", () => {
     expect(Buffer.byteLength(result?.details.profileId ?? "", "utf8")).toBeLessThanOrEqual(
       MAX_EXECUTION_FACT_BYTES,
     );
+    expect(result?.details.profileId.endsWith("😀")).toBe(true);
     expect(Buffer.byteLength(result?.details.cwd ?? "", "utf8")).toBeLessThanOrEqual(
       MAX_EXECUTION_FACT_BYTES,
     );
+  });
+
+  it("retains usage on terminal cancellation after child launch", async () => {
+    const harness = fakePi();
+    createSubagentToolkit(harness.api, {
+      runner: {
+        run: vi.fn(async () => ({
+          ...completedOutcome(),
+          state: "cancelled" as const,
+          failure: "cancelled",
+        })),
+        shutdown: vi.fn(async () => undefined),
+      },
+    });
+    harness.start();
+    const result = await harness.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(result?.details.state).toBe("cancelled");
+    expect(result?.usage).toEqual(result?.details.usage);
   });
 
   it("normalizes unknown models and marks terminal results as errors", async () => {
@@ -468,6 +499,7 @@ describe("subagent toolkit adapter", () => {
       state: "failed",
       failure: "Unknown model: missing/model",
     });
+    expect(result?.usage).toBeUndefined();
     const middleware = harness.handlers.get("tool_result")?.[0];
     expect(
       middleware?.(

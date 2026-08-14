@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { win32 } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import type { ExecutionOutcome } from "./api.js";
 import type { RunRequest } from "./runner.js";
 import { isPathWithin, SubprocessRunner, truncateUtf8 } from "./runner.js";
 
@@ -164,8 +165,16 @@ describe("SubprocessRunner", () => {
 
   it("parses split multibyte JSONL, EOF lines, usage, retry, and tool activity", async () => {
     const deps = dependencies();
-    const updates: unknown[] = [];
-    const { promise } = await launch(deps, request({ onUpdate: (value) => updates.push(value) }));
+    const updates: ExecutionOutcome[] = [];
+    const { promise } = await launch(
+      deps,
+      request({
+        onUpdate: (value) => {
+          value.usage.cost.total = 999;
+          updates.push(value);
+        },
+      }),
+    );
     const retry = `${JSON.stringify({ type: "auto_retry_start", errorMessage: "retry 😀" })}\n`;
     const bytes = Buffer.from(retry);
     const split = bytes.indexOf(Buffer.from("😀")) + 2;

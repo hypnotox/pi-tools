@@ -133,7 +133,8 @@ function assistantBatchToolNames(
 }
 
 function boundedExecutionFact(value: string): string {
-  return truncateUtf8(value.slice(0, MAX_EXECUTION_FACT_CHARACTERS), MAX_EXECUTION_FACT_BYTES);
+  const characters = Array.from(value).slice(0, MAX_EXECUTION_FACT_CHARACTERS).join("");
+  return truncateUtf8(characters, MAX_EXECUTION_FACT_BYTES);
 }
 
 function boundedExecutionIdentity(

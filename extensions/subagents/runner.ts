@@ -59,7 +59,7 @@ export function truncateUtf8(value: string, limit = MAX_TEXT_BYTES): string {
 function snapshot(outcome: ExecutionOutcome): ExecutionOutcome {
   return {
     ...outcome,
-    usage: { ...outcome.usage },
+    usage: { ...outcome.usage, cost: { ...outcome.usage.cost } },
     activity: outcome.activity.map((entry) => ({ ...entry })),
   };
 }
