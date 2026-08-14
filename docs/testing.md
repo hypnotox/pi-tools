@@ -7,7 +7,7 @@ A deterministic pre-commit gate runs the project's checks. The documented lanes 
 ## Gate
 Run `npm run check` before every commit. It verifies formatting, lint, strict types, dead code and dependencies, and Vitest tests. The pre-commit payload also runs `./awf check` for rendered drift, awf configuration, links, prose rules, and workflow state. A failure in either layer blocks the commit.
 
-Minimum-runtime evidence uses a clean `npm ci` and `npm run check` under Node.js 20. Pi extension smoke evidence loads each package directory entry with `pi -e ./extensions/timing/index.ts --list-models` and `pi -e ./extensions/subagents --list-models`, requiring a clean exit without extension diagnostics. Subagent unit tests cover profile policy, capability-batch finalization, scheduling, process isolation, and rendering boundaries; the package-level integration test compiles a consumer through the canonical type-only subpath.
+Minimum-runtime evidence uses a clean `npm ci` and `npm run check` under Node.js 20. Pi extension smoke evidence loads each package directory entry with `pi -e ./extensions/timing/index.ts --list-models` and `pi -e ./extensions/subagents --list-models`, requiring a clean exit without extension diagnostics. Subagent unit tests cover profile policy, capability negotiation and batch finalization, scheduling, process isolation, and rendering boundaries; the package-level integration test compiles a consumer through the canonical type-only subpath, negotiates and executes an atomic replacement, and restores its persisted result.
 
 
 <!-- awf:edit tiers: from .awf/docs/parts/testing/tiers.md -->

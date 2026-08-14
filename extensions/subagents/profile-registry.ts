@@ -1,13 +1,19 @@
+import { IsSchema } from "typebox";
 import type { ProfileDefinition, ProfileRegistration, ProfileRegistrationReceipt } from "./api.js";
 
+function isTypeBoxSchema(value: unknown): value is ProfileDefinition["parameters"] {
+  return IsSchema(value) && typeof (value as Record<PropertyKey, unknown>)["~kind"] === "string";
+}
+
 function validateProfile(profile: ProfileDefinition): void {
+  if (!profile || typeof profile !== "object") throw new Error("Profile definition is required");
   if (!profile.id.trim() || !profile.toolName.trim())
     throw new Error("Profile id and tool name are required");
   if (!profile.label.trim() || !profile.description.trim())
     throw new Error(`Profile ${profile.id} requires a label and description`);
-  if (!profile.parameters || typeof profile.parameters !== "object")
+  if (!isTypeBoxSchema(profile.parameters))
     throw new Error(`Profile ${profile.id} requires a TypeBox parameter schema`);
-  if (!profile.profileDataSchema || typeof profile.profileDataSchema !== "object")
+  if (!isTypeBoxSchema(profile.profileDataSchema))
     throw new Error(`Profile ${profile.id} requires a TypeBox profile-data schema`);
   if (
     typeof profile.selectModel !== "function" ||
@@ -25,8 +31,33 @@ function validateProfile(profile: ProfileDefinition): void {
     throw new Error(`Profile ${profile.id} concurrency must be a positive integer`);
 }
 
+function cloneFrozenValue<T>(value: T, seen = new WeakMap<object, unknown>()): T {
+  if (value === null || typeof value !== "object") return value;
+  const known = seen.get(value);
+  if (known !== undefined) return known as T;
+  const clone: object = Array.isArray(value) ? [] : Object.create(Object.getPrototypeOf(value));
+  seen.set(value, clone);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor) continue;
+    if ("value" in descriptor) descriptor.value = cloneFrozenValue(descriptor.value, seen);
+    Object.defineProperty(clone, key, descriptor);
+  }
+  return Object.freeze(clone) as T;
+}
+
+function snapshotProfile(profile: ProfileDefinition): ProfileDefinition {
+  return Object.freeze({
+    ...profile,
+    parameters: cloneFrozenValue(profile.parameters),
+    profileDataSchema: cloneFrozenValue(profile.profileDataSchema),
+  });
+}
+
 interface PendingBatch {
-  batch: ProfileRegistration;
+  batch: Readonly<
+    Omit<ProfileRegistration, "profiles"> & { profiles: readonly ProfileDefinition[] }
+  >;
   receipt: ProfileRegistrationReceipt;
 }
 
@@ -34,17 +65,27 @@ interface PendingBatch {
 export class ProfileRegistry {
   readonly #defaultProfile: ProfileDefinition;
   #batches: PendingBatch[] = [];
+  #receipts = new Map<string, ProfileRegistrationReceipt>();
   #finalized = false;
   #active: ProfileDefinition[] | undefined;
 
   constructor(defaultProfile: ProfileDefinition) {
     validateProfile(defaultProfile);
-    this.#defaultProfile = defaultProfile;
+    this.#defaultProfile = snapshotProfile(defaultProfile);
   }
 
   collect(batch: ProfileRegistration): ProfileRegistrationReceipt {
     if (this.#finalized)
       return { state: "late", reason: "Profile registration is closed for this session" };
+    if (
+      batch &&
+      typeof batch === "object" &&
+      typeof batch.registrationId === "string" &&
+      batch.registrationId.trim()
+    ) {
+      const known = this.#receipts.get(batch.registrationId);
+      if (known) return known;
+    }
     const receipt: ProfileRegistrationReceipt = { state: "pending" };
     try {
       this.#validateBatch(batch);
@@ -53,13 +94,13 @@ export class ProfileRegistry {
       receipt.reason = error instanceof Error ? error.message : String(error);
       return receipt;
     }
-    this.#batches.push({
-      batch: {
-        profiles: [...batch.profiles],
-        ...(batch.suppressDefault === undefined ? {} : { suppressDefault: batch.suppressDefault }),
-      },
-      receipt,
+    const snapshot = Object.freeze({
+      registrationId: batch.registrationId,
+      profiles: Object.freeze(batch.profiles.map(snapshotProfile)),
+      ...(batch.suppressDefault === undefined ? {} : { suppressDefault: batch.suppressDefault }),
     });
+    this.#batches.push({ batch: snapshot, receipt });
+    this.#receipts.set(snapshot.registrationId, receipt);
     return receipt;
   }
 
@@ -74,16 +115,32 @@ export class ProfileRegistry {
     this.#finalized = true;
     const knownIds = new Set<string>();
     const knownTools = new Set(existingTools);
-    const accepted: ProfileDefinition[] = [];
-    let suppressDefault = false;
+    const accepted: PendingBatch[] = [];
+
     for (const pending of this.#batches) {
-      const candidate = pending.batch.profiles;
+      try {
+        this.#validateBatch(pending.batch);
+      } catch (error) {
+        pending.receipt.state = "rejected";
+        pending.receipt.reason = error instanceof Error ? error.message : String(error);
+        continue;
+      }
       const ids = new Set<string>();
       const tools = new Set<string>();
-      const collision = candidate.find((profile) => {
-        if (ids.has(profile.id) || knownIds.has(profile.id)) return true;
+      const collision = pending.batch.profiles.find((profile) => {
+        if (
+          ids.has(profile.id) ||
+          knownIds.has(profile.id) ||
+          (profile.id === this.#defaultProfile.id && !pending.batch.suppressDefault)
+        )
+          return true;
         ids.add(profile.id);
-        if (tools.has(profile.toolName) || knownTools.has(profile.toolName)) return true;
+        if (
+          tools.has(profile.toolName) ||
+          knownTools.has(profile.toolName) ||
+          (profile.toolName === this.#defaultProfile.toolName && !pending.batch.suppressDefault)
+        )
+          return true;
         tools.add(profile.toolName);
         return false;
       });
@@ -93,35 +150,18 @@ export class ProfileRegistry {
         continue;
       }
       pending.receipt.state = "registered";
-      accepted.push(...candidate);
-      candidate.forEach((profile) => {
+      accepted.push(pending);
+      for (const profile of pending.batch.profiles) {
         knownIds.add(profile.id);
         knownTools.add(profile.toolName);
-      });
-      suppressDefault ||= pending.batch.suppressDefault === true;
-    }
-    // A successful suppressing batch may replace the default's tool name, so default is checked only now.
-    if (!suppressDefault && knownTools.has(this.#defaultProfile.toolName)) {
-      for (const pending of this.#batches) {
-        if (
-          pending.receipt.state === "registered" &&
-          pending.batch.profiles.some((p) => p.toolName === this.#defaultProfile.toolName)
-        ) {
-          pending.receipt.state = "rejected";
-          pending.receipt.reason = `Profile tool collision: ${this.#defaultProfile.toolName}`;
-        }
       }
     }
-    const registered = this.#batches
-      .filter((entry) => entry.receipt.state === "registered")
-      .flatMap((entry) => entry.batch.profiles);
+
+    const suppressDefault = accepted.some((entry) => entry.batch.suppressDefault === true);
+    const defaultAvailable = !suppressDefault && !knownTools.has(this.#defaultProfile.toolName);
     this.#active = [
-      ...(this.#batches.some(
-        (entry) => entry.receipt.state === "registered" && entry.batch.suppressDefault,
-      )
-        ? []
-        : [this.#defaultProfile]),
-      ...registered,
+      ...(defaultAvailable ? [this.#defaultProfile] : []),
+      ...accepted.flatMap((entry) => entry.batch.profiles),
     ];
     return this.profiles();
   }
@@ -129,18 +169,26 @@ export class ProfileRegistry {
   profiles(): ProfileDefinition[] {
     return this.#active ? [...this.#active] : [this.#defaultProfile];
   }
+
   profileTools(): Set<string> {
     return new Set([
       this.#defaultProfile.toolName,
       ...this.#batches.flatMap((entry) => entry.batch.profiles.map((profile) => profile.toolName)),
     ]);
   }
+
   find(toolName: string): ProfileDefinition | undefined {
     return this.profiles().find((profile) => profile.toolName === toolName);
   }
 
-  #validateBatch(batch: ProfileRegistration): void {
-    if (!batch || !Array.isArray(batch.profiles) || batch.profiles.length === 0)
+  #validateBatch(
+    batch: Omit<ProfileRegistration, "profiles"> & { profiles: readonly ProfileDefinition[] },
+  ): void {
+    if (!batch || typeof batch !== "object")
+      throw new Error("A profile registration batch is required");
+    if (typeof batch.registrationId !== "string" || !batch.registrationId.trim())
+      throw new Error("A profile registration batch requires a registrationId");
+    if (!Array.isArray(batch.profiles) || batch.profiles.length === 0)
       throw new Error("A profile registration batch must contain profiles");
     if (batch.suppressDefault !== undefined && typeof batch.suppressDefault !== "boolean")
       throw new Error("suppressDefault must be boolean");

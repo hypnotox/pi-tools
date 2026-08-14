@@ -1,8 +1,18 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ExecutionDetails, ExecutionOutcome, ProfileDefinition } from "./api.js";
-import { CHILD_MARKER } from "./api.js";
+import type {
+  ExecutionDetails,
+  ExecutionOutcome,
+  ProfileCapability,
+  ProfileDefinition,
+} from "./api.js";
+import {
+  CHILD_MARKER,
+  SUBAGENT_PROFILE_CAPABILITY_EVENT,
+  SUBAGENT_PROFILE_PROTOCOL_VERSION,
+  SUBAGENT_PROFILE_REQUEST_EVENT,
+} from "./api.js";
 import { createSubagentToolkit, validateProfileData } from "./index.js";
 
 interface RegisteredTool {
@@ -18,18 +28,25 @@ interface RegisteredTool {
 
 type Handler = (event: unknown, context: unknown) => unknown;
 
-function fakePi() {
+function fakePi(configuredTools = ["read"]) {
   const tools: RegisteredTool[] = [];
   const handlers = new Map<string, Handler[]>();
   const eventHandlers = new Map<string, Array<(data: unknown) => void>>();
+  let activeTools = [...configuredTools];
   const api = {
     registerTool: (tool: RegisteredTool) => tools.push(tool),
-    getActiveTools: () => ["read"],
+    getActiveTools: () => [...activeTools],
+    getAllTools: () => [
+      ...configuredTools.map((name) => ({ name })),
+      ...tools.map(({ name }) => ({ name })),
+    ],
+    setActiveTools: (names: string[]) => {
+      activeTools = [...names];
+    },
     on: (event: string, handler: Handler) => {
       const existing = handlers.get(event) ?? [];
       existing.push(handler);
       handlers.set(event, existing);
-      if (event === "session_start") handler({}, context());
     },
     events: {
       on: (event: string, handler: (data: unknown) => void) => {
@@ -49,7 +66,14 @@ function fakePi() {
     handlers.get("session_start")?.forEach((handler) => {
       handler({}, context());
     });
-  return { api: api as unknown as ExtensionAPI, tools, handlers, start };
+  return {
+    api: api as unknown as ExtensionAPI,
+    tools,
+    handlers,
+    eventHandlers,
+    start,
+    activeTools: () => [...activeTools],
+  };
 }
 
 const runtimeModel = {
@@ -114,6 +138,7 @@ describe("subagent toolkit adapter", () => {
     createSubagentToolkit(parent.api, {
       runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
     });
+    parent.start();
     expect(parent.tools.map((tool) => tool.name)).toEqual(["subagent"]);
 
     process.env[CHILD_MARKER] = "1";
@@ -121,6 +146,7 @@ describe("subagent toolkit adapter", () => {
     createSubagentToolkit(child.api, {
       runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
     });
+    child.start();
     expect(child.tools).toHaveLength(0);
   });
 
@@ -134,6 +160,7 @@ describe("subagent toolkit adapter", () => {
     createSubagentToolkit(harness.api, {
       runner: { run, shutdown: vi.fn(async () => undefined) },
     });
+    harness.start();
     const updates: unknown[] = [];
     const result = await harness.tools[0]?.execute(
       "call",
@@ -177,6 +204,7 @@ describe("subagent toolkit adapter", () => {
       },
       profiles: [customProfile({ beforeRun, afterRun })],
     });
+    harness.start();
     const result = await harness.tools[0]?.execute(
       "call",
       { task: "focus" },
@@ -205,6 +233,7 @@ describe("subagent toolkit adapter", () => {
         }),
       ],
     });
+    harness.start();
     const invalid = await harness.tools[0]?.execute(
       "call",
       { task: "focus" },
@@ -237,6 +266,7 @@ describe("subagent toolkit adapter", () => {
         }),
       ],
     });
+    throwing.start();
     const failed = await throwing.tools[0]?.execute(
       "call",
       { task: "focus" },
@@ -264,6 +294,7 @@ describe("subagent toolkit adapter", () => {
         }),
       ],
     });
+    harness.start();
     const result = await harness.tools[0]?.execute(
       "call",
       { task: "focus" },
@@ -283,6 +314,7 @@ describe("subagent toolkit adapter", () => {
     createSubagentToolkit(harness.api, {
       runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
     });
+    harness.start();
     const result = await harness.tools[0]?.execute(
       "call",
       { task: "focus", model: "missing/model" },
@@ -313,6 +345,7 @@ describe("subagent toolkit adapter", () => {
     createSubagentToolkit(harness.api, {
       runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
     });
+    harness.start();
     const preflight = harness.handlers.get("tool_call")?.[0];
     const branch = [
       {
@@ -330,6 +363,146 @@ describe("subagent toolkit adapter", () => {
       block: true,
       reason: "An exclusive subagent tool cannot run beside sibling tools",
     });
+  });
+
+  it("negotiates either load order and deduplicates replayed requests", () => {
+    const registration = {
+      registrationId: "consumer:review",
+      profiles: [customProfile()],
+      suppressDefault: true,
+    };
+
+    const consumerFirst = fakePi();
+    const consumerFirstReceipts: unknown[] = [];
+    const correlationId = "consumer-first";
+    consumerFirst.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
+      const capability = data as ProfileCapability;
+      if (
+        capability.protocolVersion !== SUBAGENT_PROFILE_PROTOCOL_VERSION ||
+        (capability.correlationId !== undefined && capability.correlationId !== correlationId)
+      )
+        return;
+      consumerFirstReceipts.push(capability.register(registration));
+    });
+    consumerFirst.api.events.emit(SUBAGENT_PROFILE_REQUEST_EVENT, {
+      protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
+      correlationId,
+    });
+    createSubagentToolkit(consumerFirst.api, {
+      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+    });
+    consumerFirst.start();
+    expect(consumerFirst.tools.map((tool) => tool.name)).toEqual(["custom_agent"]);
+    expect(consumerFirstReceipts).toHaveLength(1);
+    expect(consumerFirstReceipts[0]).toMatchObject({ state: "registered" });
+
+    const toolkitFirst = fakePi();
+    createSubagentToolkit(toolkitFirst.api, {
+      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+    });
+    const toolkitFirstReceipts: unknown[] = [];
+    toolkitFirst.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
+      const capability = data as ProfileCapability;
+      if (capability.correlationId !== "toolkit-first") return;
+      toolkitFirstReceipts.push(capability.register(registration));
+    });
+    for (let replay = 0; replay < 2; replay++) {
+      toolkitFirst.api.events.emit(SUBAGENT_PROFILE_REQUEST_EVENT, {
+        protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
+        correlationId: "toolkit-first",
+      });
+    }
+    expect(toolkitFirstReceipts[0]).toBe(toolkitFirstReceipts[1]);
+    toolkitFirst.start();
+    expect(toolkitFirst.tools.map((tool) => tool.name)).toEqual(["custom_agent"]);
+    expect(toolkitFirstReceipts[0]).toMatchObject({ state: "registered" });
+  });
+
+  it("keeps the standalone default for absent or incompatible consumers and rejects late batches", () => {
+    const harness = fakePi();
+    let capability: ProfileCapability | undefined;
+    createSubagentToolkit(harness.api, {
+      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+    });
+    harness.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
+      capability = data as ProfileCapability;
+    });
+    harness.api.events.emit(SUBAGENT_PROFILE_REQUEST_EVENT, {
+      protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION + 1,
+      correlationId: "incompatible",
+    });
+    expect(capability).toBeUndefined();
+    harness.start();
+    expect(harness.tools.map((tool) => tool.name)).toEqual(["subagent"]);
+
+    harness.api.events.emit(SUBAGENT_PROFILE_REQUEST_EVENT, {
+      protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
+      correlationId: "late",
+    });
+    expect(
+      capability?.register({
+        registrationId: "late",
+        profiles: [customProfile()],
+        suppressDefault: true,
+      }),
+    ).toMatchObject({ state: "late" });
+  });
+
+  it("renegotiates on a replacement runtime with fresh session state", () => {
+    const registration = {
+      registrationId: "consumer:replacement",
+      profiles: [customProfile()],
+      suppressDefault: true,
+    };
+    for (const reason of ["startup", "replacement"]) {
+      const runtime = fakePi();
+      runtime.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
+        (data as ProfileCapability).register(registration);
+      });
+      createSubagentToolkit(runtime.api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      });
+      runtime.start();
+      expect(
+        runtime.tools.map((tool) => tool.name),
+        reason,
+      ).toEqual(["custom_agent"]);
+    }
+  });
+
+  it("removes discovered profile names from marked child runtimes", () => {
+    process.env[CHILD_MARKER] = "1";
+    const child = fakePi(["read", "subagent", "custom_agent"]);
+    child.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
+      const capability = data as ProfileCapability;
+      capability.register({
+        registrationId: "child-consumer",
+        profiles: [customProfile()],
+        suppressDefault: true,
+      });
+    });
+    createSubagentToolkit(child.api, {
+      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+    });
+    child.start();
+    expect(child.tools).toEqual([]);
+    expect(child.activeTools()).toEqual(["read"]);
+  });
+
+  it("does not override configured inactive tools during finalization", () => {
+    const harness = fakePi(["read", "inactive_agent"]);
+    harness.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
+      (data as ProfileCapability).register({
+        registrationId: "collision",
+        profiles: [customProfile({ toolName: "inactive_agent" })],
+        suppressDefault: true,
+      });
+    });
+    createSubagentToolkit(harness.api, {
+      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+    });
+    harness.start();
+    expect(harness.tools.map((tool) => tool.name)).toEqual(["subagent"]);
   });
 
   it("awaits runner shutdown", async () => {

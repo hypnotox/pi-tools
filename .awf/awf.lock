@@ -572,8 +572,8 @@
     "docs/testing.md": {
       "templateId": "docs/testing.md.tmpl",
       "templateHash": "sha256:a57a68e1550ff6762ec8021fb14948cf40b221bc228459e70af8e8be4ea16c51",
-      "configHash": "sha256:4140e1d6380d56c712a817b6be5d88aab14e79e97554afea99b06aedf641a102",
-      "outputHash": "sha256:f0665bf28e5370f442efd1b5adf36fcf8ed4443e9578aa28ee9eb9d294fb4591"
+      "configHash": "sha256:1c975e671c07c867eec274299141c9cc9fef74b268af1ba28a00a6c1cba119c1",
+      "outputHash": "sha256:f7cb6b2ef5e0713bf41a03d77bde1fd4f22cfceade89d3177d7b28f0fc18d530"
     },
     "docs/topics/development/extension-toolchain.md": {
       "templateId": "topics/topic.md.tmpl",

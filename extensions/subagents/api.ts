@@ -156,6 +156,8 @@ export interface ProfileDefinition<
 }
 
 export interface ProfileRegistration {
+  /** Stable consumer-owned key used to make replayed delivery idempotent. */
+  registrationId: string;
   profiles: ProfileDefinition[];
   suppressDefault?: boolean;
 }
@@ -175,7 +177,8 @@ export interface ProfileCapabilityRequest {
 }
 export interface ProfileCapability {
   protocolVersion: number;
-  correlationId: string;
+  /** Present on a request reply; absent on an availability announcement. */
+  correlationId?: string;
   register(batch: ProfileRegistration): ProfileRegistrationReceipt;
 }
 

@@ -146,7 +146,7 @@ function detailsFromOutcome(
 
 export interface ToolkitDependencies {
   runner?: Pick<SubprocessRunner, "run" | "shutdown">;
-  /** Internal composition seam used to exercise profile callbacks before Phase 2 transport exists. */
+  /** Internal local-composition and test seam; runtime consumers use the event bus. */
   profiles?: ProfileDefinition[];
 }
 
@@ -181,40 +181,44 @@ export function createSubagentToolkit(
   };
   const registry = new ProfileRegistry(defaultProfile);
   if (dependencies.profiles?.length)
-    registry.register({ profiles: dependencies.profiles, suppressDefault: true });
+    registry.register({
+      registrationId: "pi-tools:local-composition",
+      profiles: dependencies.profiles,
+      suppressDefault: true,
+    });
 
   // The bus is deliberately the only runtime bridge: package types never imply a shared module root.
-  const receipts = new WeakMap<object, ProfileRegistrationReceipt>();
-  const register = (batch: ProfileRegistration): ProfileRegistrationReceipt => {
-    if (typeof batch !== "object" || batch === null) return registry.collect(batch);
-    const known = receipts.get(batch);
-    if (known) return known;
-    const receipt = registry.collect(batch);
-    receipts.set(batch, receipt);
-    return receipt;
-  };
+  const register = (batch: ProfileRegistration): ProfileRegistrationReceipt =>
+    registry.collect(batch);
   const events = pi.events;
+  const capability = (correlationId?: string) => ({
+    protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
+    ...(correlationId === undefined ? {} : { correlationId }),
+    register,
+  });
   events?.on(SUBAGENT_PROFILE_REQUEST_EVENT, (data) => {
     const request = data as Partial<ProfileCapabilityRequest>;
     if (
       request.protocolVersion !== SUBAGENT_PROFILE_PROTOCOL_VERSION ||
-      typeof request.correlationId !== "string"
+      typeof request.correlationId !== "string" ||
+      !request.correlationId
     )
       return;
-    events.emit(SUBAGENT_PROFILE_CAPABILITY_EVENT, {
-      protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
-      correlationId: request.correlationId,
-      register,
-    });
+    events.emit(SUBAGENT_PROFILE_CAPABILITY_EVENT, capability(request.correlationId));
   });
-  events?.emit(SUBAGENT_PROFILE_REQUEST_EVENT, {
-    protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
-    correlationId: `subagent-toolkit:${Date.now()}:${Math.random()}`,
-  } satisfies ProfileCapabilityRequest);
+  // A consumer that loaded first receives this announcement; one that loads later requests a
+  // correlated replay. A stable registrationId makes handling both deliveries idempotent.
+  events?.emit(SUBAGENT_PROFILE_CAPABILITY_EVENT, capability());
 
-  // Child instances still collect profile names through the handshake, so their inherited tool policy
-  // removes them, but never finalize or expose delegation tools.
-  if (process.env[CHILD_MARKER] === "1") return;
+  // Child instances collect profile names through the same handshake, then remove every discovered
+  // name from the active set without finalizing or exposing delegation tools.
+  if (process.env[CHILD_MARKER] === "1") {
+    pi.on("session_start", () => {
+      const denied = registry.profileTools();
+      pi.setActiveTools(pi.getActiveTools().filter((name) => !denied.has(name)));
+    });
+    return;
+  }
 
   const scheduler = new ProfileScheduler();
   const runner = dependencies.runner ?? new SubprocessRunner();
@@ -398,9 +402,9 @@ export function createSubagentToolkit(
 
   let exclusiveTools = new Set<string>();
   pi.on("session_start", (_event, ctx) => {
-    // This is the only registration point: Pi's complete pre-existing tool snapshot makes
-    // collision decisions deterministic for the session.
-    const profiles = registry.finalize(pi.getActiveTools());
+    // This is the only registration point: Pi's complete configured tool snapshot makes
+    // collision decisions deterministic for the session, including inactive tools.
+    const profiles = registry.finalize(pi.getAllTools().map((tool) => tool.name));
     for (const profile of profiles) {
       pi.registerTool({
         name: profile.toolName,
