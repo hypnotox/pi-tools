@@ -205,21 +205,27 @@ export function createSubagentToolkit(
     let thinkingLevel = (ctx.thinkingLevel ?? "off") as ThinkingLevel;
     let cwd = ctx.cwd;
 
-    const failureResult = (error: unknown) => {
+    const failureResult = (error: unknown, outcome?: ExecutionOutcome) => {
       const failure = truncateUtf8(error instanceof Error ? error.message : String(error));
-      const details: ExecutionDetails = {
-        profileId: profile.id,
-        state: signal?.aborted ? "cancelled" : "failed",
-        cwd,
-        model: selectedModel,
-        thinkingLevel,
-        retryActive: false,
-        retries: 0,
-        activity: [],
-        omittedActivity: 0,
-        usage: { ...EMPTY_USAGE },
-        failure,
-      };
+      const details: ExecutionDetails = outcome
+        ? detailsFromOutcome(profile.id, cwd, selectedModel, thinkingLevel, {
+            ...outcome,
+            state: signal?.aborted ? "cancelled" : "failed",
+            failure,
+          })
+        : {
+            profileId: profile.id,
+            state: signal?.aborted ? "cancelled" : "failed",
+            cwd,
+            model: selectedModel,
+            thinkingLevel,
+            retryActive: false,
+            retries: 0,
+            activity: [],
+            omittedActivity: 0,
+            usage: { ...EMPTY_USAGE },
+            failure,
+          };
       return { content: [{ type: "text" as const, text: failure }], details };
     };
 
@@ -269,9 +275,10 @@ export function createSubagentToolkit(
         signal,
         async () => {
           let state: unknown;
+          let outcome: ExecutionOutcome | undefined;
           try {
             state = await profile.beforeRun?.(profileContext);
-            const outcome = await runner.run({
+            outcome = await runner.run({
               prepared,
               model: selectedModel,
               thinkingLevel,
@@ -328,7 +335,7 @@ export function createSubagentToolkit(
               details,
             };
           } catch (error) {
-            return failureResult(error);
+            return failureResult(error, outcome);
           }
         },
         (queuePosition) => {

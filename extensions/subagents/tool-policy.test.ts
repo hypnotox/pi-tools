@@ -18,4 +18,14 @@ describe("resolveTools", () => {
       ),
     ).toEqual(["read"]);
   });
+
+  it("preserves child-only allowlist names, de-duplicates them, and still denies profiles", () => {
+    expect(
+      resolveTools(
+        { mode: "allowlist", tools: ["child_only", "child_only", "subagent"] },
+        ["read"],
+        new Set(["subagent"]),
+      ),
+    ).toEqual(["child_only"]);
+  });
 });

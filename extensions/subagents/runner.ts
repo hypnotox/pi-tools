@@ -156,6 +156,11 @@ export class SubprocessRunner {
     }
   }
 
+  #assertLaunchable(signal: AbortSignal | undefined): void {
+    if (this.#disposed) throw new Error("Subagent runner is shut down");
+    if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
+  }
+
   async #run(request: RunRequest): Promise<ExecutionOutcome> {
     if (this.#disposed || request.signal?.aborted)
       return {
@@ -184,17 +189,17 @@ export class SubprocessRunner {
 
     try {
       childCwd = await this.#deps.canonicalize(path.resolve(request.prepared.cwd));
-      if (this.#disposed) throw new Error("Subagent runner is shut down");
+      this.#assertLaunchable(request.signal);
       parentCwd = await this.#deps.canonicalize(path.resolve(request.parentCwd));
-      if (this.#disposed) throw new Error("Subagent runner is shut down");
+      this.#assertLaunchable(request.signal);
       promptDir = await this.#deps.mkdtemp(path.join(tmpdir(), "pi-tools-subagent-"));
       promptPath = path.join(promptDir, "system-prompt.txt");
-      if (this.#disposed) throw new Error("Subagent runner is shut down");
+      this.#assertLaunchable(request.signal);
       await this.#deps.writeFile(promptPath, request.prepared.systemPrompt, {
         encoding: "utf8",
         mode: 0o600,
       });
-      if (this.#disposed) throw new Error("Subagent runner is shut down");
+      this.#assertLaunchable(request.signal);
       const invocation = this.#deps.executable();
       const args = [
         ...invocation.prefix,
@@ -213,6 +218,7 @@ export class SubprocessRunner {
         ...(request.tools.length > 0 ? ["--tools", request.tools.join(",")] : ["--no-tools"]),
       ];
       if (request.parentTrusted && isPathWithin(parentCwd, childCwd)) args.push("--approve");
+      this.#assertLaunchable(request.signal);
 
       child = this.#deps.spawn(invocation.command, args, {
         cwd: childCwd,

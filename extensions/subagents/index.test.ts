@@ -195,6 +195,12 @@ describe("subagent toolkit adapter", () => {
     );
     expect(invalid?.details).toMatchObject({
       state: "failed",
+      cwd: "/parent",
+      model: { provider: "p", id: "m" },
+      report: "done",
+      retries: 1,
+      activity: [{ kind: "tool_end", text: "read" }],
+      usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 0.5 },
       failure: "Profile returned data that does not match its schema",
     });
 

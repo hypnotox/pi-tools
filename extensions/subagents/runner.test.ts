@@ -134,6 +134,20 @@ describe("SubprocessRunner", () => {
     },
   );
 
+  it("rejects a descendant-looking symlink whose canonical target escapes", async () => {
+    const deps = dependencies();
+    deps.canonicalize = vi.fn(async (value: string) =>
+      value.endsWith("/link") ? "/outside/target" : "/parent",
+    );
+    const { promise } = await launch(
+      deps,
+      request({ prepared: { ...request().prepared, cwd: "/parent/link" } }),
+    );
+    deps.child.emit("close", 0);
+    await promise;
+    expect(deps.spawn.mock.calls[0]?.[1]).not.toContain("--approve");
+  });
+
   it("does not trust siblings, prefix collisions, or cross-volume Windows paths", async () => {
     expect(isPathWithin("/parent", "/parentish/child")).toBe(false);
     expect(isPathWithin("C:\\parent", "D:\\parent\\child", win32)).toBe(false);
@@ -197,6 +211,21 @@ describe("SubprocessRunner", () => {
     expect(result.activity.filter((entry) => entry.kind === "diagnostic")).toHaveLength(2);
   });
 
+  it("terminates and clears retry state when cancelled during a child request retry", async () => {
+    const deps = dependencies();
+    const controller = new AbortController();
+    const { promise } = await launch(deps, request({ signal: controller.signal }));
+    deps.child.stdout.emit(
+      "data",
+      Buffer.from(`${JSON.stringify({ type: "auto_retry_start", errorMessage: "retrying" })}\n`),
+    );
+    controller.abort();
+    const result = await promise;
+    expect(result).toMatchObject({ state: "cancelled", retries: 1, retryActive: false });
+    expect(result.activity).toContainEqual({ kind: "retry_start", text: "retrying" });
+    expect(deps.signalTree).toHaveBeenCalledWith(deps.child, "SIGTERM");
+  });
+
   it("terminates the process tree gracefully then forcibly on cancellation", async () => {
     const deps = dependencies();
     const controller = new AbortController();
@@ -248,6 +277,19 @@ describe("SubprocessRunner", () => {
     deps.child.emit("close", 0);
     await shutdown;
     await promise;
+  });
+
+  it("prevents spawn when the invocation is aborted during pre-launch setup", async () => {
+    const gate = deferred<string>();
+    const deps = dependencies();
+    deps.canonicalize = vi.fn(() => gate.promise);
+    const controller = new AbortController();
+    const runner = new SubprocessRunner(deps as never);
+    const run = runner.run(request({ signal: controller.signal }));
+    controller.abort();
+    gate.resolve("/parent/child");
+    await expect(run).resolves.toMatchObject({ state: "cancelled" });
+    expect(deps.spawn).not.toHaveBeenCalled();
   });
 
   it("prevents spawn and awaits a run interrupted during pre-launch setup", async () => {
