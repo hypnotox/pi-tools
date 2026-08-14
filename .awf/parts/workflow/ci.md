@@ -1,0 +1,1 @@
+No continuous-integration pipeline is configured. The repository currently relies on the local staged check, gate, and rendered hook payloads described above. Add CI before treating remote pushes as independently verified; use the pinned bootstrap command from [Working with awf](working-with-awf.md) rather than installing an unrelated awf version.

@@ -14,7 +14,8 @@
 - `prompts/`: Markdown prompt templates exported by the package.
 - `themes/`: JSON themes exported by the package.
 - `.awf/`: authored workflow configuration and convention parts.
-- `.pi/`, `.claude/`, `docs/`, `AGENTS.md`, and `CLAUDE.md`: awf-rendered project workflow and documentation surfaces.
+- `.pi/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, and the generated catalog under `docs/`: awf-rendered project workflow and documentation surfaces.
+- `docs/decisions/` and `docs/plans/`: generated guidance and indexes around banner-free ADRs and implementation plans authored directly in those directories.
 
 
 <!-- awf:edit data-flow: from .awf/docs/parts/architecture/data-flow.md -->

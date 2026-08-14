@@ -187,9 +187,8 @@ A tracked stub should locate the invoking worktree, not assume the primary check
 
 **Your stub is the override point.** The rendered payloads are deliberately all-or-nothing; they take no convention parts. To deviate from a payload's policy (say, a docs-only fast path that skips the test gate), put the deviation in the stub you own instead of forking the payload: keep the payload canonical, have the stub carry the project-specific logic, and mark the divergence with a comment naming it a deliberate deviation from the rendered script. The payload then keeps updating through `awf render` while your deviation stays visible, reviewable, and yours.
 
-<!-- awf:edit ci: default; create .awf/parts/workflow/ci.md to override -->
+<!-- awf:edit ci: from .awf/parts/workflow/ci.md -->
 ## Continuous integration
-
-Local hooks are per-clone and optional, so CI is the enforcement backstop: run `./awf check` and the gate (`./awf check`) on every push. When the pinned bootstrap is enabled, CI obtains the exact awf version this repo was rendered with by capturing the path it prints (`"$(bash .awf/bootstrap.sh)" check`) instead of installing awf separately; the script verifies the download's SHA-256 before caching it.
+No continuous-integration pipeline is configured. The repository currently relies on the local staged check, gate, and rendered hook payloads described above. Add CI before treating remote pushes as independently verified; use the pinned bootstrap command from [Working with awf](working-with-awf.md) rather than installing an unrelated awf version.
 
 Pi session-context facts are a transient model-facing observation of the active model window and active-branch compactions. Use them with retained-context relevance and upcoming work at eligible boundaries; no threshold, warning, or automatic action follows.

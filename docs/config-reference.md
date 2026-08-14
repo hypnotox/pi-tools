@@ -58,11 +58,11 @@ Each var is consumed only while a rendered artifact references it. State reads: 
 declined; the generic prose renders).
 
 - `gateCmd`: Command that runs the full pre-commit gate (tests, lint, coverage). Consumed while a rendered artifact's template references it, by the `{{=awf:gateCmd}}` placeholder in convention parts (including the rendered pre-push hook payload's part channel), and by divergent effort-integration guidance.
-  State: set (`./awf check`). Consumed by: agent implementer, agents-doc, doc workflow, hooks pre-commit, hooks pre-push, skill adr-lifecycle, skill bugfix, skill debugging, skill executing-plans, skill retrospective, skill reviewing-impl, skill subagent-driven-development, skill tdd, skill writing-plans.
+  State: set (`./awf check`). Consumed by: agent implementer, agents-doc, hooks pre-commit, hooks pre-push, skill adr-lifecycle, skill bugfix, skill debugging, skill executing-plans, skill retrospective, skill reviewing-impl, skill subagent-driven-development, skill tdd, skill writing-plans.
 - `gateCmdFull`: Command for the full/extended gate tier, if the project has one. Consumed while a rendered artifact's template references it.
-  State: absent, declined; the generic prose renders. Consumed by: doc workflow, hooks pre-push, skill bugfix, skill debugging.
+  State: absent, declined; the generic prose renders. Consumed by: hooks pre-push, skill bugfix, skill debugging.
 - `checkCmd`: Command that checks rendered output for drift. Leave empty to run through the always-rendered `./awf` wrapper. Consumed while a rendered artifact's template references it, and by the `{{=awf:checkCmd}}` placeholder in convention parts.
-  State: set (`./awf check`). Consumed by: doc workflow, hooks pre-commit, hooks pre-merge-commit, hooks pre-push.
+  State: set (`./awf check`). Consumed by: hooks pre-commit, hooks pre-merge-commit, hooks pre-push.
 - `commitGateCmd`: Command that validates one commit message (the commit-msg hook payload appends the message-file argument). Leave empty to run through the always-rendered `./awf` wrapper. Consumed by the always-rendered commit-msg hook payload.
   State: set (`./awf check staged commit`). Consumed by: hooks commit-msg.
 - `testCmd`: Command that runs the test suite. Consumed while a rendered artifact's template references it.
