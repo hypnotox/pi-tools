@@ -7,3 +7,5 @@ vars:
   gateCmd: ./awf check
 bootstrap:
   enabled: true
+domains:
+  - development

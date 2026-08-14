@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-_No decisions are in flight._
+- [ADR-0001: TypeScript Extension Quality Toolchain](0001-typescript-extension-quality-toolchain.md) (Proposed)
 
 ## History
 
