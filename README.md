@@ -15,6 +15,14 @@ The timing extension adds local `HH:mm:ss.SSS` timestamps and monotonic duration
 
 While a turn runs, its elapsed time appears beside Pi's native working spinner. Tool durations appear directly beneath completed tool output without an extra blank line. Timing history uses custom session entries, which render in the TUI but never enter model context. Run `/reload` after editing or updating the extension.
 
+### Subagent
+
+The standalone `subagent` tool accepts a required `task` and optional exact `provider/model` and `thinkingLevel`. Without overrides it inherits the parent model, thinking level, CWD, and active tools. Calls are serialized and cannot share a parent tool batch.
+
+Each call runs a fresh Pi child with a minimal task prompt, the selected CWD/model/effective thinking/tools, normal extension loading, and context-file and skill discovery disabled. Toolkit profile tools are removed from every child tool set and marked children never activate them, preventing recursive toolkit delegation. Temporary trust is passed only to a canonical child CWD within the canonical trusted parent tree.
+
+The child owns transient request retries; the toolkit never retries a whole process. Child activity, reports, failures, diagnostics, and persisted JSON profile data are bounded. Final execution details persist for TUI rendering while profile data remains out of model-visible content unless a profile deliberately transforms its final report. Run `/reload` after updating the toolkit.
+
 ## Layout
 
 - `extensions/` - TypeScript extensions
