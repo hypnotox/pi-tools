@@ -47,6 +47,7 @@ describe("ProfileRegistry", () => {
     expect(replay).toBe(first);
     registry.finalize();
     expect(first.state).toBe("registered");
+    expect(registry.collect(batch("consumer", [profile("ignored")]))).toBe(first);
     expect(registry.profiles().map((entry) => entry.toolName)).toEqual(["review"]);
     expect(registry.collect(batch("late", [profile("late")]))).toMatchObject({ state: "late" });
   });
@@ -94,6 +95,7 @@ describe("ProfileRegistry", () => {
     const failed = registry.collect(batch("failed", [profile("other", "read")], true));
     registry.finalize(["read"]);
     expect(failed.state).toBe("rejected");
+    expect(registry.collect(batch("failed", [profile("ignored")]))).toBe(failed);
     expect(registry.profiles().map((entry) => entry.toolName)).toEqual(["subagent"]);
 
     const several = new ProfileRegistry(profile("default", "subagent"));

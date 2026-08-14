@@ -75,8 +75,6 @@ export class ProfileRegistry {
   }
 
   collect(batch: ProfileRegistration): ProfileRegistrationReceipt {
-    if (this.#finalized)
-      return { state: "late", reason: "Profile registration is closed for this session" };
     if (
       batch &&
       typeof batch === "object" &&
@@ -86,6 +84,8 @@ export class ProfileRegistry {
       const known = this.#receipts.get(batch.registrationId);
       if (known) return known;
     }
+    if (this.#finalized)
+      return { state: "late", reason: "Profile registration is closed for this session" };
     const receipt: ProfileRegistrationReceipt = { state: "pending" };
     try {
       this.#validateBatch(batch);

@@ -86,6 +86,16 @@ function assertJsonValue(value: unknown): asserts value is ExecutionDetails["pro
   }
 }
 
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
+
+function immutableSnapshot<T>(value: T): T {
+  return deepFreeze(structuredClone(value));
+}
+
 export function validateProfileData(value: unknown): ExecutionDetails["profileData"] | undefined {
   if (value === undefined) return undefined;
   assertJsonValue(value);
@@ -93,7 +103,7 @@ export function validateProfileData(value: unknown): ExecutionDetails["profileDa
   const serialized = JSON.stringify(value);
   if (Buffer.byteLength(serialized, "utf8") > MAX_PROFILE_DATA_BYTES)
     throw new Error(`Profile data exceeds ${MAX_PROFILE_DATA_BYTES} bytes`);
-  return value;
+  return deepFreeze(JSON.parse(serialized) as ExecutionDetails["profileData"]);
 }
 
 function exactModel(value: string): { provider: string; id: string } {
@@ -196,7 +206,7 @@ export function createSubagentToolkit(
     ...(correlationId === undefined ? {} : { correlationId }),
     register,
   });
-  events?.on(SUBAGENT_PROFILE_REQUEST_EVENT, (data) => {
+  const unsubscribeRequests = events?.on(SUBAGENT_PROFILE_REQUEST_EVENT, (data) => {
     const request = data as Partial<ProfileCapabilityRequest>;
     if (
       request.protocolVersion !== SUBAGENT_PROFILE_PROTOCOL_VERSION ||
@@ -216,6 +226,9 @@ export function createSubagentToolkit(
     pi.on("session_start", () => {
       const denied = registry.profileTools();
       pi.setActiveTools(pi.getActiveTools().filter((name) => !denied.has(name)));
+    });
+    pi.on("session_shutdown", () => {
+      unsubscribeRequests?.();
     });
     return;
   }
@@ -318,28 +331,30 @@ export function createSubagentToolkit(
           let outcome: ExecutionOutcome | undefined;
           try {
             state = await profile.beforeRun?.(profileContext);
-            outcome = await runner.run({
-              prepared,
-              model: selectedModel,
-              thinkingLevel,
-              tools,
-              parentCwd: parent.cwd,
-              parentTrusted: parent.trusted,
-              ...(signal === undefined ? {} : { signal }),
-              onUpdate: (update) => {
-                const details = detailsFromOutcome(
-                  profile.id,
-                  prepared.cwd,
-                  selectedModel,
-                  thinkingLevel,
-                  update,
-                );
-                onUpdate?.({
-                  content: [{ type: "text", text: update.report ?? "Running..." }],
-                  details,
-                });
-              },
-            });
+            outcome = immutableSnapshot(
+              await runner.run({
+                prepared,
+                model: selectedModel,
+                thinkingLevel,
+                tools,
+                parentCwd: parent.cwd,
+                parentTrusted: parent.trusted,
+                ...(signal === undefined ? {} : { signal }),
+                onUpdate: (update) => {
+                  const details = detailsFromOutcome(
+                    profile.id,
+                    prepared.cwd,
+                    selectedModel,
+                    thinkingLevel,
+                    update,
+                  );
+                  onUpdate?.({
+                    content: [{ type: "text", text: update.report ?? "Running..." }],
+                    details,
+                  });
+                },
+              }),
+            );
             let report = outcome.report;
             let data: ExecutionDetails["profileData"];
             if (profile.afterRun) {
@@ -445,6 +460,7 @@ export function createSubagentToolkit(
       return { isError: true };
   });
   pi.on("session_shutdown", async () => {
+    unsubscribeRequests?.();
     scheduler.shutdown();
     await runner.shutdown();
   });

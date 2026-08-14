@@ -28,10 +28,12 @@ interface RegisteredTool {
 
 type Handler = (event: unknown, context: unknown) => unknown;
 
-function fakePi(configuredTools = ["read"]) {
+function fakePi(
+  configuredTools = ["read"],
+  eventHandlers = new Map<string, Array<(data: unknown) => void>>(),
+) {
   const tools: RegisteredTool[] = [];
   const handlers = new Map<string, Handler[]>();
-  const eventHandlers = new Map<string, Array<(data: unknown) => void>>();
   let activeTools = [...configuredTools];
   const api = {
     registerTool: (tool: RegisteredTool) => tools.push(tool),
@@ -53,7 +55,13 @@ function fakePi(configuredTools = ["read"]) {
         const existing = eventHandlers.get(event) ?? [];
         existing.push(handler);
         eventHandlers.set(event, existing);
-        return () => undefined;
+        return () => {
+          const current = eventHandlers.get(event) ?? [];
+          eventHandlers.set(
+            event,
+            current.filter((candidate) => candidate !== handler),
+          );
+        };
       },
       emit: (event: string, data: unknown) => {
         eventHandlers.get(event)?.forEach((handler) => {
@@ -66,12 +74,16 @@ function fakePi(configuredTools = ["read"]) {
     handlers.get("session_start")?.forEach((handler) => {
       handler({}, context());
     });
+  const shutdown = async () => {
+    for (const handler of handlers.get("session_shutdown") ?? []) await handler({}, context());
+  };
   return {
     api: api as unknown as ExtensionAPI,
     tools,
     handlers,
     eventHandlers,
     start,
+    shutdown,
     activeTools: () => [...activeTools],
   };
 }
@@ -218,6 +230,41 @@ describe("subagent toolkit adapter", () => {
     });
     expect(result?.content).toEqual([{ type: "text", text: "transformed prepared" }]);
     expect(result?.details.profileData).toEqual({ summary: "bounded" });
+  });
+
+  it("protects runner outcomes and detaches validated profile data from callback aliases", async () => {
+    const harness = fakePi();
+    const retained = { summary: "bounded" };
+    createSubagentToolkit(harness.api, {
+      runner: {
+        run: vi.fn(async () => completedOutcome()),
+        shutdown: vi.fn(async () => undefined),
+      },
+      profiles: [
+        customProfile({
+          afterRun: (outcome) => {
+            Reflect.set(outcome, "report", "tampered");
+            Reflect.set(outcome.activity[0] ?? {}, "text", "tampered");
+            return { profileData: retained };
+          },
+        }),
+      ],
+    });
+    harness.start();
+    const result = await harness.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    retained.summary = "mutated later";
+    expect(result?.details).toMatchObject({
+      report: "done",
+      activity: [{ kind: "tool_end", text: "read" }],
+      profileData: { summary: "bounded" },
+    });
+    expect(Object.isFrozen(result?.details.profileData)).toBe(true);
   });
 
   it("normalizes callback failures and profile-data schema mismatches", async () => {
@@ -448,26 +495,38 @@ describe("subagent toolkit adapter", () => {
     ).toMatchObject({ state: "late" });
   });
 
-  it("renegotiates on a replacement runtime with fresh session state", () => {
+  it("renegotiates on a replacement runtime without retaining stale request listeners", async () => {
+    const sharedBus = new Map<string, Array<(data: unknown) => void>>();
     const registration = {
       registrationId: "consumer:replacement",
       profiles: [customProfile()],
       suppressDefault: true,
     };
-    for (const reason of ["startup", "replacement"]) {
-      const runtime = fakePi();
-      runtime.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
-        (data as ProfileCapability).register(registration);
-      });
-      createSubagentToolkit(runtime.api, {
-        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-      });
-      runtime.start();
-      expect(
-        runtime.tools.map((tool) => tool.name),
-        reason,
-      ).toEqual(["custom_agent"]);
-    }
+    let correlatedReplies = 0;
+    const first = fakePi(["read"], sharedBus);
+    first.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
+      const capability = data as ProfileCapability;
+      if (capability.correlationId === "replacement-request") correlatedReplies++;
+      capability.register(registration);
+    });
+    createSubagentToolkit(first.api, {
+      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+    });
+    first.start();
+    expect(first.tools.map((tool) => tool.name)).toEqual(["custom_agent"]);
+    await first.shutdown();
+
+    const replacement = fakePi(["read"], sharedBus);
+    createSubagentToolkit(replacement.api, {
+      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+    });
+    replacement.api.events.emit(SUBAGENT_PROFILE_REQUEST_EVENT, {
+      protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
+      correlationId: "replacement-request",
+    });
+    replacement.start();
+    expect(replacement.tools.map((tool) => tool.name)).toEqual(["custom_agent"]);
+    expect(correlatedReplies).toBe(1);
   });
 
   it("removes discovered profile names from marked child runtimes", () => {
