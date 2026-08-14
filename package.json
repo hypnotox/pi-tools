@@ -42,7 +42,9 @@
   "pi": {
     "extensions": [
       "./extensions/timing",
-      "./extensions/subagents"
+      "./extensions/subagents",
+      "./extensions/context-usage",
+      "./extensions/handoff"
     ],
     "skills": [
       "./skills"
