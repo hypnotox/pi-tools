@@ -9,8 +9,14 @@ const profile = (id: string, toolName = id): ProfileDefinition => ({
   label: id,
   description: id,
   parameters: Type.Object({}),
+  profileDataSchema: Type.Object({}, { additionalProperties: false }),
   selectModel: () => ({ provider: "p", id: "m", thinkingLevels: ["off"] }),
-  prepare: () => ({ cwd: "/tmp", prompt: "x", toolPolicy: { mode: "allowlist", tools: [] } }),
+  prepare: () => ({
+    cwd: "/tmp",
+    systemPrompt: "system",
+    prompt: "x",
+    toolPolicy: { mode: "allowlist", tools: [] },
+  }),
 });
 
 describe("ProfileRegistry", () => {
@@ -18,12 +24,38 @@ describe("ProfileRegistry", () => {
     const registry = new ProfileRegistry(profile("default", "subagent"));
     registry.register({ profiles: [profile("review")], suppressDefault: true });
     expect(registry.profiles().map((entry) => entry.toolName)).toEqual(["review"]);
+    expect(registry.profileTools()).toEqual(new Set(["subagent", "review"]));
   });
-  it("rejects duplicates without mutating", () => {
+
+  it("rejects duplicate ids and tools without mutating", () => {
     const registry = new ProfileRegistry(profile("default", "subagent"));
     expect(() => registry.register({ profiles: [profile("a"), profile("a", "other")] })).toThrow(
       "Duplicate profile id",
     );
+    expect(() => registry.register({ profiles: [profile("a"), profile("b", "a")] })).toThrow(
+      "Duplicate profile tool",
+    );
+    expect(registry.profiles()).toHaveLength(1);
+  });
+
+  it("rejects collisions with a visible default but permits atomic replacement", () => {
+    const registry = new ProfileRegistry(profile("default", "subagent"));
+    expect(() => registry.register({ profiles: [profile("other", "subagent")] })).toThrow(
+      "Duplicate profile tool",
+    );
+    registry.register({ profiles: [profile("other", "subagent")], suppressDefault: true });
+    expect(registry.profiles().map((entry) => entry.id)).toEqual(["other"]);
+  });
+
+  it("rejects malformed batches, callbacks, and concurrency before mutation", () => {
+    const registry = new ProfileRegistry(profile("default", "subagent"));
+    expect(() => registry.register({ profiles: [] })).toThrow("contain profiles");
+    expect(() => registry.register({ profiles: [{ ...profile("bad"), concurrency: 0 }] })).toThrow(
+      "positive integer",
+    );
+    expect(() =>
+      registry.register({ profiles: [{ ...profile("bad"), prepare: undefined as never }] }),
+    ).toThrow("invalid callbacks");
     expect(registry.profiles()).toHaveLength(1);
   });
 });

@@ -3,52 +3,113 @@ import { type Static, Type, type TSchema as TypeBoxSchema } from "typebox";
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
-export const ConcreteModelSchema = Type.Object({
-  provider: Type.String({ minLength: 1 }),
-  id: Type.String({ minLength: 1 }),
-  thinkingLevels: Type.Array(Type.String()),
-});
+const ThinkingLevelSchema = Type.Union([
+  Type.Literal("off"),
+  Type.Literal("minimal"),
+  Type.Literal("low"),
+  Type.Literal("medium"),
+  Type.Literal("high"),
+  Type.Literal("xhigh"),
+  Type.Literal("max"),
+]);
+
+export const ConcreteModelSchema = Type.Object(
+  {
+    provider: Type.String({ minLength: 1 }),
+    id: Type.String({ minLength: 1 }),
+    thinkingLevels: Type.Array(ThinkingLevelSchema, { minItems: 1, uniqueItems: true }),
+  },
+  { additionalProperties: false },
+);
 export type ConcreteModel = Static<typeof ConcreteModelSchema>;
 
-const JsonValueSchema = Type.Any();
-export type JsonValue = Static<typeof JsonValueSchema>;
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+// Nested JSON validity is enforced by the cycle-safe validator before persistence.
+export const JsonValueSchema = Type.Union([
+  Type.Null(),
+  Type.Boolean(),
+  Type.Number(),
+  Type.String(),
+  Type.Array(Type.Unknown()),
+  Type.Record(Type.String(), Type.Unknown()),
+]);
 
 export const ToolPolicySchema = Type.Union([
-  Type.Object({
-    mode: Type.Literal("allowlist"),
-    tools: Type.Array(Type.String({ minLength: 1 })),
-  }),
-  Type.Object({ mode: Type.Literal("inherit"), deny: Type.Array(Type.String({ minLength: 1 })) }),
+  Type.Object(
+    {
+      mode: Type.Literal("allowlist"),
+      tools: Type.Array(Type.String({ minLength: 1 }), { uniqueItems: true }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      mode: Type.Literal("inherit"),
+      deny: Type.Array(Type.String({ minLength: 1 }), { uniqueItems: true }),
+    },
+    { additionalProperties: false },
+  ),
 ]);
 export type ToolPolicy = Static<typeof ToolPolicySchema>;
 
+export const PreparedRunSchema = Type.Object(
+  {
+    cwd: Type.String({ minLength: 1 }),
+    systemPrompt: Type.String({ minLength: 1 }),
+    prompt: Type.String({ minLength: 1 }),
+    toolPolicy: ToolPolicySchema,
+  },
+  { additionalProperties: false },
+);
 export interface PreparedRun {
   cwd: string;
+  systemPrompt: string;
   prompt: string;
   toolPolicy: ToolPolicy;
 }
 
-export interface ExecutionUsage {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  cost: number;
-}
+export const ExecutionUsageSchema = Type.Object(
+  {
+    input: Type.Number({ minimum: 0 }),
+    output: Type.Number({ minimum: 0 }),
+    cacheRead: Type.Number({ minimum: 0 }),
+    cacheWrite: Type.Number({ minimum: 0 }),
+    cost: Type.Number({ minimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+export type ExecutionUsage = Static<typeof ExecutionUsageSchema>;
 
-export interface ExecutionActivity {
-  kind: "tool_start" | "tool_end" | "retry_start" | "retry_end";
-  text: string;
-}
+export const ExecutionActivitySchema = Type.Object(
+  {
+    kind: Type.Union([
+      Type.Literal("tool_start"),
+      Type.Literal("tool_end"),
+      Type.Literal("retry_start"),
+      Type.Literal("retry_end"),
+      Type.Literal("diagnostic"),
+    ]),
+    text: Type.String(),
+  },
+  { additionalProperties: false },
+);
+export type ExecutionActivity = Static<typeof ExecutionActivitySchema>;
 
 export interface ExecutionOutcome {
-  state: "completed" | "failed" | "cancelled";
+  state: "running" | "completed" | "failed" | "cancelled";
   report?: string;
   failure?: string;
   usage: ExecutionUsage;
   activity: ExecutionActivity[];
   omittedActivity: number;
   retries: number;
+  retryActive: boolean;
 }
 
 export interface ProfileContext<TArgs> {
@@ -63,8 +124,21 @@ export interface ProfileContext<TArgs> {
   signal: AbortSignal;
 }
 
+export const PostRunResultSchema = Type.Object(
+  {
+    report: Type.Optional(Type.String()),
+    profileData: Type.Optional(JsonValueSchema),
+  },
+  { additionalProperties: false },
+);
+export interface PostRunResult<TProfileData extends JsonValue = JsonValue> {
+  report?: string;
+  profileData?: TProfileData;
+}
+
 export interface ProfileDefinition<
   TParameters extends TypeBoxSchema = TypeBoxSchema,
+  TProfileData extends TypeBoxSchema = TypeBoxSchema,
   TState = unknown,
 > {
   id: string;
@@ -72,6 +146,7 @@ export interface ProfileDefinition<
   label: string;
   description: string;
   parameters: TParameters;
+  profileDataSchema: TProfileData;
   concurrency?: number;
   exclusiveParentBatch?: boolean;
   selectModel(context: ProfileContext<Static<TParameters>>): ConcreteModel;
@@ -81,7 +156,10 @@ export interface ProfileDefinition<
   afterRun?(
     outcome: ExecutionOutcome,
     state: TState,
-  ): Promise<JsonValue | undefined> | JsonValue | undefined;
+  ):
+    | Promise<PostRunResult<Static<TProfileData> & JsonValue> | undefined>
+    | PostRunResult<Static<TProfileData> & JsonValue>
+    | undefined;
 }
 
 export interface ProfileRegistration {
@@ -89,32 +167,32 @@ export interface ProfileRegistration {
   suppressDefault?: boolean;
 }
 
-export const ExecutionDetailsSchema = Type.Object({
-  profileId: Type.String(),
-  cwd: Type.String(),
-  model: ConcreteModelSchema,
-  thinkingLevel: Type.Union(THINKING_LEVELS.map((level) => Type.Literal(level))),
-  outcome: Type.Union([
-    Type.Literal("completed"),
-    Type.Literal("failed"),
-    Type.Literal("cancelled"),
-  ]),
-  report: Type.Optional(Type.String()),
-  failure: Type.Optional(Type.String()),
-  profileData: Type.Optional(JsonValueSchema),
-});
-export interface ExecutionDetails {
-  profileId: string;
-  cwd: string;
-  model: ConcreteModel;
-  thinkingLevel: ThinkingLevel;
-  outcome: "completed" | "failed" | "cancelled";
-  report?: string;
-  failure?: string;
-  profileData?: JsonValue;
-}
+export const ExecutionDetailsSchema = Type.Object(
+  {
+    profileId: Type.String(),
+    state: Type.Union([
+      Type.Literal("queued"),
+      Type.Literal("running"),
+      Type.Literal("completed"),
+      Type.Literal("failed"),
+      Type.Literal("cancelled"),
+    ]),
+    cwd: Type.String(),
+    model: ConcreteModelSchema,
+    thinkingLevel: ThinkingLevelSchema,
+    queuePosition: Type.Optional(Type.Integer({ minimum: 1 })),
+    retryActive: Type.Boolean(),
+    retries: Type.Integer({ minimum: 0 }),
+    activity: Type.Array(ExecutionActivitySchema),
+    omittedActivity: Type.Integer({ minimum: 0 }),
+    usage: ExecutionUsageSchema,
+    report: Type.Optional(Type.String()),
+    failure: Type.Optional(Type.String()),
+    profileData: Type.Optional(JsonValueSchema),
+  },
+  { additionalProperties: false },
+);
+export type ExecutionDetails = Static<typeof ExecutionDetailsSchema>;
 
-export const SUBAGENT_CAPABILITY = "pi-tools:subagent-profiles";
-export const SUBAGENT_PROTOCOL_VERSION = 1;
 export const CHILD_MARKER = "PI_TOOLS_SUBAGENT_CHILD";
 export const MAX_PROFILE_DATA_BYTES = 16 * 1024;

@@ -1,7 +1,8 @@
-import { type ChildProcess, spawn as nodeSpawn } from "node:child_process";
+import { type ChildProcess, spawn as nodeSpawn, spawnSync } from "node:child_process";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, relative, resolve } from "node:path";
+import * as path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import {
   CHILD_MARKER,
   type ConcreteModel,
@@ -12,7 +13,11 @@ import {
 } from "./api.js";
 
 const MAX_TEXT_BYTES = 16 * 1024;
+const MAX_ACTIVITY_TEXT_BYTES = 1024;
 const MAX_ACTIVITY = 32;
+const MAX_JSON_LINE_BYTES = 1024 * 1024;
+const TERMINATE_GRACE_MS = 1_000;
+const FORCE_WAIT_MS = 1_000;
 
 export interface RunnerDependencies {
   spawn?: typeof nodeSpawn;
@@ -21,6 +26,8 @@ export interface RunnerDependencies {
   writeFile?: typeof writeFile;
   rm?: typeof rm;
   executable?: () => { command: string; prefix: string[] };
+  signalTree?: (child: ChildProcess, signal: NodeJS.Signals) => void;
+  delay?: (milliseconds: number) => Promise<void>;
 }
 
 export interface RunRequest {
@@ -34,20 +41,42 @@ export interface RunRequest {
   onUpdate?: (outcome: ExecutionOutcome) => void;
 }
 
-function truncate(value: string, limit = MAX_TEXT_BYTES): string {
+export function truncateUtf8(value: string, limit = MAX_TEXT_BYTES): string {
   if (Buffer.byteLength(value, "utf8") <= limit) return value;
-  let output = value;
-  while (Buffer.byteLength(output, "utf8") > limit - 16) output = output.slice(0, -1);
-  return `${output}…[truncated]`;
+  const suffix = "...[truncated]";
+  const budget = Math.max(0, limit - Buffer.byteLength(suffix, "utf8"));
+  let output = "";
+  let bytes = 0;
+  for (const character of value) {
+    const width = Buffer.byteLength(character, "utf8");
+    if (bytes + width > budget) break;
+    output += character;
+    bytes += width;
+  }
+  return output + suffix;
+}
+
+function snapshot(outcome: ExecutionOutcome): ExecutionOutcome {
+  return {
+    ...outcome,
+    usage: { ...outcome.usage },
+    activity: outcome.activity.map((entry) => ({ ...entry })),
+  };
+}
+
+function finiteNonnegative(value: unknown): number {
+  const number = Number(value ?? 0);
+  return Number.isFinite(number) && number >= 0 ? number : 0;
 }
 
 function initialOutcome(): ExecutionOutcome {
   return {
-    state: "completed",
+    state: "running",
     usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
     activity: [],
     omittedActivity: 0,
     retries: 0,
+    retryActive: false,
   };
 }
 
@@ -56,21 +85,45 @@ function defaultExecutable(): { command: string; prefix: string[] } {
   if (
     script &&
     !script.startsWith("/$bunfs/") &&
-    basename(process.execPath).match(/^(node|bun)(\.exe)?$/i)
-  ) {
+    path.basename(process.execPath).match(/^(node|bun)(\.exe)?$/i)
+  )
     return { command: process.execPath, prefix: [script] };
-  }
   return { command: "pi", prefix: [] };
 }
 
-function isDescendant(parent: string, child: string): boolean {
-  const path = relative(parent, child);
-  return path === "" || (!path.startsWith("..") && !path.includes("/../"));
+export function isPathWithin(
+  parent: string,
+  child: string,
+  pathApi: Pick<typeof path, "relative" | "isAbsolute" | "sep"> = path,
+): boolean {
+  const relativePath = pathApi.relative(parent, child);
+  return (
+    relativePath === "" ||
+    (!pathApi.isAbsolute(relativePath) &&
+      relativePath !== ".." &&
+      !relativePath.startsWith(`..${pathApi.sep}`))
+  );
+}
+
+function defaultSignalTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid === undefined) return;
+  if (process.platform === "win32") {
+    const args = ["/pid", String(child.pid), "/t"];
+    if (signal === "SIGKILL") args.push("/f");
+    const result = spawnSync("taskkill", args, { stdio: "ignore", windowsHide: true });
+    if (result.status !== 0) child.kill(signal);
+    return;
+  }
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    child.kill(signal);
+  }
 }
 
 export class SubprocessRunner {
   #deps: Required<RunnerDependencies>;
-  #children = new Set<ChildProcess>();
+  #terminations = new Set<() => Promise<void>>();
 
   constructor(deps: RunnerDependencies = {}) {
     this.#deps = {
@@ -80,27 +133,41 @@ export class SubprocessRunner {
       writeFile: deps.writeFile ?? writeFile,
       rm: deps.rm ?? rm,
       executable: deps.executable ?? defaultExecutable,
+      signalTree: deps.signalTree ?? defaultSignalTree,
+      delay:
+        deps.delay ??
+        ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))),
     };
   }
 
   async run(request: RunRequest): Promise<ExecutionOutcome> {
     if (request.signal?.aborted)
-      return { ...initialOutcome(), state: "cancelled", failure: "Cancelled before launch" };
+      return {
+        ...initialOutcome(),
+        state: "cancelled",
+        failure: "Cancelled before launch",
+      };
+
     const outcome = initialOutcome();
-    const childCwd = await this.#deps.canonicalize(resolve(request.prepared.cwd));
-    const parentCwd = await this.#deps.canonicalize(resolve(request.parentCwd));
-    const promptDir = await this.#deps.mkdtemp(join(tmpdir(), "pi-tools-subagent-"));
-    const promptPath = join(promptDir, "prompt.txt");
-    let child: ChildProcess | undefined;
-    let killTimer: ReturnType<typeof setTimeout> | undefined;
+    const emit = (): void => request.onUpdate?.(snapshot(outcome));
     const activity = (kind: ExecutionActivity["kind"], text: string): void => {
       if (outcome.activity.length < MAX_ACTIVITY)
-        outcome.activity.push({ kind, text: truncate(text, 1024) });
+        outcome.activity.push({ kind, text: truncateUtf8(text, MAX_ACTIVITY_TEXT_BYTES) });
       else outcome.omittedActivity++;
-      request.onUpdate?.(outcome);
+      emit();
     };
+
+    const childCwd = await this.#deps.canonicalize(path.resolve(request.prepared.cwd));
+    const parentCwd = await this.#deps.canonicalize(path.resolve(request.parentCwd));
+    const promptDir = await this.#deps.mkdtemp(path.join(tmpdir(), "pi-tools-subagent-"));
+    const promptPath = path.join(promptDir, "system-prompt.txt");
+    let child: ChildProcess | undefined;
+    let removeAbort = (): void => undefined;
+    let removeChildListeners = (): void => undefined;
+    let terminate = async (): Promise<void> => undefined;
+
     try {
-      await this.#deps.writeFile(promptPath, request.prepared.prompt, {
+      await this.#deps.writeFile(promptPath, request.prepared.systemPrompt, {
         encoding: "utf8",
         mode: 0o600,
       });
@@ -113,108 +180,209 @@ export class SubprocessRunner {
         "--no-session",
         "--no-context-files",
         "--no-skills",
-        "--append-system-prompt",
+        "--system-prompt",
         promptPath,
         "--model",
         `${request.model.provider}/${request.model.id}`,
         "--thinking",
         request.thinkingLevel,
-        "--tools",
-        request.tools.join(","),
-        request.prepared.prompt,
+        ...(request.tools.length > 0 ? ["--tools", request.tools.join(",")] : ["--no-tools"]),
       ];
-      if (request.parentTrusted && isDescendant(parentCwd, childCwd)) args.push("--approve");
+      if (request.parentTrusted && isPathWithin(parentCwd, childCwd)) args.push("--approve");
+      args.push(request.prepared.prompt);
+
       child = this.#deps.spawn(invocation.command, args, {
         cwd: childCwd,
+        detached: true,
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
         env: { ...process.env, [CHILD_MARKER]: "1" },
       });
-      this.#children.add(child);
-      let stdout = "";
-      let stderr = "";
-      const terminate = (): void => {
-        if (!child || child.killed) return;
-        child.kill("SIGTERM");
-        killTimer = setTimeout(() => child?.kill("SIGKILL"), 1_000);
+
+      let settled = false;
+      let settleClose: (code: number | null) => void = () => undefined;
+      let rejectClose: (error: Error) => void = () => undefined;
+      const closePromise = new Promise<number | null>((resolveClose, reject) => {
+        settleClose = (code) => {
+          if (settled) return;
+          settled = true;
+          resolveClose(code);
+        };
+        rejectClose = (error) => {
+          if (settled) return;
+          settled = true;
+          reject(error);
+        };
+      });
+      child.once("close", settleClose);
+      child.once("error", rejectClose);
+
+      let terminating: Promise<void> | undefined;
+      terminate = (): Promise<void> => {
+        if (terminating) return terminating;
+        terminating = (async () => {
+          if (!child || settled) return;
+          this.#deps.signalTree(child, "SIGTERM");
+          await Promise.race([
+            closePromise.catch(() => null),
+            this.#deps.delay(TERMINATE_GRACE_MS),
+          ]);
+          if (!settled) this.#deps.signalTree(child, "SIGKILL");
+          await Promise.race([closePromise.catch(() => null), this.#deps.delay(FORCE_WAIT_MS)]);
+          if (!settled) settleClose(null);
+        })();
+        return terminating;
       };
-      request.signal?.addEventListener("abort", terminate, { once: true });
-      child.stdout?.on("data", (chunk: Buffer) => {
-        stdout = truncate(stdout + chunk.toString("utf8"));
-        let newline = stdout.indexOf("\n");
-        while (newline >= 0) {
-          const line = stdout.slice(0, newline);
-          stdout = stdout.slice(newline + 1);
-          try {
-            const event = JSON.parse(line) as Record<string, unknown>;
-            if (event.type === "tool_execution_start")
-              activity("tool_start", String(event.toolName ?? "tool"));
-            else if (event.type === "tool_execution_end")
-              activity("tool_end", String(event.toolName ?? "tool"));
-            else if (event.type === "auto_retry_start") {
-              outcome.retries++;
-              activity("retry_start", "request retry");
-            } else if (event.type === "auto_retry_end")
-              activity("retry_end", "request retry complete");
-            else if (event.type === "message_end") {
-              const message = event.message as
-                | {
-                    role?: string;
-                    content?: Array<{ type?: string; text?: string }>;
-                    usage?: Record<string, unknown>;
-                    errorMessage?: string;
-                  }
-                | undefined;
-              if (message?.role === "assistant") {
-                outcome.report = truncate(
-                  message.content
-                    ?.filter((part) => part.type === "text")
-                    .map((part) => part.text ?? "")
-                    .join("") ?? "",
-                );
-                const usage = message.usage;
-                if (usage)
-                  for (const key of ["input", "output", "cacheRead", "cacheWrite"] as const)
-                    outcome.usage[key] += Number(usage[key] ?? 0);
-                if (usage && typeof usage.cost === "object" && usage.cost)
-                  outcome.usage.cost += Number((usage.cost as { total?: unknown }).total ?? 0);
-                if (message.errorMessage) outcome.failure = truncate(message.errorMessage);
-              }
-            }
-          } catch {
-            /* malformed child output is intentionally ignored */
-          }
-          newline = stdout.indexOf("\n");
+      this.#terminations.add(terminate);
+      const abort = (): void => {
+        void terminate();
+      };
+      request.signal?.addEventListener("abort", abort, { once: true });
+      removeAbort = () => request.signal?.removeEventListener("abort", abort);
+
+      const stdoutDecoder = new StringDecoder("utf8");
+      const stderrDecoder = new StringDecoder("utf8");
+      let lineBuffer = "";
+      let discardingLine = false;
+      let stderr = "";
+
+      const processLine = (line: string): void => {
+        if (!line.trim()) return;
+        let event: Record<string, unknown>;
+        try {
+          event = JSON.parse(line) as Record<string, unknown>;
+        } catch {
+          activity("diagnostic", "Ignored malformed child JSON event");
+          return;
         }
-      });
-      child.stderr?.on("data", (chunk: Buffer) => {
-        stderr = truncate(stderr + chunk.toString("utf8"));
-      });
-      const code = await new Promise<number | null>((resolveClose, reject) => {
-        child?.once("close", resolveClose);
-        child?.once("error", reject);
-      });
+        if (event.type === "tool_execution_start")
+          activity("tool_start", String(event.toolName ?? "tool"));
+        else if (event.type === "tool_execution_end")
+          activity("tool_end", String(event.toolName ?? "tool"));
+        else if (event.type === "auto_retry_start") {
+          outcome.retries++;
+          outcome.retryActive = true;
+          activity("retry_start", String(event.errorMessage ?? "request retry"));
+        } else if (event.type === "auto_retry_end") {
+          outcome.retryActive = false;
+          activity("retry_end", String(event.finalError ?? "request retry complete"));
+        } else if (event.type === "message_end") {
+          const message = event.message as
+            | {
+                role?: string;
+                content?: Array<{ type?: string; text?: string }>;
+                usage?: Record<string, unknown>;
+                errorMessage?: string;
+              }
+            | undefined;
+          if (message?.role !== "assistant") return;
+          outcome.report = truncateUtf8(
+            message.content
+              ?.filter((part) => part.type === "text")
+              .map((part) => part.text ?? "")
+              .join("") ?? "",
+          );
+          const usage = message.usage;
+          if (usage) {
+            for (const key of ["input", "output", "cacheRead", "cacheWrite"] as const)
+              outcome.usage[key] += finiteNonnegative(usage[key]);
+            const cost = usage.cost;
+            if (cost && typeof cost === "object")
+              outcome.usage.cost += finiteNonnegative((cost as { total?: unknown }).total);
+          }
+          if (message.errorMessage) outcome.failure = truncateUtf8(message.errorMessage);
+          emit();
+        }
+      };
+
+      const feedStdout = (text: string, final = false): void => {
+        let remaining = text;
+        while (remaining.length > 0) {
+          if (discardingLine) {
+            const newline = remaining.indexOf("\n");
+            if (newline < 0) return;
+            remaining = remaining.slice(newline + 1);
+            discardingLine = false;
+            activity("diagnostic", "Ignored oversized child JSON event");
+            continue;
+          }
+          const newline = remaining.indexOf("\n");
+          if (newline < 0) {
+            lineBuffer += remaining;
+            if (Buffer.byteLength(lineBuffer, "utf8") > MAX_JSON_LINE_BYTES) {
+              lineBuffer = "";
+              discardingLine = true;
+            }
+            remaining = "";
+            continue;
+          }
+          const line = lineBuffer + remaining.slice(0, newline);
+          lineBuffer = "";
+          remaining = remaining.slice(newline + 1);
+          if (Buffer.byteLength(line, "utf8") > MAX_JSON_LINE_BYTES)
+            activity("diagnostic", "Ignored oversized child JSON event");
+          else processLine(line);
+        }
+        if (final && discardingLine) {
+          discardingLine = false;
+          activity("diagnostic", "Ignored oversized child JSON event");
+        } else if (final && lineBuffer.trim()) {
+          processLine(lineBuffer);
+          lineBuffer = "";
+        }
+      };
+
+      const readStdout = (chunk: Buffer): void => feedStdout(stdoutDecoder.write(chunk));
+      const readStderr = (chunk: Buffer): void => {
+        stderr = truncateUtf8(stderr + stderrDecoder.write(chunk));
+      };
+      child.stdout?.on("data", readStdout);
+      child.stderr?.on("data", readStderr);
+      removeChildListeners = () => {
+        child?.stdout?.removeListener("data", readStdout);
+        child?.stderr?.removeListener("data", readStderr);
+        child?.removeListener("close", settleClose);
+        child?.removeListener("error", rejectClose);
+      };
+
+      const code = await closePromise;
+      feedStdout(stdoutDecoder.end(), true);
+      stderr = truncateUtf8(stderr + stderrDecoder.end());
       if (request.signal?.aborted) {
         outcome.state = "cancelled";
         outcome.failure = "Cancelled";
       } else if (code !== 0 || outcome.failure) {
         outcome.state = "failed";
-        outcome.failure = outcome.failure ?? truncate(stderr || "Child process failed");
-      }
+        outcome.failure = outcome.failure ?? truncateUtf8(stderr || "Child process failed");
+      } else outcome.state = "completed";
+      outcome.retryActive = false;
+      emit();
       return outcome;
     } catch (error) {
+      await terminate();
       outcome.state = request.signal?.aborted ? "cancelled" : "failed";
-      outcome.failure = truncate(error instanceof Error ? error.message : String(error));
+      outcome.retryActive = false;
+      outcome.failure = truncateUtf8(error instanceof Error ? error.message : String(error));
+      emit();
       return outcome;
     } finally {
-      if (killTimer) clearTimeout(killTimer);
-      if (child) this.#children.delete(child);
-      await this.#deps.rm(promptDir, { recursive: true, force: true });
+      removeAbort();
+      removeChildListeners();
+      this.#terminations.delete(terminate);
+      try {
+        await this.#deps.rm(promptDir, { recursive: true, force: true });
+      } catch (error) {
+        outcome.state = "failed";
+        outcome.failure = truncateUtf8(
+          `Failed to clean up subagent prompt: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        emit();
+      }
     }
   }
 
-  shutdown(): void {
-    for (const child of this.#children) child.kill("SIGTERM");
-    this.#children.clear();
+  async shutdown(): Promise<void> {
+    await Promise.all([...this.#terminations].map((terminate) => terminate()));
+    this.#terminations.clear();
   }
 }
