@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-_No decisions are in flight._
+- [ADR-0005: Public source distribution](0005-public-source-distribution.md) (Proposed)
 
 ## History
 

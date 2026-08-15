@@ -1,0 +1,39 @@
+---
+format: current-state-v4
+slug: public-source-distribution
+status: Proposed
+date: 2026-08-16
+---
+# ADR-0005: Public source distribution
+
+## Context
+
+Consumers need stable Git refs for tests and direct Pi package installation without private-repository credentials. Making the repository public exposes its complete reachable history, existing tag, and GitHub-hosted automation history. The publication audit found no credential or private-machine-state blocker; all reachable commits use the owner's accepted public identity.
+
+The repository has no npm publication pipeline or built artifact. Public source availability does not require making the npm package publishable. A license is required to grant downstream reuse rights rather than merely exposing source.
+
+## Decision
+
+1. `decision: public-agpl-git-distribution` Distribute pi-tools as a public Git repository under the GNU Affero General Public License version 3 while retaining the npm publication guard and Git-ref-based package distribution.
+
+## State changes
+
+- add `development/distribution-policy:public-git-distribution`
+
+## Consequences
+
+Consumers can inspect, clone, test, and pin tagged revisions without repository credentials. The AGPL-3.0 terms govern redistribution and modification, including its source-availability obligations. The complete repository history and accepted author identity become public.
+
+The package remains unavailable from npm unless a later distribution-policy decision removes the guard. Release tags remain the supported stable installation refs.
+
+## Alternatives Considered
+
+| Alternative | Why not chosen |
+|---|---|
+| Keep the repository private | Consumers would continue to require repository credentials to test pinned refs. |
+| Make the source visible without a license | Visibility alone would not grant downstream reuse rights. |
+| Publish the package to npm | Public Git installation satisfies the requirement without introducing a publication pipeline or artifact. |
+
+## Status history
+
+- 2026-08-16: Proposed
