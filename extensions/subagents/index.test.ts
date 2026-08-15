@@ -257,17 +257,21 @@ describe("subagent toolkit adapter", () => {
       profiles: [customProfile({ selectModel: async () => ({ provider: "p" }) as never })],
     });
     harness.start();
+    const toolContext = context();
+    const find = vi.fn();
+    toolContext.modelRegistry.find = find;
     const result = await harness.tools[0]?.execute(
       "call",
       { task: "focus" },
       undefined,
       undefined,
-      context(),
+      toolContext,
     );
     expect(result?.details).toMatchObject({
       state: "failed",
       failure: "Profile selected an invalid model",
     });
+    expect(find).not.toHaveBeenCalled();
     expect(run).not.toHaveBeenCalled();
   });
 
