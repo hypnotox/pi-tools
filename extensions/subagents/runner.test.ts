@@ -49,8 +49,13 @@ function request(overrides: Partial<RunRequest> = {}): RunRequest {
 }
 
 function dependencies(child = fakeChild()) {
+  const refreshState = {
+    callback: undefined as (() => void) | undefined,
+    stop: vi.fn(),
+  };
   return {
     child,
+    refreshState,
     spawn: vi.fn((..._args: unknown[]) => child),
     canonicalize: async (value: string) => value,
     mkdtemp: (async () => "/tmp/test") as never,
@@ -59,6 +64,10 @@ function dependencies(child = fakeChild()) {
     executable: () => ({ command: "pi", prefix: [] }),
     signalTree: vi.fn(),
     delay: vi.fn(async () => undefined),
+    scheduleRefresh: vi.fn((callback: () => void) => {
+      refreshState.callback = callback;
+      return refreshState.stop;
+    }),
   };
 }
 
@@ -227,7 +236,7 @@ describe("SubprocessRunner", () => {
     });
     expect(result.activity.map((entry) => entry.kind)).toEqual(["retry_start", "retry_end"]);
     expect(result.execution?.activity).toContainEqual(
-      expect.objectContaining({ kind: "tool", toolCallId: "read-id", state: "running" }),
+      expect.objectContaining({ kind: "tool", toolCallId: "read-id", state: "error" }),
     );
     expect(result.activity[0]?.text).toContain("😀");
     expect(updates.length).toBeGreaterThan(0);
@@ -284,11 +293,16 @@ describe("SubprocessRunner", () => {
     const { promise } = await launch(deps, request({ signal: controller.signal }));
     deps.child.stdout.emit(
       "data",
-      Buffer.from(`${JSON.stringify({ type: "auto_retry_start", errorMessage: "retrying" })}\n`),
+      Buffer.from(
+        `${JSON.stringify({ type: "auto_retry_start", errorMessage: "retrying" })}\n${JSON.stringify({ type: "tool_execution_start", toolCallId: "active", toolName: "read", args: {} })}\n`,
+      ),
     );
     controller.abort();
     const result = await promise;
     expect(result).toMatchObject({ state: "cancelled", retries: 1, retryActive: false });
+    expect(result.execution?.activity).toContainEqual(
+      expect.objectContaining({ kind: "tool", toolCallId: "active", state: "error" }),
+    );
     expect(result.activity).toContainEqual({ kind: "retry_start", text: "retrying" });
     expect(deps.signalTree).toHaveBeenCalledWith(deps.child, "SIGTERM");
   });
@@ -302,6 +316,24 @@ describe("SubprocessRunner", () => {
     expect(deps.signalTree).toHaveBeenNthCalledWith(1, deps.child, "SIGTERM");
     expect(deps.signalTree).toHaveBeenNthCalledWith(2, deps.child, "SIGKILL");
     await expect(promise).resolves.toMatchObject({ state: "cancelled" });
+  });
+
+  it("finalizes an active tool as failed when the child exits abnormally", async () => {
+    const deps = dependencies();
+    const { promise } = await launch(deps);
+    deps.child.stdout.emit(
+      "data",
+      Buffer.from(
+        `${JSON.stringify({ type: "tool_execution_start", toolCallId: "active", toolName: "read", args: {} })}\n`,
+      ),
+    );
+    deps.child.stderr.emit("data", Buffer.from("child failed"));
+    deps.child.emit("close", 1);
+    const result = await promise;
+    expect(result).toMatchObject({ state: "failed", failure: "child failed" });
+    expect(result.execution?.activity).toContainEqual(
+      expect.objectContaining({ kind: "tool", toolCallId: "active", state: "error" }),
+    );
   });
 
   it("normalizes prompt pipe failures and terminates the child tree", async () => {
@@ -415,6 +447,15 @@ describe("SubprocessRunner", () => {
     });
     now = 20;
     event({ type: "tool_execution_start", toolCallId: "one", toolName: "read", args: {} });
+    now = 25;
+    deps.refreshState.callback?.();
+    expect(updates.at(-1)?.execution).toMatchObject({
+      elapsedMs: 25,
+      activity: [
+        { kind: "thinking", text: "first" },
+        { kind: "tool", toolCallId: "one", state: "running", durationMs: 5 },
+      ],
+    });
     now = 30;
     event({ type: "tool_execution_start", toolCallId: "two", toolName: "bash", args: {} });
     now = 40;
@@ -460,6 +501,8 @@ describe("SubprocessRunner", () => {
       ),
     );
     expect(liveTool?.execution).toMatchObject({ elapsedMs: 30 });
+    expect(deps.scheduleRefresh).toHaveBeenCalledWith(expect.any(Function), 1_000);
+    expect(deps.refreshState.stop).toHaveBeenCalledTimes(1);
   });
 
   it("flushes completed thinking blocks before later activity", async () => {

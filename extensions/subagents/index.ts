@@ -168,6 +168,16 @@ function boundedExecutionIdentity(
   };
 }
 
+function initialExecution(prompt: string): NonNullable<ExecutionDetails["execution"]> {
+  return immutableSnapshot({
+    prompt: truncateUtf8(prompt),
+    activity: [],
+    omittedActivity: 0,
+    elapsedMs: 0,
+    turns: 0,
+  });
+}
+
 function detailsFromOutcome(
   profileId: string,
   cwd: string,
@@ -317,6 +327,7 @@ export function createSubagentToolkit(
     let selectedModel = parentFallback;
     let thinkingLevel = (ctx.thinkingLevel ?? "off") as ThinkingLevel;
     let cwd = ctx.cwd;
+    let preparedExecution: ExecutionDetails["execution"];
 
     const failureResult = (error: unknown, outcome?: ExecutionOutcome) => {
       const failure = truncateUtf8(error instanceof Error ? error.message : String(error));
@@ -336,6 +347,7 @@ export function createSubagentToolkit(
             omittedActivity: 0,
             usage: { ...EMPTY_USAGE, cost: { ...EMPTY_USAGE.cost } },
             failure,
+            ...(preparedExecution === undefined ? {} : { execution: preparedExecution }),
           };
       return {
         content: [{ type: "text" as const, text: failure }],
@@ -384,6 +396,8 @@ export function createSubagentToolkit(
       if (!Value.Check(PreparedRunSchema, prepared))
         throw new Error("Profile prepared an invalid run");
       cwd = prepared.cwd;
+      const execution = initialExecution(prepared.prompt);
+      preparedExecution = execution;
       const tools = resolveTools(prepared.toolPolicy, parent.activeTools, registry.profileTools());
 
       return await scheduler.run(
@@ -484,13 +498,7 @@ export function createSubagentToolkit(
             activity: [],
             omittedActivity: 0,
             usage: { ...EMPTY_USAGE, cost: { ...EMPTY_USAGE.cost } },
-            execution: {
-              prompt: truncateUtf8(prepared.prompt),
-              activity: [],
-              omittedActivity: 0,
-              elapsedMs: 0,
-              turns: 0,
-            },
+            execution,
           };
           onUpdate?.({ content: [{ type: "text", text: `Queued (${queuePosition})` }], details });
         },

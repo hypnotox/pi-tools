@@ -131,6 +131,14 @@ function context(branch: unknown[] = []) {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function customProfile(overrides: Partial<ProfileDefinition> = {}): ProfileDefinition {
   return {
     id: "custom",
@@ -474,8 +482,53 @@ describe("subagent toolkit adapter", () => {
       undefined,
       context(),
     );
-    expect(failed?.details).toMatchObject({ state: "failed", failure: "callback failed" });
+    expect(failed?.details).toMatchObject({
+      state: "failed",
+      failure: "callback failed",
+      execution: { prompt: "focus", activity: [], elapsedMs: 0 },
+    });
     expect(failed?.usage).toBeUndefined();
+  });
+
+  it("retains the prepared prompt when a queued invocation is cancelled", async () => {
+    const harness = fakePi();
+    const firstOutcome = deferred<ExecutionOutcome>();
+    const run = vi
+      .fn()
+      .mockImplementationOnce(() => firstOutcome.promise)
+      .mockResolvedValueOnce(completedOutcome());
+    createSubagentToolkit(harness.api, {
+      runner: { run, shutdown: vi.fn(async () => undefined) },
+      profiles: [customProfile()],
+    });
+    harness.start();
+    const tool = harness.tools[0];
+    const first = tool?.execute("first", { task: "first task" }, undefined, undefined, context());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const controller = new AbortController();
+    const updates: Array<{ details: ExecutionDetails }> = [];
+    const second = tool?.execute(
+      "second",
+      { task: "queued task" },
+      controller.signal,
+      (update) => updates.push(update as { details: ExecutionDetails }),
+      context(),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(updates.at(-1)?.details).toMatchObject({
+      state: "queued",
+      execution: { prompt: "queued task" },
+    });
+    controller.abort();
+    await expect(second).resolves.toMatchObject({
+      details: {
+        state: "cancelled",
+        execution: { prompt: "queued task", activity: [], elapsedMs: 0 },
+      },
+    });
+    expect(run).toHaveBeenCalledTimes(1);
+    firstOutcome.resolve(completedOutcome());
+    await first;
   });
 
   it("rejects duplicate prepared tool names before launching", async () => {

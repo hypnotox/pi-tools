@@ -20,6 +20,7 @@ const MAX_EXECUTION_HISTORY = 50;
 const MAX_JSON_LINE_BYTES = 1024 * 1024;
 const TERMINATE_GRACE_MS = 1_000;
 const FORCE_WAIT_MS = 1_000;
+const REFRESH_INTERVAL_MS = 1_000;
 
 export interface RunnerDependencies {
   spawn?: typeof nodeSpawn;
@@ -31,6 +32,8 @@ export interface RunnerDependencies {
   signalTree?: (child: ChildProcess, signal: NodeJS.Signals) => void;
   delay?: (milliseconds: number) => Promise<void>;
   monotonicNow?: () => number;
+  /** Schedules bounded live timing refreshes and returns their cleanup callback. */
+  scheduleRefresh?: (callback: () => void, milliseconds: number) => () => void;
 }
 
 export interface RunRequest {
@@ -205,6 +208,13 @@ export class SubprocessRunner {
         deps.delay ??
         ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))),
       monotonicNow: deps.monotonicNow ?? (() => performance.now()),
+      scheduleRefresh:
+        deps.scheduleRefresh ??
+        ((callback, milliseconds) => {
+          const timer = setInterval(callback, milliseconds);
+          timer.unref();
+          return () => clearInterval(timer);
+        }),
     };
   }
 
@@ -252,6 +262,11 @@ export class SubprocessRunner {
       for (const { startedMono, entry } of activeTools.values())
         if (entry.state === "running") entry.durationMs = Math.max(0, now - startedMono);
     };
+    const finalizeActiveTools = (): void => {
+      updateDurations();
+      for (const { entry } of activeTools.values()) entry.state = "error";
+      activeTools.clear();
+    };
     const emit = (): void => {
       updateDurations();
       request.onUpdate?.(snapshot(outcome));
@@ -298,6 +313,7 @@ export class SubprocessRunner {
     let removeAbort = (): void => undefined;
     let removeChildListeners = (): void => undefined;
     let terminate = async (): Promise<void> => undefined;
+    let stopRefresh = (): void => undefined;
 
     try {
       childCwd = await this.#deps.canonicalize(path.resolve(request.prepared.cwd));
@@ -534,6 +550,7 @@ export class SubprocessRunner {
         child?.removeListener("close", settleClose);
         child?.removeListener("error", rejectClose);
       };
+      if (request.onUpdate) stopRefresh = this.#deps.scheduleRefresh(emit, REFRESH_INTERVAL_MS);
 
       const code = await closePromise;
       feedStdout(stdoutDecoder.end(), true);
@@ -546,6 +563,7 @@ export class SubprocessRunner {
         outcome.failure = outcome.failure ?? truncateUtf8(stderr || "Child process failed");
       } else outcome.state = "completed";
       outcome.retryActive = false;
+      finalizeActiveTools();
       emit();
       return outcome;
     } catch (error) {
@@ -553,9 +571,11 @@ export class SubprocessRunner {
       outcome.state = request.signal?.aborted || this.#disposed ? "cancelled" : "failed";
       outcome.retryActive = false;
       outcome.failure = truncateUtf8(error instanceof Error ? error.message : String(error));
+      finalizeActiveTools();
       emit();
       return outcome;
     } finally {
+      stopRefresh();
       removeAbort();
       removeChildListeners();
       this.#terminations.delete(terminate);
