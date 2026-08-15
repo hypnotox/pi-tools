@@ -228,7 +228,6 @@ export function createSubagentToolkit(
     },
   };
   const registry = new ProfileRegistry(defaultProfile);
-  const toolSummaryRegistry = new ToolSummaryRegistry();
   if (dependencies.profiles?.length)
     registry.register({
       registrationId: "pi-tools:local-composition",
@@ -245,25 +244,6 @@ export function createSubagentToolkit(
     ...(correlationId === undefined ? {} : { correlationId }),
     register,
   });
-  const toolSummaryCapability = (correlationId?: string) => ({
-    protocolVersion: SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION,
-    ...(correlationId === undefined ? {} : { correlationId }),
-    register: (batch: ToolSummaryRegistration): ToolSummaryRegistrationReceipt =>
-      toolSummaryRegistry.collect(batch),
-  });
-  const unsubscribeSummaryRequests = events?.on(SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT, (data) => {
-    const request = data as Partial<ToolSummaryCapabilityRequest>;
-    if (
-      request.protocolVersion === SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION &&
-      typeof request.correlationId === "string" &&
-      request.correlationId
-    )
-      events.emit(
-        SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT,
-        toolSummaryCapability(request.correlationId),
-      );
-  });
-  events?.emit(SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT, toolSummaryCapability());
   const unsubscribeRequests = events?.on(SUBAGENT_PROFILE_REQUEST_EVENT, (data) => {
     const request = data as Partial<ProfileCapabilityRequest>;
     if (
@@ -287,10 +267,30 @@ export function createSubagentToolkit(
     });
     pi.on("session_shutdown", () => {
       unsubscribeRequests?.();
-      unsubscribeSummaryRequests?.();
     });
     return;
   }
+
+  const toolSummaryRegistry = new ToolSummaryRegistry();
+  const toolSummaryCapability = (correlationId?: string) => ({
+    protocolVersion: SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION,
+    ...(correlationId === undefined ? {} : { correlationId }),
+    register: (batch: ToolSummaryRegistration): ToolSummaryRegistrationReceipt =>
+      toolSummaryRegistry.collect(batch),
+  });
+  const unsubscribeSummaryRequests = events?.on(SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT, (data) => {
+    const request = data as Partial<ToolSummaryCapabilityRequest>;
+    if (
+      request.protocolVersion === SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION &&
+      typeof request.correlationId === "string" &&
+      request.correlationId
+    )
+      events.emit(
+        SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT,
+        toolSummaryCapability(request.correlationId),
+      );
+  });
+  events?.emit(SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT, toolSummaryCapability());
 
   const scheduler = new ProfileScheduler();
   const runner = dependencies.runner ?? new SubprocessRunner();

@@ -1,8 +1,22 @@
 const MAX_VALUE = 256;
 
+function isUnsafeCodePoint(codePoint: number): boolean {
+  return (
+    codePoint <= 0x1f ||
+    (codePoint >= 0x7f && codePoint <= 0x9f) ||
+    codePoint === 0x2028 ||
+    codePoint === 0x2029
+  );
+}
+
 function text(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
-  const clean = value.replace(/[\0\r\n\t]/g, " ").trim();
+  const clean = Array.from(value, (character) =>
+    isUnsafeCodePoint(character.codePointAt(0) ?? 0) ? " " : character,
+  )
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
   return clean && clean.length <= MAX_VALUE ? clean : undefined;
 }
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -36,7 +50,9 @@ export function summarizeBuiltinTool(toolName: string, args: unknown): string | 
     case "write":
       return withValue(toolName, path);
     case "bash": {
-      const command = text(values.command);
+      const firstLine =
+        typeof values.command === "string" ? values.command.split(/\r\n|\r|\n/, 1)[0] : undefined;
+      const command = text(firstLine);
       return command ? `bash ${command.split(/(?<!\\)[;&|]/)[0]?.trim() ?? ""}` : toolName;
     }
     case "grep": {

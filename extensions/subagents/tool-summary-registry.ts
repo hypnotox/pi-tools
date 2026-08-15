@@ -24,11 +24,20 @@ function frozenJson(value: unknown): JsonValue {
   }
 }
 
+function isUnsafeCodePoint(codePoint: number): boolean {
+  return (
+    codePoint <= 0x1f ||
+    (codePoint >= 0x7f && codePoint <= 0x9f) ||
+    codePoint === 0x2028 ||
+    codePoint === 0x2029
+  );
+}
+
 function validSummary(value: unknown): value is string {
   return (
     typeof value === "string" &&
     value.trim().length > 0 &&
-    !/[\0\r\n]/.test(value) &&
+    !Array.from(value).some((character) => isUnsafeCodePoint(character.codePointAt(0) ?? 0)) &&
     Buffer.byteLength(value, "utf8") <= MAX_SUMMARY_BYTES
   );
 }
@@ -81,7 +90,11 @@ export class ToolSummaryRegistry {
       this.#pending.push({
         batch: Object.freeze({
           registrationId: batch.registrationId,
-          resolvers: Object.freeze([...batch.resolvers]),
+          resolvers: Object.freeze(
+            batch.resolvers.map((entry) =>
+              Object.freeze({ toolName: entry.toolName, resolve: entry.resolve }),
+            ),
+          ),
         }),
         receipt,
       });

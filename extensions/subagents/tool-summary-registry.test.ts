@@ -56,6 +56,10 @@ describe("ToolSummaryRegistry", () => {
       }),
     );
     registry.collect(batch("invalid", "invalid", () => "bad\nvalue"));
+    registry.collect(batch("tab", "tab", () => "bad\tvalue"));
+    registry.collect(batch("escape", "escape", () => "bad\u001b[31mvalue"));
+    registry.collect(batch("bell", "bell", () => "bad\u0007value"));
+    registry.collect(batch("separator", "separator", () => "bad\u2028value"));
     registry.collect(
       batch("throws", "throws", () => {
         throw new Error("unsafe");
@@ -66,6 +70,23 @@ describe("ToolSummaryRegistry", () => {
     expect(Object.isFrozen(received)).toBe(true);
     expect(Object.isFrozen((received as { nested: object }).nested)).toBe(true);
     expect(registry.resolve("invalid", {})).toBe("invalid");
+    expect(registry.resolve("tab", {})).toBe("tab");
+    expect(registry.resolve("escape", {})).toBe("escape");
+    expect(registry.resolve("bell", {})).toBe("bell");
+    expect(registry.resolve("separator", {})).toBe("separator");
     expect(registry.resolve("throws", {})).toBe("throws");
+  });
+
+  it("snapshots resolver descriptors before finalization", () => {
+    const registry = new ToolSummaryRegistry();
+    const descriptor = { toolName: "original", resolve: () => "original summary" };
+    registry.collect({ registrationId: "mutable", resolvers: [descriptor] });
+    descriptor.toolName = "mutated";
+    descriptor.resolve = () => "mutated summary";
+    expect(registry.finalize()).toEqual([
+      { protocolVersion: 1, registrationId: "mutable", state: "registered" },
+    ]);
+    expect(registry.resolve("original", {})).toBe("original summary");
+    expect(registry.resolve("mutated", {})).toBe("mutated");
   });
 });

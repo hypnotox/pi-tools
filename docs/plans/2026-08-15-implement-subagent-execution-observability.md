@@ -94,4 +94,6 @@ feat(extensions): expose live subagent execution progress
 ## Notes
 
 - Plan review: added explicit core-tool summary readings, `ls`, raw-argument negative coverage, rendering scenarios, compatibility ownership, DoD completion, and the governed application batch. Generic baseline and repository-gate choreography remain owned by the execution workflows rather than duplicated here.
+- Phase 1 verification deviation: worktree-local Biome treats the parent `.awf` path as excluded, so the phase owner ran the full gate against a temporary materialization of the exact staged tree. No repository or gate policy changed.
+- Phase 1 review: broadened custom and built-in control-character containment, selected the first bash line before sanitizing, froze resolver descriptors, withheld the unused capability from marked children, expanded replay/adapter/raw-argument persistence coverage, and documented synchronous latency. These fixes preserve the approved safety, parent-side projection, and compatibility boundaries.
 - Record reasoned implementation deviations, review dispositions, and focused evidence here.

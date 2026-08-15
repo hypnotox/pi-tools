@@ -30,6 +30,11 @@ interface RegisteredTool {
   name: string;
   promptSnippet?: string;
   promptGuidelines?: string[];
+  renderResult?: (
+    result: { details: ExecutionDetails },
+    options: { expanded: boolean },
+    theme: { fg(color: string, text: string): string; bold(text: string): string },
+  ) => { render(width: number): string[] };
   execute: (
     id: string,
     params: unknown,
@@ -180,11 +185,17 @@ describe("subagent toolkit adapter", () => {
 
     process.env[CHILD_MARKER] = "1";
     const child = fakePi();
+    let summaryAnnouncements = 0;
+    child.api.events.on(SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT, () => {
+      summaryAnnouncements++;
+    });
     createSubagentToolkit(child.api, {
       runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
     });
     child.start();
     expect(child.tools).toHaveLength(0);
+    expect(summaryAnnouncements).toBe(0);
+    expect(child.eventHandlers.get(SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT)).toBeUndefined();
   });
 
   it("resolves the registry model, clamps thinking, removes profile tools, and preserves facts", async () => {
@@ -942,36 +953,96 @@ describe("subagent toolkit adapter", () => {
     ]);
   });
 
-  it("negotiates exclusive custom tool summaries and releases listeners", async () => {
+  it("replays and applies exclusive custom tool summaries across persisted surfaces", async () => {
+    const secret = "RAW_ARGUMENT_SENTINEL";
+    const run = vi.fn(
+      async (request: { summarizeTool?: (toolName: string, args: unknown) => string }) => ({
+        ...completedOutcome(),
+        activity: [
+          {
+            kind: "tool_start" as const,
+            text: request.summarizeTool?.("read", { path: "safe.ts" }) ?? "missing",
+          },
+          {
+            kind: "tool_start" as const,
+            text:
+              request.summarizeTool?.("custom_tool", { secret, nested: { value: 1 } }) ?? "missing",
+          },
+          {
+            kind: "tool_start" as const,
+            text: request.summarizeTool?.("invalid_tool", {}) ?? "missing",
+          },
+          {
+            kind: "tool_start" as const,
+            text: request.summarizeTool?.("throwing_tool", {}) ?? "missing",
+          },
+          {
+            kind: "tool_start" as const,
+            text: request.summarizeTool?.("unknown_tool", { secret }) ?? "missing",
+          },
+        ],
+      }),
+    );
     const harness = fakePi();
-    let capability: ToolSummaryCapability | undefined;
     const results: ToolSummaryRegistrationResult[] = [];
+    createSubagentToolkit(harness.api, {
+      runner: { run, shutdown: vi.fn(async () => undefined) },
+    });
+
+    let capability: ToolSummaryCapability | undefined;
     harness.api.events.on(SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT, (data) => {
       const candidate = data as ToolSummaryCapability;
-      if (candidate.protocolVersion === SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION)
+      if (
+        candidate.protocolVersion === SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION &&
+        candidate.correlationId === "late-consumer"
+      )
         capability = candidate;
     });
     harness.api.events.on(SUBAGENT_TOOL_SUMMARY_REGISTRATION_RESULT_EVENT, (data) => {
       results.push(data as ToolSummaryRegistrationResult);
     });
-    createSubagentToolkit(harness.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+    harness.api.events.emit(SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT, {
+      protocolVersion: SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION,
+      correlationId: "late-consumer",
     });
-    expect(
-      capability?.register({
-        registrationId: "custom",
-        resolvers: [{ toolName: "custom_tool", resolve: () => "safe" }],
-      }).state,
-    ).toBe("pending");
-    expect(
-      capability?.register({
-        registrationId: "built-in",
-        resolvers: [{ toolName: "read", resolve: () => "unsafe" }],
-      }).state,
-    ).toBe("pending");
+    const registration = {
+      registrationId: "custom",
+      resolvers: [
+        {
+          toolName: "custom_tool",
+          resolve: (args: unknown) =>
+            (args as { secret?: string }).secret === secret ? "custom safe" : "wrong",
+        },
+      ],
+    };
+    const receipt = capability?.register(registration);
+    expect(receipt?.state).toBe("pending");
+    expect(capability?.register(registration)).toBe(receipt);
+    capability?.register({
+      registrationId: "invalid",
+      resolvers: [{ toolName: "invalid_tool", resolve: () => "bad\nvalue" }],
+    });
+    capability?.register({
+      registrationId: "throws",
+      resolvers: [
+        {
+          toolName: "throwing_tool",
+          resolve: () => {
+            throw new Error("resolver failed");
+          },
+        },
+      ],
+    });
+    capability?.register({
+      registrationId: "built-in",
+      resolvers: [{ toolName: "read", resolve: () => "unsafe" }],
+    });
+
     harness.start();
     expect(results).toEqual([
       { protocolVersion: 1, registrationId: "custom", state: "registered" },
+      { protocolVersion: 1, registrationId: "invalid", state: "registered" },
+      { protocolVersion: 1, registrationId: "throws", state: "registered" },
       {
         protocolVersion: 1,
         registrationId: "built-in",
@@ -979,6 +1050,31 @@ describe("subagent toolkit adapter", () => {
         reason: "Reserved tool summary: read",
       },
     ]);
+    const result = await harness.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(result?.details.activity.map((entry) => entry.text)).toEqual([
+      "read safe.ts",
+      "custom safe",
+      "invalid_tool",
+      "throwing_tool",
+      "unknown_tool",
+    ]);
+    expect(JSON.stringify(result)).not.toContain(secret);
+    const reconstructed = JSON.parse(JSON.stringify(result?.details)) as ExecutionDetails;
+    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+    for (const expanded of [false, true]) {
+      const rendered = harness.tools[0]
+        ?.renderResult?.({ details: reconstructed }, { expanded }, theme)
+        .render(120)
+        .join("\n");
+      expect(rendered).not.toContain(secret);
+      if (expanded) expect(rendered).toContain("custom safe");
+    }
     expect(
       capability?.register({
         registrationId: "late",
