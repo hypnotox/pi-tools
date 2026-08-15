@@ -93,7 +93,7 @@ pi install /absolute/path/to/pi-tools
 Use `/reload` after editing resources. To update this installed package explicitly:
 
 ```bash
-pi update git:git@github.com:hypnotox/pi-tools
+pi update git:github.com/hypnotox/pi-tools
 ```
 
 `pi update --extensions` updates all unpinned installed packages. A package installed at a Git tag or commit remains pinned until its configured ref changes.
