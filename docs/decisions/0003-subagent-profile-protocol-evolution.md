@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: subagent-profile-protocol-evolution
-status: Implementing
+status: Implemented
 date: 2026-08-15
 ---
 # ADR-0003: Subagent Profile Protocol Evolution
@@ -53,3 +53,4 @@ The toolkit remains responsible for common execution and registration mechanics 
 - 2026-08-15: Accepted; content-sha256: 6787d1cec927ba578c80621d3e955bfc6be5cf3560773b90ca64ae0ad9eb7d8a
 - 2026-08-15: Implementing; content-sha256: 6787d1cec927ba578c80621d3e955bfc6be5cf3560773b90ca64ae0ad9eb7d8a
 - 2026-08-15: Applied; operations: update `development/subagent-toolkit:profile-runtime`
+- 2026-08-15: Implemented; content-sha256: 6787d1cec927ba578c80621d3e955bfc6be5cf3560773b90ca64ae0ad9eb7d8a

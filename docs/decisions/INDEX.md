@@ -2,9 +2,10 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-- [ADR-0003: Subagent Profile Protocol Evolution](0003-subagent-profile-protocol-evolution.md) (Implementing)
+_No decisions are in flight._
 
 ## History
 
 - [ADR-0001: TypeScript Extension Quality Toolchain](0001-typescript-extension-quality-toolchain.md) (Implemented)
 - [ADR-0002: Subagent Profile Toolkit](0002-subagent-profile-toolkit.md) (Implemented)
+- [ADR-0003: Subagent Profile Protocol Evolution](0003-subagent-profile-protocol-evolution.md) (Implemented)

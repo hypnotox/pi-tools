@@ -2,7 +2,7 @@
 format: plan-v2
 date: 2026-08-15
 adrs: [subagent-profile-protocol-evolution]
-status: Proposed
+status: Implemented
 ---
 # Plan: Subagent Profile Protocol V2
 
