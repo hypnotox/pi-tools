@@ -19,6 +19,14 @@ function text(value: unknown): string | undefined {
     .trim();
   return clean && clean.length <= MAX_VALUE ? clean : undefined;
 }
+function firstLogicalLine(value: string): string {
+  const separators = ["\r", "\n", "\u0085", "\u2028", "\u2029"];
+  const indexes = separators
+    .map((separator) => value.indexOf(separator))
+    .filter((index) => index >= 0);
+  return indexes.length > 0 ? value.slice(0, Math.min(...indexes)) : value;
+}
+
 function record(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -51,7 +59,7 @@ export function summarizeBuiltinTool(toolName: string, args: unknown): string | 
       return withValue(toolName, path);
     case "bash": {
       const firstLine =
-        typeof values.command === "string" ? values.command.split(/\r\n|\r|\n/, 1)[0] : undefined;
+        typeof values.command === "string" ? firstLogicalLine(values.command) : undefined;
       const command = text(firstLine);
       return command ? `bash ${command.split(/(?<!\\)[;&|]/)[0]?.trim() ?? ""}` : toolName;
     }

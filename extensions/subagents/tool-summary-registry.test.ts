@@ -56,10 +56,8 @@ describe("ToolSummaryRegistry", () => {
       }),
     );
     registry.collect(batch("invalid", "invalid", () => "bad\nvalue"));
-    registry.collect(batch("tab", "tab", () => "bad\tvalue"));
-    registry.collect(batch("escape", "escape", () => "bad\u001b[31mvalue"));
-    registry.collect(batch("bell", "bell", () => "bad\u0007value"));
-    registry.collect(batch("separator", "separator", () => "bad\u2028value"));
+    let controlSummary = "safe";
+    registry.collect(batch("control", "control", () => controlSummary));
     registry.collect(
       batch("throws", "throws", () => {
         throw new Error("unsafe");
@@ -70,10 +68,16 @@ describe("ToolSummaryRegistry", () => {
     expect(Object.isFrozen(received)).toBe(true);
     expect(Object.isFrozen((received as { nested: object }).nested)).toBe(true);
     expect(registry.resolve("invalid", {})).toBe("invalid");
-    expect(registry.resolve("tab", {})).toBe("tab");
-    expect(registry.resolve("escape", {})).toBe("escape");
-    expect(registry.resolve("bell", {})).toBe("bell");
-    expect(registry.resolve("separator", {})).toBe("separator");
+    const unsafeCodePoints = [
+      ...Array.from({ length: 0x20 }, (_, codePoint) => codePoint),
+      ...Array.from({ length: 0x21 }, (_, offset) => 0x7f + offset),
+      0x2028,
+      0x2029,
+    ];
+    for (const codePoint of unsafeCodePoints) {
+      controlSummary = `bad${String.fromCodePoint(codePoint)}value`;
+      expect(registry.resolve("control", {}), `U+${codePoint.toString(16)}`).toBe("control");
+    }
     expect(registry.resolve("throws", {})).toBe("throws");
   });
 
