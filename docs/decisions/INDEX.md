@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-- [ADR-0005: Public source distribution](0005-public-source-distribution.md) (Accepted)
+_No decisions are in flight._
 
 ## History
 
@@ -10,4 +10,5 @@
 - [ADR-0002: Subagent Profile Toolkit](0002-subagent-profile-toolkit.md) (Implemented)
 - [ADR-0003: Subagent Profile Protocol Evolution](0003-subagent-profile-protocol-evolution.md) (Implemented)
 - [ADR-0004: Subagent Execution Observability](0004-subagent-execution-observability.md) (Implemented)
+- [ADR-0005: Public source distribution](0005-public-source-distribution.md) (Implemented)
 - [ADR-0006: Verified commit provenance](0006-verified-commit-provenance.md) (Implemented)

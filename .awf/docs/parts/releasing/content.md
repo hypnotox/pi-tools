@@ -1,4 +1,4 @@
-This private package has no publication pipeline or built artifact. Consumers install the Git repository directly. Releases remain pre-1.0 until the stability policy changes.
+This public-source repository has no npm publication pipeline or built artifact. Consumers install the Git repository directly. Releases remain pre-1.0 until the stability policy changes.
 
 Use SemVer for every release. The package version and immutable annotated tag match: version `0.1.0` uses tag `v0.1.0`. Before 1.0, increment the patch version for compatible fixes and the minor version for new or breaking behavior.
 
@@ -11,4 +11,4 @@ To cut a release:
 5. Create an annotated tag with `git tag -a vVERSION -m "pi-tools vVERSION"`.
 6. Push the release commit and its tag to `origin`. Never move or replace a published release tag.
 
-Do not publish this private package to npm or create a separate release artifact unless the repository's distribution policy changes first.
+Keep `package.json` private and do not publish the package to npm or create a separate release artifact unless the repository's distribution policy changes first.

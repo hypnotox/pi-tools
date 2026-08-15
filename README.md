@@ -1,6 +1,6 @@
 # pi-tools
 
-Private, personal tooling for [Pi](https://pi.dev): portable extensions, skills, prompt templates, and themes shared across systems.
+Personal tooling for [Pi](https://pi.dev): portable extensions, skills, prompt templates, and themes shared across systems.
 
 ## Extensions
 
@@ -78,12 +78,10 @@ The resource directories are declared in `package.json`, so this repository can 
 
 ## Install
 
-The repository is private, so a system must have GitHub SSH access configured first.
-
 Install a tagged release so the package stays pinned until its configured ref changes:
 
 ```bash
-pi install git:git@github.com:hypnotox/pi-tools@v0.1.0
+pi install git:github.com/hypnotox/pi-tools@v0.1.0
 ```
 
 Omit `@v0.1.0` only when intentionally following the repository's latest revision. For local development without installing a second copy:
@@ -108,6 +106,10 @@ pi update git:git@github.com:hypnotox/pi-tools
 - Theme: add `themes/<name>.json`.
 
 Keep secrets and machine-specific configuration out of the repository. Use environment variables or ignored `.env` files instead.
+
+## License
+
+Licensed under the [GNU Affero General Public License v3.0](LICENSE).
 
 ## Development checks
 

@@ -7,7 +7,7 @@ Use Git, Bash, Node.js 20 or newer, npm, and a compatible Pi installation. Clone
 
 The awf wrapper uses the cached pinned binary when available. First use on Linux or macOS requires an amd64 or arm64 system, network access to GitHub, `curl`, `tar`, and either `sha256sum` or `shasum`; installing the pinned awf version on `PATH` avoids the download.
 
-GitHub SSH access is required only to clone the private remote or install it as a Git package. Run `/reload` after changing a resource during an active Pi session.
+Clone or install the public repository over HTTPS without GitHub credentials. SSH remains available for authenticated maintainer access. Run `/reload` after changing a resource during an active Pi session.
 
 
 <!-- awf:edit command-runner: from .awf/docs/parts/development/command-runner.md -->

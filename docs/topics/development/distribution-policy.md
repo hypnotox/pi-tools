@@ -6,6 +6,12 @@ Source distribution, licensing, and publication boundaries.
 
 **Applicability:** Global topic: applies repository-wide. It declares no bounded ownership selectors. Run `awf topic development/distribution-policy --coverage` for current applicable and owned paths and marker sites.
 
-Current project contracts for this topic are documented here.
+This topic records how the project makes its source and package resources available.
 
 ## Claims
+
+### `rule: public-git-distribution`
+
+The repository is public and licensed as `AGPL-3.0-only` with the exact GNU Affero General Public License version 3 text. Consumers install and pin tagged Git refs without repository credentials. `package.json` retains `private: true` to prevent npm publication; changing that guard or adding a publication artifact requires a new distribution-policy decision.
+
+Origin: ADR-0005

@@ -1,1 +1,1 @@
-`pi-tools` is a private, pre-1.0 Pi package for portable personal extensions, Agent Skills, prompt templates, and themes in the `@earendil-works/pi-coding-agent` ecosystem. It ships a timing extension and keeps its package resources ready for direct installation across the owner's systems.
+`pi-tools` is a public, pre-1.0 Pi package for portable personal extensions, Agent Skills, prompt templates, and themes in the `@earendil-works/pi-coding-agent` ecosystem. It ships a timing extension and keeps its package resources ready for direct installation across the owner's systems.

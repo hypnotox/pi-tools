@@ -3,7 +3,7 @@
 
 <!-- awf:edit overview: from .awf/docs/parts/architecture/overview.md -->
 ## Overview
-`pi-tools` is a private Pi package and its own awf-governed development workspace. The package manifest exposes the top-level resource directories to installed Pi environments. The `.awf/` configuration renders project-local workflow support under `.pi/`, `.claude/`, `docs/`, and the root agent guides; those generated resources maintain this repository and are not package exports.
+`pi-tools` is a public-source Pi package and its own awf-governed development workspace. The package manifest exposes the top-level resource directories to installed Pi environments. The `.awf/` configuration renders project-local workflow support under `.pi/`, `.claude/`, `docs/`, and the root agent guides; those generated resources maintain this repository and are not package exports.
 
 
 <!-- awf:edit components: from .awf/docs/parts/architecture/components.md -->
