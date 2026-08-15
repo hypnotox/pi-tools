@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-- [ADR-0005: Public source distribution](0005-public-source-distribution.md) (Proposed)
+- [ADR-0005: Public source distribution](0005-public-source-distribution.md) (Accepted)
 - [ADR-0006: Verified commit provenance](0006-verified-commit-provenance.md) (Proposed)
 
 ## History

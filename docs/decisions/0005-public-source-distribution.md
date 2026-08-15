@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: public-source-distribution
-status: Proposed
+status: Accepted
 date: 2026-08-16
 ---
 # ADR-0005: Public source distribution
@@ -40,3 +40,4 @@ The package remains unavailable from npm unless a later distribution-policy deci
 ## Status history
 
 - 2026-08-16: Proposed
+- 2026-08-16: Accepted; content-sha256: 436a6c9acb5e2c0a8cc733ab92f98b2f79aeeaf7e660c4958260471bda320ad0
