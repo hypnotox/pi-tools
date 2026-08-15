@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: subagent-execution-observability
-status: Proposed
+status: Accepted
 date: 2026-08-15
 ---
 # ADR-subagent-execution-observability: Subagent Execution Observability
@@ -50,3 +50,4 @@ Useful tool rows also require argument summaries. Core Pi tools have stable summ
 ## Status history
 
 - 2026-08-15: Proposed
+- 2026-08-15: Accepted; content-sha256: caa99ad96d7b6ed70157b6287bc5ce963f979de3c46f24d5a4daf5eca7a09382
