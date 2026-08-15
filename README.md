@@ -80,11 +80,13 @@ The resource directories are declared in `package.json`, so this repository can 
 
 The repository is private, so a system must have GitHub SSH access configured first.
 
+Install a tagged release so the package stays pinned until its configured ref changes:
+
 ```bash
-pi install git:git@github.com:hypnotox/pi-tools
+pi install git:git@github.com:hypnotox/pi-tools@v0.1.0
 ```
 
-For local development without installing a second copy:
+Omit `@v0.1.0` only when intentionally following the repository's latest revision. For local development without installing a second copy:
 
 ```bash
 pi install /absolute/path/to/pi-tools
