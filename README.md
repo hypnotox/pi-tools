@@ -35,7 +35,7 @@ The child owns transient request retries; the toolkit never retries a whole proc
 
 ### Profile integration
 
-An extension that wants a purpose-specific delegation surface imports **types only** from `pi-tools/subagent-profile`; it does not import toolkit runtime code. At factory initialization it listens for `pi-tools:subagent-profiles:capability`, emits a `pi-tools:subagent-profiles:request` containing a unique correlation id and protocol version `1`, and accepts either a matching capability reply or an uncorrelated availability announcement. The capability's `register()` queues one atomic profile batch:
+An extension that wants a purpose-specific delegation surface imports **types only** from `pi-tools/subagent-profile`; it does not import toolkit runtime code. At factory initialization it listens for `pi-tools:subagent-profiles:capability` and `pi-tools:subagent-profiles:registration-result`, emits a `pi-tools:subagent-profiles:request` containing a unique correlation id and protocol version `2`, and accepts either a matching capability reply or an uncorrelated availability announcement. The capability's `register()` queues one atomic profile batch:
 
 ```ts
 import type { ProfileDefinition, ProfileRegistration } from "pi-tools/subagent-profile";
@@ -43,13 +43,21 @@ import type { ProfileDefinition, ProfileRegistration } from "pi-tools/subagent-p
 const registration: ProfileRegistration = {
   registrationId: "my-extension:review-v1",
   suppressDefault: true,
-  profiles: [reviewProfile satisfies ProfileDefinition],
+  profiles: [
+    {
+      ...reviewProfile,
+      promptSnippet: "Use review_agent for focused review.",
+      promptGuidelines: ["Use review_agent only for focused review."],
+    } satisfies ProfileDefinition,
+  ],
 };
 // On a matching version plus either a matching correlation id or no correlation id:
 // capability.register(registration);
 ```
 
-The toolkit announces availability after installing its listener, while a later consumer requests a correlated replay, so either extension load order works. Consumers reuse one stable `registrationId` for every replay; repeated delivery returns the same receipt without duplicating profiles. Registration receipts are initially `pending` and become `registered` or `rejected` when `session_start` freezes the complete configured tool snapshot, including inactive tools. A successful batch alone suppresses `subagent`; invalid, colliding, missing, incompatible, or late batches leave a deterministic safe surface. Profiles own model/thinking selection, preparation, lifecycle hooks, and bounded JSON result data; consumers own dependency provisioning and their policy for missing or incompatible capabilities.
+The toolkit announces availability after installing its listener, while a later consumer requests a correlated replay, so either extension load order works. Consumers reuse one stable `registrationId` for every replay; repeated delivery returns the same receipt without duplicating profiles. Registration receipts are initially `pending` and become `registered` or `rejected` when `session_start` freezes the complete configured tool snapshot, including inactive tools. After accepted tools are installed, the toolkit emits one protocol-versioned `registration-result` event per finalized batch with its `registrationId`, terminal state, and rejection reason when applicable.
+
+Profiles can provide validated `promptSnippet` and `promptGuidelines` metadata for Pi's active-tool prompt. They own model/thinking selection, preparation, lifecycle hooks, and bounded JSON result data. An `afterRun` hook may return a bounded `failure` with schema-valid `profileData`: unless cancellation is authoritative, that creates a terminal failed result, preserves child execution facts and profile audit data, and makes the failure text model-visible. Uncorrelated exclusive calls fail closed with a retry-alone instruction; ordinary calls remain allowed when correlation is unavailable. Consumers own dependency provisioning and their policy for missing or incompatible capabilities.
 
 ## Layout
 

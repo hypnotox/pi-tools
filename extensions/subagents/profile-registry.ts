@@ -1,5 +1,11 @@
 import { IsSchema } from "typebox";
-import type { ProfileDefinition, ProfileRegistration, ProfileRegistrationReceipt } from "./api.js";
+import type {
+  ProfileDefinition,
+  ProfileRegistration,
+  ProfileRegistrationReceipt,
+  ProfileRegistrationResult,
+} from "./api.js";
+import { SUBAGENT_PROFILE_PROTOCOL_VERSION } from "./api.js";
 
 function isTypeBoxSchema(value: unknown): value is ProfileDefinition["parameters"] {
   return IsSchema(value) && typeof (value as Record<PropertyKey, unknown>)["~kind"] === "string";
@@ -11,6 +17,24 @@ function validateProfile(profile: ProfileDefinition): void {
     throw new Error("Profile id and tool name are required");
   if (!profile.label.trim() || !profile.description.trim())
     throw new Error(`Profile ${profile.id} requires a label and description`);
+  if (
+    profile.promptSnippet !== undefined &&
+    (typeof profile.promptSnippet !== "string" ||
+      !profile.promptSnippet.trim() ||
+      profile.promptSnippet.length > 4096 ||
+      /[\r\n]/.test(profile.promptSnippet))
+  )
+    throw new Error(`Profile ${profile.id} promptSnippet must be a non-empty single line`);
+  if (
+    profile.promptGuidelines !== undefined &&
+    (!Array.isArray(profile.promptGuidelines) ||
+      profile.promptGuidelines.length > 64 ||
+      profile.promptGuidelines.some(
+        (guideline) =>
+          typeof guideline !== "string" || !guideline.trim() || guideline.length > 4096,
+      ))
+  )
+    throw new Error(`Profile ${profile.id} promptGuidelines must be bounded non-empty strings`);
   if (!isTypeBoxSchema(profile.parameters))
     throw new Error(`Profile ${profile.id} requires a TypeBox parameter schema`);
   if (!isTypeBoxSchema(profile.profileDataSchema))
@@ -51,6 +75,9 @@ function snapshotProfile(profile: ProfileDefinition): ProfileDefinition {
     ...profile,
     parameters: cloneFrozenValue(profile.parameters),
     profileDataSchema: cloneFrozenValue(profile.profileDataSchema),
+    ...(profile.promptGuidelines === undefined
+      ? {}
+      : { promptGuidelines: cloneFrozenValue(profile.promptGuidelines) }),
   });
 }
 
@@ -117,8 +144,12 @@ export class ProfileRegistry {
     if (receipt.state === "rejected") throw new Error(receipt.reason);
   }
 
-  finalize(existingTools: Iterable<string> = []): ProfileDefinition[] {
-    if (this.#finalized) return this.profiles();
+  finalize(existingTools: Iterable<string> = []): {
+    profiles: ProfileDefinition[];
+    transitions: ProfileRegistrationResult[];
+  } {
+    if (this.#finalized) return { profiles: this.profiles(), transitions: [] };
+    const transitions: ProfileRegistrationResult[] = [];
     this.#finalized = true;
     const knownIds = new Set<string>();
     const knownTools = new Set(existingTools);
@@ -130,6 +161,12 @@ export class ProfileRegistry {
       } catch (error) {
         pending.receipt.state = "rejected";
         pending.receipt.reason = error instanceof Error ? error.message : String(error);
+        transitions.push({
+          protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
+          registrationId: pending.batch.registrationId,
+          state: "rejected",
+          reason: pending.receipt.reason,
+        });
         continue;
       }
       const ids = new Set<string>();
@@ -162,9 +199,20 @@ export class ProfileRegistry {
           collisionKind === "id"
             ? `Duplicate profile id: ${collision.id}`
             : `Profile tool collision: ${collision.toolName}`;
+        transitions.push({
+          protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
+          registrationId: pending.batch.registrationId,
+          state: "rejected",
+          reason: pending.receipt.reason,
+        });
         continue;
       }
       pending.receipt.state = "registered";
+      transitions.push({
+        protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
+        registrationId: pending.batch.registrationId,
+        state: "registered",
+      });
       accepted.push(pending);
       for (const profile of pending.batch.profiles) {
         knownIds.add(profile.id);
@@ -178,7 +226,7 @@ export class ProfileRegistry {
       ...(defaultAvailable ? [this.#defaultProfile] : []),
       ...accepted.flatMap((entry) => entry.batch.profiles),
     ];
-    return this.profiles();
+    return { profiles: this.profiles(), transitions };
   }
 
   profiles(): ProfileDefinition[] {

@@ -131,16 +131,43 @@ describe("ProfileRegistry", () => {
 
   it("snapshots collected profiles and revalidates them at finalization", () => {
     const registry = new ProfileRegistry(profile("default", "subagent"));
-    const mutable = profile("review");
+    const mutable = {
+      ...profile("review"),
+      promptSnippet: "Use review",
+      promptGuidelines: ["Use review."],
+    };
     const receipt = registry.collect(batch("consumer", [mutable], true));
     mutable.id = "changed";
     mutable.toolName = "changed_tool";
     (mutable.parameters as { type?: string }).type = "number";
-    registry.finalize();
+    mutable.promptGuidelines[0] = "Mutated";
+    const result = registry.finalize();
     expect(receipt.state).toBe("registered");
     expect(registry.profiles().map(({ id, toolName }) => ({ id, toolName }))).toEqual([
       { id: "review", toolName: "review" },
     ]);
+    expect(result.profiles[0]).toMatchObject({
+      promptSnippet: "Use review",
+      promptGuidelines: ["Use review."],
+    });
+  });
+
+  it("reports each pending batch's exact terminal transition", () => {
+    const registry = new ProfileRegistry(profile("default", "subagent"));
+    registry.collect(batch("accepted", [profile("review")], true));
+    registry.collect(batch("rejected", [profile("conflict", "read")], true));
+    const result = registry.finalize(["read"]);
+    expect(result.transitions).toEqual([
+      { protocolVersion: 2, registrationId: "accepted", state: "registered" },
+      {
+        protocolVersion: 2,
+        registrationId: "rejected",
+        state: "rejected",
+        reason: "Profile tool collision: read",
+      },
+    ]);
+    expect(result.profiles.map((entry) => entry.toolName)).toEqual(["review"]);
+    expect(registry.finalize().transitions).toEqual([]);
   });
 
   it("rejects malformed batches, non-TypeBox schemas, callbacks, and concurrency", () => {
@@ -157,6 +184,16 @@ describe("ProfileRegistry", () => {
     expect(() =>
       registry.register(batch("callbacks", [{ ...profile("bad"), prepare: undefined as never }])),
     ).toThrow("invalid callbacks");
+    expect(() =>
+      registry.register(
+        batch("invalid-snippet", [{ ...profile("bad"), promptSnippet: "two\nlines" }]),
+      ),
+    ).toThrow("promptSnippet");
+    expect(() =>
+      registry.register(
+        batch("invalid-guidelines", [{ ...profile("bad"), promptGuidelines: [""] }]),
+      ),
+    ).toThrow("promptGuidelines");
     expect(registry.profiles()).toHaveLength(1);
   });
 });

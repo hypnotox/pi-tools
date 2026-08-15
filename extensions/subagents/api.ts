@@ -135,11 +135,17 @@ export interface ProfileContext<TArgs> {
   signal: AbortSignal;
 }
 export const PostRunResultSchema = Type.Object(
-  { report: Type.Optional(Type.String()), profileData: Type.Optional(JsonValueSchema) },
+  {
+    report: Type.Optional(Type.String()),
+    failure: Type.Optional(Type.String({ maxLength: MAX_EXECUTION_FACT_CHARACTERS })),
+    profileData: Type.Optional(JsonValueSchema),
+  },
   { additionalProperties: false },
 );
 export interface PostRunResult<TProfileData extends JsonValue = JsonValue> {
   report?: string;
+  /** A consumer policy failure after a completed child run. */
+  failure?: string;
   profileData?: TProfileData;
 }
 
@@ -152,6 +158,10 @@ export interface ProfileDefinition<
   toolName: string;
   label: string;
   description: string;
+  /** Optional active-tool entry in Pi's Available tools prompt section. */
+  promptSnippet?: string;
+  /** Optional active-tool guideline bullets; each must identify its tool. */
+  promptGuidelines?: string[];
   parameters: TParameters;
   profileDataSchema: TProfileData;
   concurrency?: number;
@@ -180,11 +190,19 @@ export interface ProfileRegistrationReceipt {
   state: ProfileRegistrationState;
   reason?: string;
 }
+export interface ProfileRegistrationResult {
+  protocolVersion: typeof SUBAGENT_PROFILE_PROTOCOL_VERSION;
+  registrationId: string;
+  state: "registered" | "rejected";
+  reason?: string;
+}
 
 /** Stable event-bus protocol. Consumers import these types only; runtime integration uses pi.events. */
-export const SUBAGENT_PROFILE_PROTOCOL_VERSION = 1;
+export const SUBAGENT_PROFILE_PROTOCOL_VERSION = 2;
 export const SUBAGENT_PROFILE_REQUEST_EVENT = "pi-tools:subagent-profiles:request";
 export const SUBAGENT_PROFILE_CAPABILITY_EVENT = "pi-tools:subagent-profiles:capability";
+export const SUBAGENT_PROFILE_REGISTRATION_RESULT_EVENT =
+  "pi-tools:subagent-profiles:registration-result";
 export interface ProfileCapabilityRequest {
   protocolVersion: number;
   correlationId: string;

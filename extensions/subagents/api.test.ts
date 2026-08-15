@@ -8,6 +8,7 @@ import {
   PreparedRunSchema,
   type ProfileContext,
   type ProfileDefinition,
+  SUBAGENT_PROFILE_PROTOCOL_VERSION,
   type ThinkingLevel,
 } from "./api.js";
 
@@ -81,5 +82,12 @@ describe("profile API", () => {
     expectTypeOf<ThinkingLevel>().toEqualTypeOf<
       "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
     >();
+    expect(SUBAGENT_PROFILE_PROTOCOL_VERSION).toBe(2);
+    expect(
+      Value.Check(PostRunResultSchema, {
+        failure: "policy rejected result",
+        profileData: { audit: true },
+      }),
+    ).toBe(true);
   });
 });

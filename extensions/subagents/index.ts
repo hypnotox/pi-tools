@@ -22,6 +22,7 @@ import {
   type ProfileRegistrationReceipt,
   SUBAGENT_PROFILE_CAPABILITY_EVENT,
   SUBAGENT_PROFILE_PROTOCOL_VERSION,
+  SUBAGENT_PROFILE_REGISTRATION_RESULT_EVENT,
   SUBAGENT_PROFILE_REQUEST_EVENT,
   THINKING_LEVELS,
   type ThinkingLevel,
@@ -40,6 +41,7 @@ export type {
   PostRunResult,
   ProfileDefinition,
   ProfileRegistration,
+  ProfileRegistrationResult,
   ThinkingLevel,
   ToolPolicy,
 } from "./api.js";
@@ -120,8 +122,7 @@ function exactModel(value: string): { provider: string; id: string } {
 function assistantBatchToolNames(
   context: ExtensionContext,
   toolCallId: string,
-  fallback: string,
-): string[] {
+): string[] | undefined {
   const entries = context.sessionManager.getBranch();
   for (let index = entries.length - 1; index >= 0; index--) {
     const entry = entries[index];
@@ -129,7 +130,7 @@ function assistantBatchToolNames(
     const calls = entry.message.content.flatMap((part) => (part.type === "toolCall" ? [part] : []));
     if (calls.some((call) => call.id === toolCallId)) return calls.map((call) => call.name);
   }
-  return [fallback];
+  return undefined;
 }
 
 function boundedExecutionFact(value: string): string {
@@ -383,6 +384,7 @@ export function createSubagentToolkit(
               }),
             );
             let report = outcome.report;
+            let policyFailure: string | undefined;
             let data: ExecutionDetails["profileData"];
             if (profile.afterRun) {
               const postRun = await profile.afterRun(outcome, state);
@@ -395,10 +397,19 @@ export function createSubagentToolkit(
                 )
                   throw new Error("Profile returned data that does not match its schema");
                 report = postRun.report === undefined ? report : truncateUtf8(postRun.report);
+                policyFailure =
+                  postRun.failure === undefined ? undefined : truncateUtf8(postRun.failure);
                 data = validateProfileData(postRun.profileData);
               }
             }
-            const finalOutcome = { ...outcome, ...(report === undefined ? {} : { report }) };
+            const cancelled = outcome.state === "cancelled" || signal?.aborted === true;
+            const finalOutcome = {
+              ...outcome,
+              ...(report === undefined ? {} : { report }),
+              ...(cancelled || policyFailure === undefined
+                ? {}
+                : { state: "failed" as const, failure: policyFailure }),
+            };
             const details = detailsFromOutcome(
               profile.id,
               prepared.cwd,
@@ -411,7 +422,7 @@ export function createSubagentToolkit(
               content: [
                 {
                   type: "text" as const,
-                  text: report ?? outcome.failure ?? "Subagent completed.",
+                  text: finalOutcome.failure ?? report ?? "Subagent completed.",
                 },
               ],
               details,
@@ -445,12 +456,16 @@ export function createSubagentToolkit(
   pi.on("session_start", (_event, ctx) => {
     // This is the only registration point: Pi's complete configured tool snapshot makes
     // collision decisions deterministic for the session, including inactive tools.
-    const profiles = registry.finalize(pi.getAllTools().map((tool) => tool.name));
-    for (const profile of profiles) {
+    const finalization = registry.finalize(pi.getAllTools().map((tool) => tool.name));
+    for (const profile of finalization.profiles) {
       pi.registerTool({
         name: profile.toolName,
         label: profile.label,
         description: profile.description,
+        ...(profile.promptSnippet === undefined ? {} : { promptSnippet: profile.promptSnippet }),
+        ...(profile.promptGuidelines === undefined
+          ? {}
+          : { promptGuidelines: profile.promptGuidelines }),
         parameters: profile.parameters,
         execute: async (_id, params, signal, onUpdate, toolContext) =>
           executeProfile(profile, params, signal, onUpdate, toolContext),
@@ -463,17 +478,24 @@ export function createSubagentToolkit(
       });
     }
     exclusiveTools = new Set(
-      profiles.filter((profile) => profile.exclusiveParentBatch).map((profile) => profile.toolName),
+      finalization.profiles
+        .filter((profile) => profile.exclusiveParentBatch)
+        .map((profile) => profile.toolName),
     );
+    for (const result of finalization.transitions)
+      events?.emit(SUBAGENT_PROFILE_REGISTRATION_RESULT_EVENT, result);
     // Keep ctx referenced so Pi's event contract remains explicit at this lifecycle boundary.
     void ctx;
   });
   pi.on("tool_call", (event, ctx) => {
     try {
-      scheduler.validateExclusiveSiblingBatch(
-        assistantBatchToolNames(ctx, event.toolCallId, event.toolName),
-        exclusiveTools,
-      );
+      const batch = assistantBatchToolNames(ctx, event.toolCallId);
+      if (batch === undefined && exclusiveTools.has(event.toolName))
+        return {
+          block: true,
+          reason: "Cannot verify this exclusive subagent call is alone; retry this tool alone",
+        };
+      scheduler.validateExclusiveSiblingBatch(batch ?? [], exclusiveTools);
       return;
     } catch (error) {
       return { block: true, reason: error instanceof Error ? error.message : String(error) };

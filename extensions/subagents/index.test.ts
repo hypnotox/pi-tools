@@ -7,6 +7,7 @@ import type {
   ExecutionUsage,
   ProfileCapability,
   ProfileDefinition,
+  ProfileRegistrationResult,
 } from "./api.js";
 import {
   CHILD_MARKER,
@@ -14,12 +15,15 @@ import {
   MAX_EXECUTION_FACT_CHARACTERS,
   SUBAGENT_PROFILE_CAPABILITY_EVENT,
   SUBAGENT_PROFILE_PROTOCOL_VERSION,
+  SUBAGENT_PROFILE_REGISTRATION_RESULT_EVENT,
   SUBAGENT_PROFILE_REQUEST_EVENT,
 } from "./api.js";
 import { createSubagentToolkit, validateProfileData } from "./index.js";
 
 interface RegisteredTool {
   name: string;
+  promptSnippet?: string;
+  promptGuidelines?: string[];
   execute: (
     id: string,
     params: unknown,
@@ -512,6 +516,110 @@ describe("subagent toolkit adapter", () => {
         context(),
       ),
     ).toEqual({ isError: true });
+  });
+
+  it("forwards prompt metadata and publishes finalization only after tool installation", () => {
+    const harness = fakePi();
+    const results: ProfileRegistrationResult[] = [];
+    harness.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
+      (data as ProfileCapability).register({
+        registrationId: "prompt-guided",
+        profiles: [
+          customProfile({
+            promptSnippet: "Use custom_agent for focused review.",
+            promptGuidelines: ["Use custom_agent only for focused review."],
+          }),
+        ],
+        suppressDefault: true,
+      });
+    });
+    harness.api.events.on(SUBAGENT_PROFILE_REGISTRATION_RESULT_EVENT, (data) => {
+      results.push(data as ProfileRegistrationResult);
+      expect(harness.tools.map((tool) => tool.name)).toContain("custom_agent");
+    });
+    createSubagentToolkit(harness.api, {
+      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+    });
+    harness.start();
+    expect(harness.tools[0]).toMatchObject({
+      name: "custom_agent",
+      promptSnippet: "Use custom_agent for focused review.",
+      promptGuidelines: ["Use custom_agent only for focused review."],
+    });
+    expect(results).toEqual([
+      { protocolVersion: 2, registrationId: "prompt-guided", state: "registered" },
+    ]);
+  });
+
+  it("turns a returned policy failure into a failed result while cancellation remains authoritative", async () => {
+    const policyFailure = fakePi();
+    createSubagentToolkit(policyFailure.api, {
+      runner: {
+        run: vi.fn(async () => completedOutcome()),
+        shutdown: vi.fn(async () => undefined),
+      },
+      profiles: [
+        customProfile({
+          afterRun: () => ({ failure: "commit policy failed", profileData: { summary: "audit" } }),
+        }),
+      ],
+    });
+    policyFailure.start();
+    const failed = await policyFailure.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(failed?.content).toEqual([{ type: "text", text: "commit policy failed" }]);
+    expect(failed?.details).toMatchObject({
+      state: "failed",
+      failure: "commit policy failed",
+      profileData: { summary: "audit" },
+      retries: 1,
+      usage: { input: 1 },
+    });
+
+    const cancelled = fakePi();
+    createSubagentToolkit(cancelled.api, {
+      runner: {
+        run: vi.fn(async () => ({ ...completedOutcome(), state: "cancelled" as const })),
+        shutdown: vi.fn(async () => undefined),
+      },
+      profiles: [
+        customProfile({
+          afterRun: () => ({ failure: "commit policy failed", profileData: { summary: "audit" } }),
+        }),
+      ],
+    });
+    cancelled.start();
+    const result = await cancelled.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(result?.details).toMatchObject({
+      state: "cancelled",
+      profileData: { summary: "audit" },
+    });
+    expect(result?.details.failure).not.toBe("commit policy failed");
+  });
+
+  it("fails closed only for uncorrelated exclusive calls", () => {
+    const harness = fakePi();
+    createSubagentToolkit(harness.api, {
+      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+    });
+    harness.start();
+    const preflight = harness.handlers.get("tool_call")?.[0];
+    expect(preflight?.({ toolCallId: "missing", toolName: "subagent" }, context())).toEqual({
+      block: true,
+      reason: "Cannot verify this exclusive subagent call is alone; retry this tool alone",
+    });
+    expect(preflight?.({ toolCallId: "missing", toolName: "read" }, context())).toBeUndefined();
   });
 
   it("blocks an exclusive subagent when its assistant batch has siblings", () => {

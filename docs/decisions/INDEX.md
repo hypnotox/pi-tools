@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-- [ADR-subagent-profile-protocol-evolution: Subagent Profile Protocol Evolution](subagent-profile-protocol-evolution.md) (Accepted)
+- [ADR-subagent-profile-protocol-evolution: Subagent Profile Protocol Evolution](subagent-profile-protocol-evolution.md) (Implementing)
 
 ## History
 
