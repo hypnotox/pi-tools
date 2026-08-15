@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-_No decisions are in flight._
+- [ADR-subagent-execution-observability: Subagent Execution Observability](subagent-execution-observability.md) (Proposed)
 
 ## History
 
