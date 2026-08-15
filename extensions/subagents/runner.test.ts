@@ -77,6 +77,7 @@ describe("SubprocessRunner", () => {
     const runner = new SubprocessRunner({ spawn: spawn as never });
     const result = await runner.run(request({ signal: controller.signal }));
     expect(result.state).toBe("cancelled");
+    expect(result.execution?.prompt).toBe("task");
     expect(spawn).not.toHaveBeenCalled();
   });
 
@@ -423,13 +424,13 @@ describe("SubprocessRunner", () => {
       prompt: "task",
       elapsedMs: 70,
       turns: 1,
-      unfinishedThinking: "third",
       latestTurnUsage: { cacheRead: 21, input: 4 },
       activity: [
         { kind: "thinking", text: "first" },
         { kind: "tool", toolCallId: "one", summary: "read", state: "success", durationMs: 20 },
         { kind: "tool", toolCallId: "two", summary: "bash", state: "error", durationMs: 20 },
         { kind: "thinking", text: "second line" },
+        { kind: "thinking", text: "third" },
       ],
     });
     expect(JSON.stringify(result)).not.toContain('"args"');
@@ -439,6 +440,37 @@ describe("SubprocessRunner", () => {
       ),
     );
     expect(liveTool?.execution).toMatchObject({ elapsedMs: 30 });
+  });
+
+  it("flushes completed thinking blocks before later activity", async () => {
+    const deps = dependencies();
+    const { promise } = await launch(deps);
+    const event = (value: unknown) =>
+      deps.child.stdout.emit("data", Buffer.from(`${JSON.stringify(value)}\n`));
+    event({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_delta", delta: "first block" },
+    });
+    event({ type: "message_update", assistantMessageEvent: { type: "thinking_end" } });
+    event({ type: "tool_execution_start", toolCallId: "read-id", toolName: "read", args: {} });
+    event({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_delta", delta: "second block" },
+    });
+    event({ type: "message_update", assistantMessageEvent: { type: "thinking_end" } });
+    event({
+      type: "message_end",
+      message: { role: "assistant", content: [{ type: "text", text: "done" }] },
+    });
+    deps.child.emit("close", 0);
+
+    const result = await promise;
+    expect(result.execution?.unfinishedThinking).toBeUndefined();
+    expect(result.execution?.activity).toEqual([
+      { kind: "thinking", text: "first block" },
+      expect.objectContaining({ kind: "tool", toolCallId: "read-id" }),
+      { kind: "thinking", text: "second block" },
+    ]);
   });
 
   it("evicts the oldest thinking and tool rows while retaining the unfinished thinking line", async () => {

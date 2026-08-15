@@ -6,6 +6,8 @@ import {
   ExecutionDetailsSchema,
   ExecutionProjectionSchema,
   JsonValueSchema,
+  MAX_EXECUTION_ACTIVITY_CHARACTERS,
+  MAX_EXECUTION_FACT_BYTES,
   PostRunResultSchema,
   PreparedRunSchema,
   type ProfileContext,
@@ -127,6 +129,23 @@ describe("profile API", () => {
     };
     expect(Value.Check(ExecutionProjectionSchema, execution)).toBe(true);
     expect(Value.Check(ExecutionProjectionSchema, { ...execution, activity: [] })).toBe(true);
+    expect(
+      Value.Check(ExecutionProjectionSchema, {
+        ...execution,
+        prompt: "x".repeat(MAX_EXECUTION_FACT_BYTES + 1),
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ExecutionProjectionSchema, {
+        ...execution,
+        activity: [
+          {
+            kind: "thinking",
+            text: "x".repeat(MAX_EXECUTION_ACTIVITY_CHARACTERS + 1),
+          },
+        ],
+      }),
+    ).toBe(false);
     expect(
       Value.Check(ExecutionProjectionSchema, { ...execution, rawArgs: { secret: true } }),
     ).toBe(false);

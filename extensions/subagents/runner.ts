@@ -230,7 +230,7 @@ export class SubprocessRunner {
   async #run(request: RunRequest): Promise<ExecutionOutcome> {
     if (this.#disposed || request.signal?.aborted)
       return {
-        ...initialOutcome(),
+        ...initialOutcome(request.prepared.prompt),
         state: "cancelled",
         failure: this.#disposed ? "Subagent runner is shut down" : "Cancelled before launch",
       };
@@ -282,6 +282,12 @@ export class SubprocessRunner {
       if (unfinished)
         outcome.execution.unfinishedThinking = truncateUtf8(unfinished, MAX_ACTIVITY_TEXT_BYTES);
       else delete outcome.execution.unfinishedThinking;
+    };
+    const flushThinking = (): void => {
+      const text = unfinishedThinking.trim();
+      if (text) history({ kind: "thinking", text: truncateUtf8(text, MAX_ACTIVITY_TEXT_BYTES) });
+      unfinishedThinking = "";
+      delete outcome.execution.unfinishedThinking;
     };
 
     let childCwd = "";
@@ -438,6 +444,7 @@ export class SubprocessRunner {
             | undefined;
           if (assistantMessageEvent?.type === "thinking_delta")
             thinking(assistantMessageEvent.delta);
+          else if (assistantMessageEvent?.type === "thinking_end") flushThinking();
           emit();
         } else if (event.type === "auto_retry_start") {
           outcome.retries++;
@@ -456,6 +463,7 @@ export class SubprocessRunner {
               }
             | undefined;
           if (message?.role !== "assistant") return;
+          flushThinking();
           outcome.report = truncateUtf8(
             message.content
               ?.filter((part) => part.type === "text")

@@ -3,6 +3,7 @@ import { type Static, Type, type TSchema as TypeBoxSchema } from "typebox";
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export const MAX_EXECUTION_FACT_BYTES = 16 * 1024;
 export const MAX_EXECUTION_FACT_CHARACTERS = MAX_EXECUTION_FACT_BYTES / 4;
+export const MAX_EXECUTION_ACTIVITY_CHARACTERS = 1024;
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 const ThinkingLevelSchema = Type.Union([
@@ -101,14 +102,20 @@ export type ExecutionUsage = Static<typeof ExecutionUsageSchema>;
 
 export const ExecutionHistoryEntrySchema = Type.Union([
   Type.Object(
-    { kind: Type.Literal("thinking"), text: Type.String() },
+    {
+      kind: Type.Literal("thinking"),
+      text: Type.String({ maxLength: MAX_EXECUTION_ACTIVITY_CHARACTERS }),
+    },
     { additionalProperties: false },
   ),
   Type.Object(
     {
       kind: Type.Literal("tool"),
-      toolCallId: Type.String({ minLength: 1, maxLength: MAX_EXECUTION_FACT_CHARACTERS }),
-      summary: Type.String(),
+      toolCallId: Type.String({
+        minLength: 1,
+        maxLength: MAX_EXECUTION_ACTIVITY_CHARACTERS,
+      }),
+      summary: Type.String({ maxLength: MAX_EXECUTION_ACTIVITY_CHARACTERS }),
       state: Type.Union([Type.Literal("running"), Type.Literal("success"), Type.Literal("error")]),
       durationMs: Type.Number({ minimum: 0 }),
     },
@@ -118,10 +125,12 @@ export const ExecutionHistoryEntrySchema = Type.Union([
 export type ExecutionHistoryEntry = Static<typeof ExecutionHistoryEntrySchema>;
 export const ExecutionProjectionSchema = Type.Object(
   {
-    prompt: Type.String(),
+    prompt: Type.String({ maxLength: MAX_EXECUTION_FACT_BYTES }),
     activity: Type.Array(ExecutionHistoryEntrySchema, { maxItems: 50 }),
     omittedActivity: Type.Integer({ minimum: 0 }),
-    unfinishedThinking: Type.Optional(Type.String()),
+    unfinishedThinking: Type.Optional(
+      Type.String({ maxLength: MAX_EXECUTION_ACTIVITY_CHARACTERS }),
+    ),
     elapsedMs: Type.Number({ minimum: 0 }),
     turns: Type.Integer({ minimum: 0 }),
     activeUsage: Type.Optional(ExecutionUsageSchema),
