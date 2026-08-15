@@ -24,7 +24,7 @@ Override an adopter-authored section with `.awf/parts/agents-doc/<section>.md`, 
 
 - **Identity**: one dense present-tense paragraph covering purpose, stack and module path, maturity, and audience.
 - **You and this project**: two or three sentences stating ownership of the project, not only the task.
-- **Invariants**: one terse imperative per genuinely cross-cutting hard rule, with an owning ADR or canonical pointer where available.
+- **Invariants**: one terse imperative per genuinely cross-cutting hard rule, with an owning ADR or a canonical pointer where available.
 - **Every sentence**: retain it only when it is needed before native skill selection or points to canonical authority.
 
 <!-- awf:edit rules: default; create .awf/parts/agents-md-standard/rules.md to override -->

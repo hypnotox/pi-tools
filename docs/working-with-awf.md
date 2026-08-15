@@ -40,7 +40,7 @@ Workflow judgment precedes this command: discovery creates no effort, and `effor
 - `awf check commit-policy <revision-or-range>...`: preview exact author, committer, and optional SSH-signature provenance for explicit targets after the configured baseline. An absent policy prints one disabled note and succeeds; correct actionable refusals or violations and rerun before policy activation. This command does not install hooks or change repository state.
 - `awf check staged`: run the HEAD-to-index current-state transition and rendered-output drift checks.
 - `awf check staged state`: report current-state authority findings over the HEAD-to-index transition.
-- `awf check staged drift`: render from the staged config and report only stale or hand-edited staged rendered output; other repository drift kinds are out of scope.
+- `awf check staged drift`: render from the staged config and report untracked, stale, or hand-edited staged rendered output; other repository drift kinds are out of scope.
 - `awf check staged commit [FILE]`: directly validate Conventional Commits and definitively authorize any exact incoming-parent older-format ADR using the cleaned final merge-message trailers; it is not part of the staged aggregate and is used by a commit-msg hook.
 ### Other lifecycle commands
 
@@ -274,30 +274,26 @@ names the project search universe and searched surfaces. After not-found, inconc
 or insufficient output, the parent may make a new fresh-context call to correct the task, change
 detail, or widen breadth. Give each child one independent information need and fan out sibling calls,
 selecting breadth, detail, and model tier per child. A fan-out may combine a large analysis child with
-small targeted paths or summary children. At most ten children are active per extension instance;
-excess calls queue FIFO, queued aborts are removed without starting a child, and every child exit
-releases its slot. Refinement that depends on a prior result remains sequential. Grounding, exploration, and review follow a no-mutation prompt policy and can use `bash`;
-they are not OS-sandboxed. Implementation starts from the project root, must run alone in its parent
-tool batch and sequentially, and may commit only when the orchestrator sets `allowCommits: true`.
-When a task explicitly operates in a supplied managed worktree, the caller sets
-`verificationCheckout` to that path and keeps the actual mutation paths explicit in the task; both
-parent and child Pi CWD remain the project root. Root work omits the field. Invalid explicit
-identities refuse before child dispatch, while an unchanged selected HEAD names the checkout and
-explains how to retry with the correct verification identity.
-Pi's current-leaf, tool-call-id-correlated preflight blocks every member of a reconstructable mixed
-implementation batch. When trustworthy batch context is unavailable, only implementation fails
-closed with an actionable retry-alone error.
-In Pi, omission uses the
-configured role default and an exact tier reference is supplied only for a deliberate override.
+small targeted paths or summary children. Refinement that depends on a prior result remains
+sequential. Grounding, exploration, and review follow awf's no-mutation profile policy.
+Implementation must run alone in its parent tool batch, remains sequential, and may commit only when
+the orchestrator sets `allowCommits: true`. When a task explicitly operates in a supplied managed
+worktree, the caller sets `verificationCheckout` to that path and keeps actual mutation paths
+explicit; root work omits the field. In Pi, model omission uses the configured role default and an
+exact tier reference is supplied only for a deliberate override.
 
-All four tools render bounded recent activity inline. The expanded tool view shows the retained
-task, events, report, present diagnostics, requested and actual models, and available usage.
-Intermediate activity remains in tool details; only the final report or bounded failure summary
-enters parent model content.
-Brainstorming uses grounding, while brainstorming, debugging, and coupling audits share the exploring skill when its conjunctive dispatch condition holds. Missing or modified
-extension files are `awf check` drift; run `./awf render` to repair them.
+Pi adopters install `hypnotox/pi-tools` independently at any protocol-v2-compatible revision. A
+successful capability handshake and final awf profile registration establish compatibility; missing,
+incompatible, late, or rejected negotiation reports an actionable prerequisite error and activates
+no awf fallback. `pi-tools` owns general scheduling, execution, confinement, progress presentation,
+context usage, and handoff mechanics. Awf renders the workflow-specific profile adapter and retained
+effort integration. Brainstorming uses grounding, while brainstorming, debugging, and coupling
+audits share the exploring skill when its conjunctive dispatch condition holds. Missing or modified
+awf adapter files are `awf check` drift; run `./awf render` to repair them.
 
-Pi also renders the separate `handoff_session` extension for persisted interactive TUI sessions; it rejects cleanly when the runtime lacks the readonly persisted-session query. Workflow guidance calls it alone after a required checkpoint. The runtime preserves bounded `{kickoff}` prose byte-for-byte after two newlines in one visible default-rendered `agent-handoff` custom message whose content begins `Agent-authored handoff context; this is not user input:`; it triggers the replacement turn through replacement-bound `sendMessage`, while Pi's current provider adapter still converts custom content to a user-role message. It revalidates only the pending request and persisted session, preserves old history, leaves the same envelope in failed automatic and recovery editors, never retries automatically, and owns no checkpoint, effort, repository, or filesystem policy.
+Workflow guidance still permits Pi session handoff only at its defined safe checkpoints and keeps
+effort association, continuation, and repository authority semantics in awf. The externally supplied
+handoff mechanism is a prerequisite rather than an awf-rendered implementation.
 
 ### Path globs and domain territories
 
@@ -399,6 +395,6 @@ parts, and newly rendered surfaces worth wiring up (fresh hook payloads, for exa
 changelog --since <previous version>` lists every adopter-facing change in between. Then run the
 drift check and commit the config and rendered files together.
 
-Pi renders five governed TypeScript outputs: context usage, handoff, and subagent index, routing, and runner. Context usage is a standalone transient observation with a deterministic unavailable form; it neither persists facts nor triggers a pressure action.
+Pi renders its profile adapter and model-routing module, plus conditional effort integration. Install `hypnotox/pi-tools` independently for context usage, handoff, execution, scheduling, and presentation; successful protocol-v2 capability and final profile registration are the compatibility check, with actionable no-fallback failure.
 
-Pi extensions require the retained 0.81.1 fork runtime APIs, including dynamic active tools and the shared file-mutation queue; incompatible runtimes receive one actionable notice before registration.
+The conditional awf effort extension requires the retained compatible Pi runtime APIs, including dynamic active tools and the shared file-mutation queue; the profile adapter instead depends only on successful pi-tools protocol-v2 negotiation.

@@ -10,7 +10,7 @@ description: >
 
 # pi-tools-refactor-coupling-audit
 
-A support skill for refactor ADRs. Runs (or dispatches) the coupling audit before the ADR scope is finalised. The audit's output is a structured listing that lands in the ADR's Context section so scope reflects the real coupling surface, not the assumed one.
+A support skill for cross-package refactors. Runs (or dispatches) the coupling audit before the ADR scope is finalised. The audit's structured output makes the approved scope reflect the real coupling surface, not the assumed one.
 
 <!-- awf:edit when-to-invoke: default; create .awf/skills/parts/refactor-coupling-audit/when-to-invoke.md to override -->
 ## When to invoke
@@ -141,7 +141,7 @@ The audit's output goes into the ADR's **Context** section under a `### Coupling
 <!-- awf:edit scope-shrink-rule: default; create .awf/skills/parts/refactor-coupling-audit/scope-shrink-rule.md to override -->
 ## Scope shrink rule
 
-If the audit reveals the refactor is larger than the ADR's originally proposed scope, **shrink the scope** with a Context-section amendment to the still-`Proposed` ADR (`docs(adr): amend NNNN, defer X`) recording what was deferred and why, before implementation starts. Do not proceed with an underscoped ADR.
+If the audit reveals the refactor is larger than the ADR's originally proposed scope, **shrink the scope** with a Context-section amendment to the still-`Proposed` ADR (`docs(adr): amend NNNN, defer X`) recording what was deferred and why before implementation starts. Do not proceed with underscoped work.
 
 <!-- awf:edit notes: default; create .awf/skills/parts/refactor-coupling-audit/notes.md to override -->
 ## Notes

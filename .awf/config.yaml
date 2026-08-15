@@ -10,3 +10,4 @@ bootstrap:
   enabled: true
 domains:
   - development
+profile: full

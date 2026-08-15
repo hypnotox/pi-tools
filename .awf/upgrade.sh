@@ -7,8 +7,8 @@
 # Deliberately nondeterministic porcelain for humans; CI and hooks call the
 # deterministic .awf/bootstrap.sh instead.
 #
-# This porcelain runs the ordinary `awf upgrade`, which migrates the schema or,
-# when the lock carries a bridge attestation, consumes that seal as the final
+# This porcelain runs the ordinary `awf upgrade`, which migrates the schema. When
+# the lock carries a bridge attestation, it consumes that seal as the final
 # current-state cutover. Recovering an interrupted cutover is `awf upgrade
 # --recover`. Attestation lives only in the preceding bridge release; this binary
 # consumes seals, it never produces them.

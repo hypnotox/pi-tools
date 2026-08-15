@@ -60,6 +60,7 @@ On Pi, direct `awf effort` commands create and manage the slugged resident. Nati
 
 For the detailed criteria of when a decision is load-bearing enough to warrant an ADR (and the ADR format itself), see [`docs/decisions/README.md`](decisions/README.md).
 
+
 <!-- awf:edit working-memory: default; create .awf/parts/workflow/working-memory.md to override -->
 ## Working memory
 
@@ -111,7 +112,9 @@ For the detailed criteria of when a decision is load-bearing enough to warrant a
 
 - Brainstorming retains the single mandatory pre-artifact outline approval check-in, stopping for explicit approval and persisting it only when an effort exists.
 
-- Settled ADR review continues autonomously to linked-plan handling or the independently selected implementation path. After a persisted formal phase or approval checkpoint, or another safe resumable point whose immediate successor can start independently, Pi judges retained-context relevance and successor work from currently available context and compaction evidence.
+- Settled ADR review continues autonomously to linked-plan handling or the independently selected implementation path.
+
+- After a persisted formal phase or approval checkpoint, or another safe resumable point whose immediate successor can start independently, Pi judges retained-context relevance and successor work from currently available context and compaction evidence.
 
 - No fixed threshold controls the choice: it either continues autonomously in-session or requests replacement.
 
@@ -183,7 +186,7 @@ awf always renders five inert payload scripts under `.awf/hooks/`: `pre-commit.s
 
 A tracked stub should locate the invoking worktree, not assume the primary checkout or its current directory, then exec that worktree's payload. For example: `repo_root=$(git rev-parse --show-toplevel) || exit 1; exec bash "$repo_root/.awf/hooks/pre-push.sh" "$@"`. This form works whether `core.hooksPath` is absolute or relative and ensures linked worktrees resolve their own configuration. Before enabling a commit policy or wiring its two enforcement payloads, run `./awf check commit-policy <revision-or-range>...` over the intended history and correct its findings. Local hooks are only a client-side preflight: the remote's protected-branch and receiving policy are the final boundary.
 
-`awf check staged commit` is the deterministic, blocking commit-message gate: it validates Conventional Commits and definitively qualifies any older-format ADR introduced by a real merge against the incoming parents and adjacent `AWF-Allow-Version` / nonempty `AWF-Allow-Reason` trailers. Malformed reserved trailers refuse. A refusal leaves the index and `MERGE_HEAD` intact: correct the message and run `git commit` to finish the existing merge. A proactive flow may use `git merge --no-commit --no-ff`; a true fast-forward has no authorization event. Never retrofit the ADR or create allowance state. The `commit-msg.sh` payload runs the check with Git's message file; run `./awf check staged commit --help` for details.
+`awf check staged commit` is the deterministic, blocking commit-message gate: it validates Conventional Commits and rejects concrete effort-memory citations. It also definitively qualifies any older-format ADR introduced by a real merge against the incoming parents and adjacent `AWF-Allow-Version` / nonempty `AWF-Allow-Reason` trailers. Malformed reserved trailers refuse. A refusal leaves the index and `MERGE_HEAD` intact: correct the message and run `git commit` to finish the existing merge. A proactive flow may use `git merge --no-commit --no-ff`; a true fast-forward has no authorization event. Never retrofit the ADR or create allowance state. The `commit-msg.sh` payload runs the check with Git's message file; run `./awf check staged commit --help` for details.
 
 **Your stub is the override point.** The rendered payloads are deliberately all-or-nothing; they take no convention parts. To deviate from a payload's policy (say, a docs-only fast path that skips the test gate), put the deviation in the stub you own instead of forking the payload: keep the payload canonical, have the stub carry the project-specific logic, and mark the divergence with a comment naming it a deliberate deviation from the rendered script. The payload then keeps updating through `awf render` while your deviation stays visible, reviewable, and yours.
 

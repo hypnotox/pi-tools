@@ -17,7 +17,7 @@ Use for a material choice or clarification, and before a hand-authored productio
 <!-- awf:edit procedure: default; create .awf/skills/parts/brainstorming/procedure.md to override -->
 ## Procedure
 
-1. **Orient in the topic.** Invoke `pi-tools-orienting` when its repository-truth moments apply, then run `./awf context <relevant paths>`.
+1. **Orient in the topic.** Invoke `pi-tools-orienting` when its repository-truth moments apply. Then run `./awf context <relevant paths>`.
 On an exact two-line `AWF_CONTEXT_SPILL_V1` notice, consume the packet per the working-with-awf doc's Context spill notices contract; treat any other output as the context packet itself.
 2. **Clarify one question at a time.** Narrow the outcome without inventing requirements.
 3. **Present proportionate approaches.** Offer alternatives with trade-offs and a recommendation when a material choice exists; a straightforward choice may need only a concise comparison.
