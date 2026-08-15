@@ -4,7 +4,7 @@ slug: subagent-profile-protocol-evolution
 status: Implementing
 date: 2026-08-15
 ---
-# ADR-subagent-profile-protocol-evolution: Subagent Profile Protocol Evolution
+# ADR-0003: Subagent Profile Protocol Evolution
 
 ## Context
 
