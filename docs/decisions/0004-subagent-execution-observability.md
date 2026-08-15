@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: subagent-execution-observability
-status: Implementing
+status: Implemented
 date: 2026-08-15
 ---
 # ADR-0004: Subagent Execution Observability
@@ -53,3 +53,4 @@ Useful tool rows also require argument summaries. Core Pi tools have stable summ
 - 2026-08-15: Accepted; content-sha256: caa99ad96d7b6ed70157b6287bc5ce963f979de3c46f24d5a4daf5eca7a09382
 - 2026-08-15: Implementing; content-sha256: caa99ad96d7b6ed70157b6287bc5ce963f979de3c46f24d5a4daf5eca7a09382
 - 2026-08-15: Applied; operations: update `development/subagent-toolkit:profile-runtime`
+- 2026-08-15: Implemented; content-sha256: caa99ad96d7b6ed70157b6287bc5ce963f979de3c46f24d5a4daf5eca7a09382

@@ -2,7 +2,7 @@
 format: plan-v2
 date: 2026-08-15
 adrs: [subagent-execution-observability]
-status: Proposed
+status: Implemented
 ---
 # Plan: Implement Subagent Execution Observability
 
