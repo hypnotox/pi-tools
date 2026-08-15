@@ -147,6 +147,34 @@ describe("profile API", () => {
       }),
     ).toBe(false);
     expect(
+      Value.Check(ExecutionProjectionSchema, {
+        ...execution,
+        unfinishedThinking: "x".repeat(MAX_EXECUTION_ACTIVITY_CHARACTERS + 1),
+      }),
+    ).toBe(false);
+    const oversizedTool = {
+      kind: "tool",
+      toolCallId: "x".repeat(MAX_EXECUTION_ACTIVITY_CHARACTERS + 1),
+      summary: "read src",
+      state: "running",
+      durationMs: 0,
+    };
+    expect(
+      Value.Check(ExecutionProjectionSchema, { ...execution, activity: [oversizedTool] }),
+    ).toBe(false);
+    expect(
+      Value.Check(ExecutionProjectionSchema, {
+        ...execution,
+        activity: [
+          {
+            ...oversizedTool,
+            toolCallId: "call",
+            summary: "x".repeat(MAX_EXECUTION_ACTIVITY_CHARACTERS + 1),
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(
       Value.Check(ExecutionProjectionSchema, { ...execution, rawArgs: { secret: true } }),
     ).toBe(false);
     expect(

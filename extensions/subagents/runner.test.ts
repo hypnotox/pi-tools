@@ -81,6 +81,26 @@ describe("SubprocessRunner", () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
+  it("retains the bounded prompt when invoked after shutdown", async () => {
+    const spawn = vi.fn();
+    const runner = new SubprocessRunner({ spawn: spawn as never });
+    await runner.shutdown();
+    const result = await runner.run(
+      request({
+        prepared: {
+          ...request().prepared,
+          prompt: "x".repeat(20_000),
+        },
+      }),
+    );
+    expect(result.state).toBe("cancelled");
+    expect(result.execution?.prompt).toContain("...[truncated]");
+    expect(Buffer.byteLength(result.execution?.prompt ?? "", "utf8")).toBeLessThanOrEqual(
+      16 * 1024,
+    );
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
   it("uses exact isolated arguments, restrictive prompt storage, and descendant trust", async () => {
     const deps = dependencies();
     const { promise } = await launch(deps);
