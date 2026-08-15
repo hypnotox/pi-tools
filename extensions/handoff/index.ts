@@ -108,11 +108,14 @@ function toolCallsInCurrentBatch(context: ExtensionContext, event: ToolCallEvent
 }
 
 export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): void {
-  if (!guardRuntime(pi, ["on", "registerTool", "registerCommand", "queueCommand"])) return;
+  if (!guardRuntime(pi, ["on", "registerTool", "registerCommand", "queueCommand", "getAllTools"]))
+    return;
   let pending: PendingHandoff | undefined;
   let suppressThresholdCompaction = false;
+  let ownsTool = false;
 
   pi.on("tool_call", (event, context) => {
+    if (!ownsTool) return undefined;
     const { calls, correlated } = toolCallsInCurrentBatch(context, event);
     if (!correlated)
       return event.toolName === TOOL
@@ -142,6 +145,7 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
   pi.on("session_shutdown", () => {
     pending = undefined;
     suppressThresholdCompaction = false;
+    ownsTool = false;
   });
 
   pi.registerCommand(COMMAND, {
@@ -197,38 +201,42 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
     },
   });
 
-  pi.registerTool({
-    name: TOOL,
-    label: "Fresh Session Handoff",
-    description: "Continue in a parent-linked fresh Pi TUI session.",
-    parameters: Type.Object(
-      { kickoff: Type.String({ maxLength: MAX_KICKOFF_LENGTH }) },
-      { additionalProperties: false },
-    ),
-    async execute(_id, params, _signal, _update, context) {
-      if (context.mode !== "tui" || !context.sessionManager.getSessionFile())
-        throw new Error("handoff_session requires a persisted interactive Pi TUI session");
-      if (!params.kickoff.trim()) throw new Error("kickoff must contain non-whitespace content");
-      if (params.kickoff.length > MAX_KICKOFF_LENGTH)
-        throw new Error("kickoff must not exceed 1000 UTF-16 code units");
-      if (pending) throw new Error("A handoff request is already pending");
+  pi.on("session_start", () => {
+    if (pi.getAllTools().some((tool) => tool.name === TOOL)) return;
+    ownsTool = true;
+    pi.registerTool({
+      name: TOOL,
+      label: "Fresh Session Handoff",
+      description: "Continue in a parent-linked fresh Pi TUI session.",
+      parameters: Type.Object(
+        { kickoff: Type.String({ maxLength: MAX_KICKOFF_LENGTH }) },
+        { additionalProperties: false },
+      ),
+      async execute(_id, params, _signal, _update, context) {
+        if (context.mode !== "tui" || !context.sessionManager.getSessionFile())
+          throw new Error("handoff_session requires a persisted interactive Pi TUI session");
+        if (!params.kickoff.trim()) throw new Error("kickoff must contain non-whitespace content");
+        if (params.kickoff.length > MAX_KICKOFF_LENGTH)
+          throw new Error("kickoff must not exceed 1000 UTF-16 code units");
+        if (pending) throw new Error("A handoff request is already pending");
 
-      const request: PendingHandoff = { id: deps.randomUUID(), kickoff: params.kickoff };
-      pending = request;
-      try {
-        (pi as QueueingAPI).queueCommand(COMMAND, request.id);
-        suppressThresholdCompaction = true;
-      } catch (error) {
-        if (pending === request) pending = undefined;
-        suppressThresholdCompaction = false;
-        throw error;
-      }
-      return {
-        content: [{ type: "text", text: "Fresh-session handoff queued." }],
-        details: { kickoff: request.kickoff },
-        terminate: true,
-      };
-    },
+        const request: PendingHandoff = { id: deps.randomUUID(), kickoff: params.kickoff };
+        pending = request;
+        try {
+          (pi as QueueingAPI).queueCommand(COMMAND, request.id);
+          suppressThresholdCompaction = true;
+        } catch (error) {
+          if (pending === request) pending = undefined;
+          suppressThresholdCompaction = false;
+          throw error;
+        }
+        return {
+          content: [{ type: "text", text: "Fresh-session handoff queued." }],
+          details: { kickoff: request.kickoff },
+          terminate: true,
+        };
+      },
+    });
   });
 }
 

@@ -3,7 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { guardRuntime, versionSupported } from "./runtime-guard.js";
 
 const NOTICE_KEY = Symbol.for("pi-tools.minimum-runtime-notified");
-const REQUIRED_APIS = ["on", "registerTool", "registerCommand", "queueCommand"] as const;
+const REQUIRED_APIS = [
+  "on",
+  "registerTool",
+  "registerCommand",
+  "queueCommand",
+  "getAllTools",
+] as const;
 type Handler = (
   event: unknown,
   context: { ui: { notify(message: string, level: string): void } },
@@ -31,6 +37,7 @@ describe("runtime compatibility guard", () => {
       registerTool: vi.fn(),
       registerCommand: vi.fn(),
       queueCommand: vi.fn(),
+      getAllTools: vi.fn(() => []),
     };
     delete pi[missingApi];
 
@@ -58,6 +65,7 @@ describe("runtime compatibility guard", () => {
         registerTool: vi.fn(),
         registerCommand: vi.fn(),
         queueCommand: vi.fn(),
+        getAllTools: vi.fn(() => []),
       } as unknown as ExtensionAPI;
 
       expect(guardRuntime(pi, REQUIRED_APIS, runtimeVersion)).toBe(false);
@@ -78,6 +86,7 @@ describe("runtime compatibility guard", () => {
       registerTool: vi.fn(),
       registerCommand: vi.fn(),
       queueCommand: vi.fn(),
+      getAllTools: vi.fn(() => []),
     } as unknown as ExtensionAPI;
 
     expect(guardRuntime(pi, REQUIRED_APIS)).toBe(true);

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { type HandoffDependencies, handoffEnvelope, registerHandoff } from "./index.js";
 
 type Hook = (event: unknown, context: unknown) => unknown;
-type Tool = { execute: (...args: unknown[]) => Promise<unknown> };
+type Tool = { name: string; execute: (...args: unknown[]) => Promise<unknown> };
 type CountdownComponent = { handleInput(data: string): void };
 type NewSessionRequest = {
   parentSession?: string;
@@ -22,11 +22,13 @@ function createHarness(
     newCancelled?: boolean;
     staleAfterFailure?: boolean;
     replacementEditorFails?: boolean;
+    existingTools?: string[];
   } = {},
 ) {
   const hooks = new Map<string, Hook>();
   const commands = new Map<string, { handler(token: string, context: unknown): Promise<void> }>();
   let tool: Tool | undefined;
+  const registeredTools: Tool[] = [];
   const queued: string[][] = [];
   const notices: unknown[][] = [];
   const editor: string[] = [];
@@ -62,6 +64,13 @@ function createHarness(
     },
     registerTool(next: Tool) {
       tool = next;
+      registeredTools.push(next);
+    },
+    getAllTools() {
+      return [
+        ...(options.existingTools ?? []).map((name) => ({ name })),
+        ...registeredTools.map(({ name }) => ({ name })),
+      ];
     },
     queueCommand(name: string, token: string) {
       if (queueFails) throw new Error("queue failed");
@@ -141,10 +150,12 @@ function createHarness(
     clearTimeout,
   };
   registerHandoff(pi, dependencies);
+  hooks.get("session_start")?.({}, context);
   return {
     hooks,
     commands,
     queued,
+    registeredTools,
     notices,
     editor,
     replacementEditor,
@@ -176,6 +187,15 @@ function createHarness(
 }
 
 describe("fresh-session handoff extension", () => {
+  it("yields tool ownership when another extension already provides handoff_session", () => {
+    const h = createHarness({ existingTools: ["handoff_session"] });
+
+    expect(h.registeredTools).toHaveLength(0);
+    expect(
+      h.hooks.get("tool_call")?.({ toolCallId: "call", toolName: "handoff_session" }, h.context),
+    ).toBeUndefined();
+  });
+
   it("suppresses only the imminent threshold compaction while handoff is pending", async () => {
     const h = createHarness();
     await h.execute();

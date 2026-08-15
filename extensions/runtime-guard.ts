@@ -3,7 +3,7 @@ import { type ExtensionAPI, VERSION } from "@earendil-works/pi-coding-agent";
 const MIN_PI_VERSION = "0.81.1";
 const NOTICE_KEY = Symbol.for("pi-tools.minimum-runtime-notified");
 
-type RequiredAPI = "on" | "registerTool" | "registerCommand" | "queueCommand";
+type RequiredAPI = "on" | "registerTool" | "registerCommand" | "queueCommand" | "getAllTools";
 type QueueingAPI = ExtensionAPI & { queueCommand?(name: string, args?: string): void };
 
 function parseVersion(value: string): [number, number, number] | undefined {
@@ -33,6 +33,7 @@ export function guardRuntime(
     registerTool: typeof pi.registerTool === "function",
     registerCommand: typeof pi.registerCommand === "function",
     queueCommand: typeof (pi as QueueingAPI).queueCommand === "function",
+    getAllTools: typeof pi.getAllTools === "function",
   };
   const missing = required.filter((api) => !available[api]);
   if (versionSupported(runtimeVersion) && missing.length === 0) return true;
