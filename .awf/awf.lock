@@ -462,7 +462,7 @@
       "templateId": "",
       "templateHash": "",
       "configHash": "sha256:619a4dec6900da1feb21570a9a316b719f4802bf7686ce13e6cd6114d391b3e6",
-      "outputHash": "sha256:7c34169c0a4b1edabb0805521b43bbca0f0a357ac1b931ef7b0a0c1aa5ae075b",
+      "outputHash": "sha256:364bf79fdc04f8e92408850fd7b018d9419a290ee19b565b46832ddaaa8477dc",
       "regenChecked": true
     },
     "docs/debugging.md": {
@@ -475,7 +475,7 @@
       "templateId": "",
       "templateHash": "",
       "configHash": "sha256:619a4dec6900da1feb21570a9a316b719f4802bf7686ce13e6cd6114d391b3e6",
-      "outputHash": "sha256:70b4c03893a101eebc53d2936cb54a23ff70ecb6f3354a7f9357fda171446a31",
+      "outputHash": "sha256:b3fa9279637aefb5e5650ae7a9b50d5f45b6501354b1724a7b727b93723168ab",
       "regenChecked": true
     },
     "docs/decisions/README.md": {
@@ -566,8 +566,8 @@
     "docs/topics/development/commit-provenance.md": {
       "templateId": "topics/topic.md.tmpl",
       "templateHash": "sha256:25b4ec23c7a22667f9d78b1e5883af8702d82f67896c3a42ac0ad19032d7c7bb",
-      "configHash": "sha256:89afaf532870f7bb9d3022623333656b50ee80b4501c700bd0bc163e01840926",
-      "outputHash": "sha256:ea6bcbe8a36a55c41d81edc69f65ab7fc913c3d94118ef5d9ae7b1ebf52d819e"
+      "configHash": "sha256:e4885ca909fbe943b2f78768e7253fcf38186f17fb2e8f47d14023051fae465a",
+      "outputHash": "sha256:c6b880c4e918c8bf525de520e9400cd0a1c16f15782ac77f6508fcc06eca3b39"
     },
     "docs/topics/development/distribution-policy.md": {
       "templateId": "topics/topic.md.tmpl",

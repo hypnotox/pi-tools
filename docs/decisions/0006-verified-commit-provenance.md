@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: verified-commit-provenance
-status: Accepted
+status: Implemented
 date: 2026-08-16
 ---
 # ADR-0006: Verified commit provenance
@@ -40,3 +40,4 @@ The policy does not replace GitHub server-side branch protection. Key rotation o
 
 - 2026-08-16: Proposed
 - 2026-08-16: Accepted; content-sha256: 442c8a81f2708042624254d92546567852be79992a82c68ae19ff841c5933276
+- 2026-08-16: Implemented; content-sha256: 442c8a81f2708042624254d92546567852be79992a82c68ae19ff841c5933276
