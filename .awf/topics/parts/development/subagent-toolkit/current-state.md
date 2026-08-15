@@ -11,4 +11,4 @@ Profiles own their argument/result schemas, concrete model and requested-thinkin
 Known Pi core tools use bounded toolkit-owned argument summaries. Independently installed extensions negotiate the version 1 tool-summary capability through the event bus and register atomic synchronous resolver batches before `session_start`. Ownership is exact, exclusive, non-overridable, and unavailable for reserved core names. The toolkit freezes accepted ownership at session start, gives each resolver an immutable JSON argument snapshot, and accepts only bounded single-line plain text. Duplicate, conflicting, reserved, or late registration is rejected deterministically; missing, throwing, or invalid resolvers fall back to the tool name without affecting execution.
 
 Origin: ADR-0002
-Revised-by: ADR-0003, ADR-subagent-execution-observability
+Revised-by: ADR-0003, ADR-0004

@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-- [ADR-subagent-execution-observability: Subagent Execution Observability](subagent-execution-observability.md) (Implementing)
+- [ADR-0004: Subagent Execution Observability](0004-subagent-execution-observability.md) (Implementing)
 
 ## History
 

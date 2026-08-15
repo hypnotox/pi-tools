@@ -4,7 +4,7 @@ slug: subagent-execution-observability
 status: Implementing
 date: 2026-08-15
 ---
-# ADR-subagent-execution-observability: Subagent Execution Observability
+# ADR-0004: Subagent Execution Observability
 
 ## Context
 
