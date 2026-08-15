@@ -329,7 +329,7 @@ export function createSubagentToolkit(
         parent,
         signal: signal ?? new AbortController().signal,
       };
-      const selection = profile.selectModel(profileContext);
+      const selection = await profile.selectModel(profileContext);
       if (!Value.Check(ConcreteModelSchema, selection))
         throw new Error("Profile selected an invalid model");
       const runtimeModel = ctx.modelRegistry.find(selection.provider, selection.id);

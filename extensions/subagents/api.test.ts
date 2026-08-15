@@ -45,7 +45,14 @@ describe("profile API", () => {
           return { report: state?.token ?? "done", profileData: { summary: "typed" } };
         },
       };
-    expect(definition.toolName).toBe("typed");
+    const asyncDefinition: ProfileDefinition<typeof parameters, typeof profileData> = {
+      ...definition,
+      async selectModel(context) {
+        expectTypeOf(context).toMatchTypeOf<ProfileContext<{ task: string; count?: number }>>();
+        return { provider: "p", id: "async", thinkingLevels: ["off"] };
+      },
+    };
+    expect([definition.toolName, asyncDefinition.toolName]).toEqual(["typed", "typed"]);
   });
 
   it("validates concrete thinking levels and post-run shape", () => {

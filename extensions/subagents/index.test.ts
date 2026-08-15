@@ -222,6 +222,55 @@ describe("subagent toolkit adapter", () => {
     expect(updates).toHaveLength(1);
   });
 
+  it.each([
+    ["synchronous", () => ({ provider: "p", id: "m", thinkingLevels: ["off"] as ["off"] })],
+    ["asynchronous", async () => ({ provider: "p", id: "m", thinkingLevels: ["off"] as ["off"] })],
+  ])("awaits %s model selection before validation and lookup", async (_kind, selectModel) => {
+    const harness = fakePi();
+    const run = vi.fn(async () => completedOutcome());
+    createSubagentToolkit(harness.api, {
+      runner: { run, shutdown: vi.fn(async () => undefined) },
+      profiles: [customProfile({ selectModel })],
+    });
+    harness.start();
+    const result = await harness.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({ model: expect.objectContaining({ provider: "p", id: "m" }) }),
+    );
+    expect(result?.details).toMatchObject({
+      state: "completed",
+      model: { provider: "p", id: "m" },
+    });
+  });
+
+  it("rejects an invalid asynchronously selected model before registry lookup", async () => {
+    const harness = fakePi();
+    const run = vi.fn();
+    createSubagentToolkit(harness.api, {
+      runner: { run, shutdown: vi.fn(async () => undefined) },
+      profiles: [customProfile({ selectModel: async () => ({ provider: "p" }) as never })],
+    });
+    harness.start();
+    const result = await harness.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(result?.details).toMatchObject({
+      state: "failed",
+      failure: "Profile selected an invalid model",
+    });
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it("transfers callback state, transforms reports, and persists schema-validated data", async () => {
     const harness = fakePi();
     const beforeRun = vi.fn(() => ({ token: "prepared" }));

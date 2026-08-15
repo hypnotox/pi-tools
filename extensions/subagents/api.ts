@@ -172,7 +172,7 @@ export interface ProfileDefinition<
   profileDataSchema: TProfileData;
   concurrency?: number;
   exclusiveParentBatch?: boolean;
-  selectModel(context: ProfileContext<Static<TParameters>>): ConcreteModel;
+  selectModel(context: ProfileContext<Static<TParameters>>): ConcreteModel | Promise<ConcreteModel>;
   selectThinkingLevel?(context: ProfileContext<Static<TParameters>>): ThinkingLevel | undefined;
   prepare(context: ProfileContext<Static<TParameters>>): Promise<PreparedRun> | PreparedRun;
   beforeRun?(context: ProfileContext<Static<TParameters>>): Promise<TState> | TState;
