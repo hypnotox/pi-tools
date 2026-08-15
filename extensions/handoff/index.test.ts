@@ -191,6 +191,7 @@ describe("fresh-session handoff extension", () => {
     const h = createHarness({ existingTools: ["handoff_session"] });
 
     expect(h.registeredTools).toHaveLength(0);
+    expect(h.commands.size).toBe(0);
     expect(
       h.hooks.get("tool_call")?.({ toolCallId: "call", toolName: "handoff_session" }, h.context),
     ).toBeUndefined();

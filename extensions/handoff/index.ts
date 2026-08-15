@@ -148,61 +148,65 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
     ownsTool = false;
   });
 
-  pi.registerCommand(COMMAND, {
-    description: "Continue a fresh-session handoff.",
-    async handler(token, context) {
-      const request = pending;
-      if (!request || token !== request.id) throw new Error("No matching pending handoff request");
-      const envelope = handoffEnvelope(request.kickoff);
-      try {
-        if (!(await countdown(context, deps))) {
-          context.ui.notify("Fresh-session handoff canceled.");
-          return;
-        }
-        if (pending !== request) throw new Error("No matching pending handoff request");
-        const parentSession = context.sessionManager.getSessionFile();
-        if (!parentSession) throw new Error("The active session is no longer persisted");
-        const result = await context.newSession({
-          parentSession,
-          async withSession(replacement) {
-            try {
-              await replacement.sendMessage(
-                { customType: "session-handoff", content: envelope, display: true },
-                { triggerTurn: true },
-              );
-            } catch (deliveryError) {
+  const registerContinuationCommand = (): void => {
+    pi.registerCommand(COMMAND, {
+      description: "Continue a fresh-session handoff.",
+      async handler(token, context) {
+        const request = pending;
+        if (!request || token !== request.id)
+          throw new Error("No matching pending handoff request");
+        const envelope = handoffEnvelope(request.kickoff);
+        try {
+          if (!(await countdown(context, deps))) {
+            context.ui.notify("Fresh-session handoff canceled.");
+            return;
+          }
+          if (pending !== request) throw new Error("No matching pending handoff request");
+          const parentSession = context.sessionManager.getSessionFile();
+          if (!parentSession) throw new Error("The active session is no longer persisted");
+          const result = await context.newSession({
+            parentSession,
+            async withSession(replacement) {
               try {
-                replacement.ui.setEditorText(envelope);
-              } catch {
-                throw deliveryError;
-              }
-              try {
-                replacement.ui.notify(
-                  "Automatic kickoff failed; submit the prepared editor text.",
-                  "warning",
+                await replacement.sendMessage(
+                  { customType: "session-handoff", content: envelope, display: true },
+                  { triggerTurn: true },
                 );
-              } catch {
-                // The prepared editor text remains available without a notification.
+              } catch (deliveryError) {
+                try {
+                  replacement.ui.setEditorText(envelope);
+                } catch {
+                  throw deliveryError;
+                }
+                try {
+                  replacement.ui.notify(
+                    "Automatic kickoff failed; submit the prepared editor text.",
+                    "warning",
+                  );
+                } catch {
+                  // The prepared editor text remains available without a notification.
+                }
               }
-            }
-          },
-        });
-        if (result.cancelled) {
-          context.ui.setEditorText(envelope);
-          context.ui.notify(
-            "Fresh-session handoff canceled; recovery text is in the editor.",
-            "warning",
-          );
+            },
+          });
+          if (result.cancelled) {
+            context.ui.setEditorText(envelope);
+            context.ui.notify(
+              "Fresh-session handoff canceled; recovery text is in the editor.",
+              "warning",
+            );
+          }
+        } finally {
+          if (pending?.id === request.id) pending = undefined;
+          suppressThresholdCompaction = false;
         }
-      } finally {
-        if (pending?.id === request.id) pending = undefined;
-        suppressThresholdCompaction = false;
-      }
-    },
-  });
+      },
+    });
+  };
 
   pi.on("session_start", () => {
     if (pi.getAllTools().some((tool) => tool.name === TOOL)) return;
+    registerContinuationCommand();
     ownsTool = true;
     pi.registerTool({
       name: TOOL,
