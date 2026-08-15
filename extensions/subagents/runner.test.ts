@@ -213,6 +213,33 @@ describe("SubprocessRunner", () => {
     expect(updates.length).toBeGreaterThan(0);
   });
 
+  it("retains only a safe tool summary, never raw tool arguments", async () => {
+    const deps = dependencies();
+    const secret = "RAW_ARGUMENT_SENTINEL";
+    const updates: ExecutionOutcome[] = [];
+    const { promise } = await launch(
+      deps,
+      request({
+        summarizeTool: (name, args) =>
+          name === "custom" && (args as { secret?: string }).secret === secret
+            ? "custom safe"
+            : name,
+        onUpdate: (outcome) => updates.push(outcome),
+      }),
+    );
+    deps.child.stdout.emit(
+      "data",
+      Buffer.from(
+        `${JSON.stringify({ type: "tool_execution_start", toolName: "custom", args: { secret } })}\n`,
+      ),
+    );
+    deps.child.emit("close", 0);
+    const outcome = await promise;
+    expect(JSON.stringify(outcome)).not.toContain(secret);
+    expect(JSON.stringify(updates)).not.toContain(secret);
+    expect(outcome.activity).toContainEqual({ kind: "tool_start", text: "custom safe" });
+  });
+
   it("bounds malformed and oversized lines without corrupting later events", async () => {
     const deps = dependencies();
     const { promise } = await launch(deps);

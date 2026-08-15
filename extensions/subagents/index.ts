@@ -24,14 +24,23 @@ import {
   SUBAGENT_PROFILE_PROTOCOL_VERSION,
   SUBAGENT_PROFILE_REGISTRATION_RESULT_EVENT,
   SUBAGENT_PROFILE_REQUEST_EVENT,
+  SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT,
+  SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION,
+  SUBAGENT_TOOL_SUMMARY_REGISTRATION_RESULT_EVENT,
+  SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT,
   THINKING_LEVELS,
   type ThinkingLevel,
+  type ToolSummaryCapabilityRequest,
+  type ToolSummaryRegistration,
+  type ToolSummaryRegistrationReceipt,
 } from "./api.js";
 import { ProfileRegistry } from "./profile-registry.js";
 import { renderExecution } from "./rendering.js";
 import { SubprocessRunner, truncateUtf8 } from "./runner.js";
 import { ProfileScheduler } from "./scheduler.js";
 import { resolveTools } from "./tool-policy.js";
+import { summarizeBuiltinTool } from "./tool-summaries.js";
+import { ToolSummaryRegistry } from "./tool-summary-registry.js";
 
 export type {
   ConcreteModel,
@@ -44,6 +53,11 @@ export type {
   ProfileRegistrationResult,
   ThinkingLevel,
   ToolPolicy,
+  ToolSummaryCapability,
+  ToolSummaryRegistration,
+  ToolSummaryRegistrationReceipt,
+  ToolSummaryRegistrationResult,
+  ToolSummaryResolver,
 } from "./api.js";
 export type { RunnerDependencies, RunRequest } from "./runner.js";
 
@@ -214,6 +228,7 @@ export function createSubagentToolkit(
     },
   };
   const registry = new ProfileRegistry(defaultProfile);
+  const toolSummaryRegistry = new ToolSummaryRegistry();
   if (dependencies.profiles?.length)
     registry.register({
       registrationId: "pi-tools:local-composition",
@@ -230,6 +245,25 @@ export function createSubagentToolkit(
     ...(correlationId === undefined ? {} : { correlationId }),
     register,
   });
+  const toolSummaryCapability = (correlationId?: string) => ({
+    protocolVersion: SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION,
+    ...(correlationId === undefined ? {} : { correlationId }),
+    register: (batch: ToolSummaryRegistration): ToolSummaryRegistrationReceipt =>
+      toolSummaryRegistry.collect(batch),
+  });
+  const unsubscribeSummaryRequests = events?.on(SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT, (data) => {
+    const request = data as Partial<ToolSummaryCapabilityRequest>;
+    if (
+      request.protocolVersion === SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION &&
+      typeof request.correlationId === "string" &&
+      request.correlationId
+    )
+      events.emit(
+        SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT,
+        toolSummaryCapability(request.correlationId),
+      );
+  });
+  events?.emit(SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT, toolSummaryCapability());
   const unsubscribeRequests = events?.on(SUBAGENT_PROFILE_REQUEST_EVENT, (data) => {
     const request = data as Partial<ProfileCapabilityRequest>;
     if (
@@ -253,6 +287,7 @@ export function createSubagentToolkit(
     });
     pi.on("session_shutdown", () => {
       unsubscribeRequests?.();
+      unsubscribeSummaryRequests?.();
     });
     return;
   }
@@ -368,6 +403,9 @@ export function createSubagentToolkit(
                 parentCwd: parent.cwd,
                 parentTrusted: parent.trusted,
                 ...(signal === undefined ? {} : { signal }),
+                summarizeTool: (toolName, args) =>
+                  summarizeBuiltinTool(toolName, args) ??
+                  toolSummaryRegistry.resolve(toolName, args),
                 onUpdate: (update) => {
                   const details = detailsFromOutcome(
                     profile.id,
@@ -458,6 +496,9 @@ export function createSubagentToolkit(
   pi.on("session_start", (_event, ctx) => {
     // This is the only registration point: Pi's complete configured tool snapshot makes
     // collision decisions deterministic for the session, including inactive tools.
+    const summaryTransitions = toolSummaryRegistry.finalize();
+    for (const result of summaryTransitions)
+      events?.emit(SUBAGENT_TOOL_SUMMARY_REGISTRATION_RESULT_EVENT, result);
     const finalization = registry.finalize(pi.getAllTools().map((tool) => tool.name));
     for (const profile of finalization.profiles) {
       pi.registerTool({
@@ -511,6 +552,7 @@ export function createSubagentToolkit(
   });
   pi.on("session_shutdown", async () => {
     unsubscribeRequests?.();
+    unsubscribeSummaryRequests?.();
     scheduler.shutdown();
     await runner.shutdown();
   });

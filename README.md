@@ -59,6 +59,12 @@ The toolkit announces availability after installing its listener, while a later 
 
 Profiles can provide validated `promptSnippet` and `promptGuidelines` metadata for Pi's active-tool prompt. They own model/thinking selection, preparation, lifecycle hooks, and bounded JSON result data; model selection may resolve synchronously or asynchronously before validation and lookup. An `afterRun` hook may return a bounded `failure` with schema-valid `profileData`: unless cancellation is authoritative, that creates a terminal failed result, preserves child execution facts and profile audit data, and makes the failure text model-visible. Uncorrelated exclusive calls fail closed with a retry-alone instruction; ordinary calls remain allowed when correlation is unavailable. Consumers own dependency provisioning and their policy for missing or incompatible capabilities.
 
+### Tool summary integration
+
+Extensions import **types only** from `pi-tools/subagent-profile` and use the version-`1` `pi-tools:subagent-tool-summaries:*` event-bus handshake. A registration has a stable `registrationId` and synchronous resolvers, each owning one exact custom tool name. Listen for capability and result events, request a correlated replay, and reuse the registration id for replayed delivery. Registrations are pending during extension initialization and become registered or rejected when `session_start` freezes ownership.
+
+The toolkit exclusively reserves `read`, `edit`, `write`, `bash`, `grep`, `find`, and `ls`; extensions cannot claim them. A batch with a reserved or already-owned name is rejected atomically, ownership is never overridden, and late registration is rejected. Resolvers receive an immutable JSON snapshot of raw arguments in the trusted extension process and must return bounded, single-line plain text synchronously. Resolver failures or invalid output, and every unregistered tool, safely display only the tool name. Raw arguments are not persisted by the toolkit.
+
 ## Layout
 
 - `extensions/` - TypeScript extensions

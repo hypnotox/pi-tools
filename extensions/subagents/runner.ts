@@ -39,6 +39,8 @@ export interface RunRequest {
   parentTrusted: boolean;
   signal?: AbortSignal;
   onUpdate?: (outcome: ExecutionOutcome) => void;
+  /** Converts child tool arguments immediately; raw arguments are never retained. */
+  summarizeTool?: (toolName: string, args: unknown) => string;
 }
 
 export function truncateUtf8(value: string, limit = MAX_TEXT_BYTES): string {
@@ -297,9 +299,10 @@ export class SubprocessRunner {
           activity("diagnostic", "Ignored malformed child JSON event");
           return;
         }
-        if (event.type === "tool_execution_start")
-          activity("tool_start", String(event.toolName ?? "tool"));
-        else if (event.type === "tool_execution_end")
+        if (event.type === "tool_execution_start") {
+          const toolName = typeof event.toolName === "string" ? event.toolName : "tool";
+          activity("tool_start", request.summarizeTool?.(toolName, event.args) ?? toolName);
+        } else if (event.type === "tool_execution_end")
           activity("tool_end", String(event.toolName ?? "tool"));
         else if (event.type === "auto_retry_start") {
           outcome.retries++;

@@ -8,6 +8,8 @@ import type {
   ProfileCapability,
   ProfileDefinition,
   ProfileRegistrationResult,
+  ToolSummaryCapability,
+  ToolSummaryRegistrationResult,
 } from "./api.js";
 import {
   CHILD_MARKER,
@@ -17,6 +19,10 @@ import {
   SUBAGENT_PROFILE_PROTOCOL_VERSION,
   SUBAGENT_PROFILE_REGISTRATION_RESULT_EVENT,
   SUBAGENT_PROFILE_REQUEST_EVENT,
+  SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT,
+  SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION,
+  SUBAGENT_TOOL_SUMMARY_REGISTRATION_RESULT_EVENT,
+  SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT,
 } from "./api.js";
 import { createSubagentToolkit, validateProfileData } from "./index.js";
 
@@ -934,6 +940,53 @@ describe("subagent toolkit adapter", () => {
         reason: "Profile tool collision: inactive_agent",
       },
     ]);
+  });
+
+  it("negotiates exclusive custom tool summaries and releases listeners", async () => {
+    const harness = fakePi();
+    let capability: ToolSummaryCapability | undefined;
+    const results: ToolSummaryRegistrationResult[] = [];
+    harness.api.events.on(SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT, (data) => {
+      const candidate = data as ToolSummaryCapability;
+      if (candidate.protocolVersion === SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION)
+        capability = candidate;
+    });
+    harness.api.events.on(SUBAGENT_TOOL_SUMMARY_REGISTRATION_RESULT_EVENT, (data) => {
+      results.push(data as ToolSummaryRegistrationResult);
+    });
+    createSubagentToolkit(harness.api, {
+      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+    });
+    expect(
+      capability?.register({
+        registrationId: "custom",
+        resolvers: [{ toolName: "custom_tool", resolve: () => "safe" }],
+      }).state,
+    ).toBe("pending");
+    expect(
+      capability?.register({
+        registrationId: "built-in",
+        resolvers: [{ toolName: "read", resolve: () => "unsafe" }],
+      }).state,
+    ).toBe("pending");
+    harness.start();
+    expect(results).toEqual([
+      { protocolVersion: 1, registrationId: "custom", state: "registered" },
+      {
+        protocolVersion: 1,
+        registrationId: "built-in",
+        state: "rejected",
+        reason: "Reserved tool summary: read",
+      },
+    ]);
+    expect(
+      capability?.register({
+        registrationId: "late",
+        resolvers: [{ toolName: "late", resolve: () => "late" }],
+      }),
+    ).toMatchObject({ state: "late" });
+    await harness.shutdown();
+    expect(harness.eventHandlers.get(SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT)).toEqual([]);
   });
 
   it("awaits runner shutdown", async () => {

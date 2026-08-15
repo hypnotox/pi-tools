@@ -220,6 +220,39 @@ export interface ProfileCapability {
   register(batch: ProfileRegistration): ProfileRegistrationReceipt;
 }
 
+/** Stable event-bus protocol for trusted custom tool argument summaries. */
+export const SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION = 1;
+export const SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT = "pi-tools:subagent-tool-summaries:request";
+export const SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT = "pi-tools:subagent-tool-summaries:capability";
+export const SUBAGENT_TOOL_SUMMARY_REGISTRATION_RESULT_EVENT =
+  "pi-tools:subagent-tool-summaries:registration-result";
+export type ToolSummaryResolver = (args: JsonValue) => string;
+export interface ToolSummaryRegistration {
+  /** Stable consumer-owned key used to make replayed delivery idempotent. */
+  registrationId: string;
+  resolvers: ReadonlyArray<{ toolName: string; resolve: ToolSummaryResolver }>;
+}
+export type ToolSummaryRegistrationState = "pending" | "registered" | "rejected" | "late";
+export interface ToolSummaryRegistrationReceipt {
+  state: ToolSummaryRegistrationState;
+  reason?: string;
+}
+export interface ToolSummaryRegistrationResult {
+  protocolVersion: typeof SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION;
+  registrationId: string;
+  state: "registered" | "rejected";
+  reason?: string;
+}
+export interface ToolSummaryCapabilityRequest {
+  protocolVersion: number;
+  correlationId: string;
+}
+export interface ToolSummaryCapability {
+  protocolVersion: number;
+  correlationId?: string;
+  register(batch: ToolSummaryRegistration): ToolSummaryRegistrationReceipt;
+}
+
 export const ExecutionDetailsSchema = Type.Object(
   {
     profileId: Type.String({ maxLength: MAX_EXECUTION_FACT_CHARACTERS }),
