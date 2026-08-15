@@ -8,4 +8,4 @@ No uncommitted product ideas are recorded. Add an item only when it is specific 
 
 <!-- awf:edit deferred: from .awf/docs/parts/roadmap/deferred.md -->
 ## Deferred
-No work is currently recorded as explicitly deferred.
+- Make the executable-resource gate run directly from canonical managed worktrees without an external snapshot while still proving the exhaustive intended file population. This promotes the recurring [Managed Worktree Biome Exclusion](pitfalls/managed-worktree-biome-exclusion.md) pitfall toward deterministic enforcement.
