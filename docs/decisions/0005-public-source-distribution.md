@@ -14,7 +14,9 @@ The repository has no npm publication pipeline or built artifact. Public source 
 
 ## Decision
 
-1. `decision: public-agpl-git-distribution` Distribute pi-tools as a public Git repository under the GNU Affero General Public License version 3 while retaining the npm publication guard and Git-ref-based package distribution.
+1. `decision: public-git-distribution` Distribute pi-tools as a public Git repository with tagged Git refs as the stable package installation boundary.
+2. `decision: agpl-license` License the repository as `AGPL-3.0-only` and carry the exact GNU Affero General Public License version 3 text.
+3. `decision: npm-publication-guard` Retain `package.json` `private: true` as the load-bearing guard against accidental npm publication.
 
 ## State changes
 
@@ -32,6 +34,7 @@ The package remains unavailable from npm unless a later distribution-policy deci
 |---|---|
 | Keep the repository private | Consumers would continue to require repository credentials to test pinned refs. |
 | Make the source visible without a license | Visibility alone would not grant downstream reuse rights. |
+| Use a permissive license | It would not preserve the selected AGPL copyleft and source-availability terms or align licensing with agentic-workflows. |
 | Publish the package to npm | Public Git installation satisfies the requirement without introducing a publication pipeline or artifact. |
 
 ## Status history
