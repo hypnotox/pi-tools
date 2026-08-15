@@ -185,6 +185,7 @@ function detailsFromOutcome(
     activity: outcome.activity,
     omittedActivity: outcome.omittedActivity,
     usage: outcome.usage,
+    ...(outcome.execution === undefined ? {} : { execution: outcome.execution }),
     ...(extra.queuePosition === undefined ? {} : { queuePosition: extra.queuePosition }),
     ...(outcome.report === undefined ? {} : { report: outcome.report }),
     ...(outcome.failure === undefined ? {} : { failure: outcome.failure }),
@@ -412,7 +413,7 @@ export function createSubagentToolkit(
                     prepared.cwd,
                     selectedModel,
                     thinkingLevel,
-                    update,
+                    immutableSnapshot(update),
                   );
                   onUpdate?.({
                     content: [{ type: "text", text: update.report ?? "Running..." }],
@@ -483,6 +484,13 @@ export function createSubagentToolkit(
             activity: [],
             omittedActivity: 0,
             usage: { ...EMPTY_USAGE, cost: { ...EMPTY_USAGE.cost } },
+            execution: {
+              prompt: truncateUtf8(prepared.prompt),
+              activity: [],
+              omittedActivity: 0,
+              elapsedMs: 0,
+              turns: 0,
+            },
           };
           onUpdate?.({ content: [{ type: "text", text: `Queued (${queuePosition})` }], details });
         },

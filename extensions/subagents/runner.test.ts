@@ -183,7 +183,7 @@ describe("SubprocessRunner", () => {
     deps.child.stdout.emit(
       "data",
       Buffer.from(
-        `${JSON.stringify({ type: "tool_execution_start", toolName: "read" })}\n${JSON.stringify({ type: "auto_retry_end", success: true })}\n${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "done" }], usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cacheWrite1h: 2, reasoning: 1, totalTokens: 10, cost: { input: 0.1, output: 0.2, cacheRead: 0.05, cacheWrite: 0.15, total: 0.5 } } } })}`,
+        `${JSON.stringify({ type: "tool_execution_start", toolCallId: "read-id", toolName: "read" })}\n${JSON.stringify({ type: "auto_retry_end", success: true })}\n${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "done" }], usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cacheWrite1h: 2, reasoning: 1, totalTokens: 10, cost: { input: 0.1, output: 0.2, cacheRead: 0.05, cacheWrite: 0.15, total: 0.5 } } } })}`,
       ),
     );
     deps.child.emit("close", 0);
@@ -204,11 +204,10 @@ describe("SubprocessRunner", () => {
         cost: { input: 0.1, output: 0.2, cacheRead: 0.05, cacheWrite: 0.15, total: 0.5 },
       },
     });
-    expect(result.activity.map((entry) => entry.kind)).toEqual([
-      "retry_start",
-      "tool_start",
-      "retry_end",
-    ]);
+    expect(result.activity.map((entry) => entry.kind)).toEqual(["retry_start", "retry_end"]);
+    expect(result.execution?.activity).toContainEqual(
+      expect.objectContaining({ kind: "tool", toolCallId: "read-id", state: "running" }),
+    );
     expect(result.activity[0]?.text).toContain("😀");
     expect(updates.length).toBeGreaterThan(0);
   });
@@ -230,14 +229,16 @@ describe("SubprocessRunner", () => {
     deps.child.stdout.emit(
       "data",
       Buffer.from(
-        `${JSON.stringify({ type: "tool_execution_start", toolName: "custom", args: { secret } })}\n`,
+        `${JSON.stringify({ type: "tool_execution_start", toolCallId: "custom-id", toolName: "custom", args: { secret } })}\n`,
       ),
     );
     deps.child.emit("close", 0);
     const outcome = await promise;
     expect(JSON.stringify(outcome)).not.toContain(secret);
     expect(JSON.stringify(updates)).not.toContain(secret);
-    expect(outcome.activity).toContainEqual({ kind: "tool_start", text: "custom safe" });
+    expect(outcome.execution?.activity).toContainEqual(
+      expect.objectContaining({ kind: "tool", toolCallId: "custom-id", summary: "custom safe" }),
+    );
   });
 
   it("bounds malformed and oversized lines without corrupting later events", async () => {
@@ -372,6 +373,100 @@ describe("SubprocessRunner", () => {
     cleanup.resolve();
     await promise;
     await shutdown;
+  });
+
+  it("projects bounded thinking, correlated tools, cumulative usage, and monotonic timing", async () => {
+    const deps = dependencies();
+    let now = 0;
+    const updates: Array<ExecutionOutcome & { execution?: Record<string, unknown> }> = [];
+    const { promise } = await launch(
+      { ...deps, monotonicNow: () => now } as never,
+      request({ onUpdate: (outcome) => updates.push(outcome as (typeof updates)[number]) }),
+    );
+    const event = (value: unknown) =>
+      deps.child.stdout.emit("data", Buffer.from(`${JSON.stringify(value)}\n`));
+
+    now = 10;
+    event({
+      type: "message_update",
+      usage: { input: 2, output: 1, cacheRead: 8, cacheWrite: 2, totalTokens: 13 },
+      assistantMessageEvent: { type: "thinking_delta", delta: "first\nsecond" },
+    });
+    now = 20;
+    event({ type: "tool_execution_start", toolCallId: "one", toolName: "read", args: {} });
+    now = 30;
+    event({ type: "tool_execution_start", toolCallId: "two", toolName: "bash", args: {} });
+    now = 40;
+    event({ type: "tool_execution_end", toolCallId: "one", toolName: "read" });
+    now = 50;
+    event({ type: "tool_execution_end", toolCallId: "two", toolName: "bash", isError: true });
+    now = 60;
+    event({
+      type: "message_update",
+      usage: { input: 3, output: 4, cacheRead: 20, cacheWrite: 5, totalTokens: 32 },
+      assistantMessageEvent: { type: "thinking_delta", delta: " line\n  \nthird" },
+    });
+    now = 70;
+    event({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+        usage: { input: 4, output: 5, cacheRead: 21, cacheWrite: 6, totalTokens: 36 },
+      },
+    });
+    deps.child.emit("close", 0);
+    const result = (await promise) as ExecutionOutcome & { execution: Record<string, unknown> };
+
+    expect(result.usage).toMatchObject({ input: 4, output: 5, cacheRead: 21, cacheWrite: 6 });
+    expect(result.execution).toMatchObject({
+      prompt: "task",
+      elapsedMs: 70,
+      turns: 1,
+      unfinishedThinking: "third",
+      latestTurnUsage: { cacheRead: 21, input: 4 },
+      activity: [
+        { kind: "thinking", text: "first" },
+        { kind: "tool", toolCallId: "one", summary: "read", state: "success", durationMs: 20 },
+        { kind: "tool", toolCallId: "two", summary: "bash", state: "error", durationMs: 20 },
+        { kind: "thinking", text: "second line" },
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain('"args"');
+    const liveTool = updates.find((update) =>
+      (update.execution?.activity as Array<Record<string, unknown>> | undefined)?.some(
+        (entry) => entry.toolCallId === "two" && entry.state === "running",
+      ),
+    );
+    expect(liveTool?.execution).toMatchObject({ elapsedMs: 30 });
+  });
+
+  it("evicts the oldest thinking and tool rows while retaining the unfinished thinking line", async () => {
+    const deps = dependencies();
+    const { promise } = await launch(deps);
+    for (let index = 0; index < 51; index++)
+      deps.child.stdout.emit(
+        "data",
+        Buffer.from(
+          `${JSON.stringify({ type: "message_update", assistantMessageEvent: { type: "thinking_delta", delta: `line ${index}\n` } })}\n`,
+        ),
+      );
+    deps.child.stdout.emit(
+      "data",
+      Buffer.from(
+        `${JSON.stringify({ type: "message_update", assistantMessageEvent: { type: "thinking_delta", delta: "unfinished" } })}\n`,
+      ),
+    );
+    deps.child.emit("close", 0);
+    const result = (await promise) as ExecutionOutcome & { execution: Record<string, unknown> };
+    expect(result.execution).toMatchObject({
+      omittedActivity: 1,
+      unfinishedThinking: "unfinished",
+    });
+    expect(result.execution.activity).toHaveLength(50);
+    expect((result.execution.activity as Array<Record<string, unknown>>)[0]).toMatchObject({
+      text: "line 1",
+    });
   });
 
   it("truncates UTF-8 without splitting a code point", () => {

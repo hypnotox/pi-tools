@@ -98,6 +98,39 @@ export const ExecutionUsageSchema = Type.Object(
   { additionalProperties: false },
 );
 export type ExecutionUsage = Static<typeof ExecutionUsageSchema>;
+
+export const ExecutionHistoryEntrySchema = Type.Union([
+  Type.Object(
+    { kind: Type.Literal("thinking"), text: Type.String() },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal("tool"),
+      toolCallId: Type.String({ minLength: 1, maxLength: MAX_EXECUTION_FACT_CHARACTERS }),
+      summary: Type.String(),
+      state: Type.Union([Type.Literal("running"), Type.Literal("success"), Type.Literal("error")]),
+      durationMs: Type.Number({ minimum: 0 }),
+    },
+    { additionalProperties: false },
+  ),
+]);
+export type ExecutionHistoryEntry = Static<typeof ExecutionHistoryEntrySchema>;
+export const ExecutionProjectionSchema = Type.Object(
+  {
+    prompt: Type.String(),
+    activity: Type.Array(ExecutionHistoryEntrySchema, { maxItems: 50 }),
+    omittedActivity: Type.Integer({ minimum: 0 }),
+    unfinishedThinking: Type.Optional(Type.String()),
+    elapsedMs: Type.Number({ minimum: 0 }),
+    turns: Type.Integer({ minimum: 0 }),
+    activeUsage: Type.Optional(ExecutionUsageSchema),
+    latestTurnUsage: Type.Optional(ExecutionUsageSchema),
+  },
+  { additionalProperties: false },
+);
+export type ExecutionProjection = Static<typeof ExecutionProjectionSchema>;
+
 export const ExecutionActivitySchema = Type.Object(
   {
     kind: Type.Union([
@@ -117,6 +150,8 @@ export interface ExecutionOutcome {
   report?: string;
   failure?: string;
   usage: ExecutionUsage;
+  /** Bounded live and resumed execution history; absent on legacy details. */
+  execution?: ExecutionProjection;
   activity: ExecutionActivity[];
   omittedActivity: number;
   retries: number;
@@ -272,6 +307,8 @@ export const ExecutionDetailsSchema = Type.Object(
     activity: Type.Array(ExecutionActivitySchema),
     omittedActivity: Type.Integer({ minimum: 0 }),
     usage: ExecutionUsageSchema,
+    /** Optional so historical session details remain valid without migration. */
+    execution: Type.Optional(ExecutionProjectionSchema),
     report: Type.Optional(Type.String()),
     failure: Type.Optional(Type.String()),
     profileData: Type.Optional(JsonValueSchema),

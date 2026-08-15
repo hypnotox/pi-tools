@@ -3,6 +3,8 @@ import { Value } from "typebox/value";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   ConcreteModelSchema,
+  ExecutionDetailsSchema,
+  ExecutionProjectionSchema,
   JsonValueSchema,
   PostRunResultSchema,
   PreparedRunSchema,
@@ -98,5 +100,50 @@ describe("profile API", () => {
     ).toBe(true);
     expect(Value.Check(PostRunResultSchema, { failure: "" })).toBe(false);
     expect(Value.Check(PostRunResultSchema, { failure: " \t" })).toBe(false);
+    const execution = {
+      prompt: "task",
+      activity: [
+        { kind: "thinking", text: "considering" },
+        {
+          kind: "tool",
+          toolCallId: "call",
+          summary: "read src",
+          state: "success",
+          durationMs: 42,
+        },
+      ],
+      omittedActivity: 0,
+      unfinishedThinking: "still considering",
+      elapsedMs: 100,
+      turns: 1,
+      activeUsage: {
+        input: 1,
+        output: 2,
+        cacheRead: 3,
+        cacheWrite: 4,
+        totalTokens: 10,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+    };
+    expect(Value.Check(ExecutionProjectionSchema, execution)).toBe(true);
+    expect(Value.Check(ExecutionProjectionSchema, { ...execution, activity: [] })).toBe(true);
+    expect(
+      Value.Check(ExecutionProjectionSchema, { ...execution, rawArgs: { secret: true } }),
+    ).toBe(false);
+    expect(
+      Value.Check(ExecutionDetailsSchema, {
+        profileId: "profile",
+        state: "completed",
+        cwd: "/tmp",
+        model: { provider: "p", id: "m", thinkingLevels: ["off"] },
+        thinkingLevel: "off",
+        retryActive: false,
+        retries: 0,
+        activity: [],
+        omittedActivity: 0,
+        usage: execution.activeUsage,
+        execution,
+      }),
+    ).toBe(true);
   });
 });

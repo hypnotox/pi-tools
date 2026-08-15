@@ -239,6 +239,46 @@ describe("subagent toolkit adapter", () => {
     expect(updates).toHaveLength(1);
   });
 
+  it("carries immutable execution projections through live updates and persisted details", async () => {
+    const harness = fakePi();
+    const execution = {
+      prompt: "prepared task",
+      activity: [{ kind: "thinking" as const, text: "live thought" }],
+      omittedActivity: 0,
+      elapsedMs: 100,
+      turns: 1,
+      latestTurnUsage: completedOutcome().usage,
+    };
+    const run = vi.fn(async (request: { onUpdate?: (value: ExecutionOutcome) => void }) => {
+      const outcome = { ...completedOutcome(), execution };
+      request.onUpdate?.({ ...outcome, state: "running" });
+      return outcome;
+    });
+    createSubagentToolkit(harness.api, { runner: { run, shutdown: vi.fn(async () => undefined) } });
+    harness.start();
+    const updates: unknown[] = [];
+    const result = await harness.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      (update) => updates.push(update),
+      context(),
+    );
+    const live = updates[0] as { details: ExecutionDetails };
+    expect(live.details.execution).toEqual(execution);
+    expect(Object.isFrozen(live.details.execution)).toBe(true);
+    expect(result?.details.execution).toEqual(execution);
+    expect(Object.isFrozen(result?.details.execution)).toBe(true);
+    expect(Object.isFrozen(result?.details.execution?.activity)).toBe(true);
+    execution.prompt = "mutated after persistence";
+    const firstActivity = execution.activity[0];
+    if (firstActivity) firstActivity.text = "mutated after persistence";
+    expect(result?.details.execution).toMatchObject({
+      prompt: "prepared task",
+      activity: [{ text: "live thought" }],
+    });
+  });
+
   it.each([
     ["synchronous", () => ({ provider: "p", id: "m", thinkingLevels: ["off"] as ["off"] })],
     ["asynchronous", async () => ({ provider: "p", id: "m", thinkingLevels: ["off"] as ["off"] })],
