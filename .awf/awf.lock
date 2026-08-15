@@ -475,7 +475,7 @@
       "templateId": "",
       "templateHash": "",
       "configHash": "sha256:619a4dec6900da1feb21570a9a316b719f4802bf7686ce13e6cd6114d391b3e6",
-      "outputHash": "sha256:974d9cfb36b3fdeced93729b365db9078d8dba95f9ea65dfbd46007e8b712c59",
+      "outputHash": "sha256:a5cbf3e6de0578a321c6a03c580910da1d1497c13dba5cc55f40219bd0e82ae1",
       "regenChecked": true
     },
     "docs/decisions/README.md": {
@@ -506,7 +506,7 @@
       "templateId": "",
       "templateHash": "",
       "configHash": "sha256:619a4dec6900da1feb21570a9a316b719f4802bf7686ce13e6cd6114d391b3e6",
-      "outputHash": "sha256:ccf89f99b133c536ad1a05c59032f6ea56962e97496187eac2b339efe7335e44",
+      "outputHash": "sha256:feaa9201852ef1a9ff41fb8a70096d1bbefcd17341568eb1c9a3084a69e24085",
       "regenChecked": true
     },
     "docs/glossary.md": {
@@ -563,6 +563,12 @@
       "configHash": "sha256:330358fb9b148759ab0544e06c10f858314583d3cb46515569796360bd93da6f",
       "outputHash": "sha256:f7cb6b2ef5e0713bf41a03d77bde1fd4f22cfceade89d3177d7b28f0fc18d530"
     },
+    "docs/topics/development/commit-provenance.md": {
+      "templateId": "topics/topic.md.tmpl",
+      "templateHash": "sha256:25b4ec23c7a22667f9d78b1e5883af8702d82f67896c3a42ac0ad19032d7c7bb",
+      "configHash": "sha256:89afaf532870f7bb9d3022623333656b50ee80b4501c700bd0bc163e01840926",
+      "outputHash": "sha256:ea6bcbe8a36a55c41d81edc69f65ab7fc913c3d94118ef5d9ae7b1ebf52d819e"
+    },
     "docs/topics/development/distribution-policy.md": {
       "templateId": "topics/topic.md.tmpl",
       "templateHash": "sha256:25b4ec23c7a22667f9d78b1e5883af8702d82f67896c3a42ac0ad19032d7c7bb",
@@ -578,8 +584,8 @@
     "docs/topics/development/index.md": {
       "templateId": "topics/index.md.tmpl",
       "templateHash": "sha256:58a9398b187ea9c7c2c3321299b70f8e6faf3f06778c44e6a2232224f3481ab1",
-      "configHash": "sha256:ea4cbca05f1a69de01bea4b914d31a537d905c9d8b91649daec63fd46573fe23",
-      "outputHash": "sha256:a611afefc4e0845b6260944dc0cd6b74901c802a8ee4c60385b78119815a0446"
+      "configHash": "sha256:564f26f9ed2082f9853c3444d3e6b3f9a99f1ab1d6278d911d818ef61b405c11",
+      "outputHash": "sha256:c8d7a480b5b3c83bf92e08d15d80c7390330fee935e132ed3fa4f7db0b1c4c39"
     },
     "docs/topics/development/subagent-toolkit.md": {
       "templateId": "topics/topic.md.tmpl",
