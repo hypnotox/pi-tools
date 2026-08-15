@@ -89,5 +89,7 @@ describe("profile API", () => {
         profileData: { audit: true },
       }),
     ).toBe(true);
+    expect(Value.Check(PostRunResultSchema, { failure: "" })).toBe(false);
+    expect(Value.Check(PostRunResultSchema, { failure: " \t" })).toBe(false);
   });
 });

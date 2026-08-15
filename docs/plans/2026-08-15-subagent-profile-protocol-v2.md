@@ -55,3 +55,6 @@ feat(extensions): add subagent profile protocol v2
 ## Notes
 
 Inline owners immediately correct stale instructions and record reasoned deviations here. Delegated owners may report rather than edit; the parent supplies the report to phase review and reconciles it with findings in one focused post-review settlement commit before checkpointing or later execution. Record deviations, spike answers, follow-ups, and findings surfaced during implementation.
+
+- Phase 1 review: signal-only cancellation after runner completion could retain a noncancelled terminal state. Disposition: treat this as authority-preserving rather than a new user decision because the approved ADR makes cancellation authoritative; force the final state to cancelled and cover abort during `afterRun`.
+- Phase 1 review: empty policy failures could create a failed result without model-visible failure text. Disposition: require a non-whitespace failure in the public post-run schema and add boundary tests.

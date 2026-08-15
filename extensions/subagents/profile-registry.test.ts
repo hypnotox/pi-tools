@@ -194,6 +194,13 @@ describe("ProfileRegistry", () => {
         batch("invalid-guidelines", [{ ...profile("bad"), promptGuidelines: [""] }]),
       ),
     ).toThrow("promptGuidelines");
+    expect(() =>
+      registry.register(
+        batch("unnamed-guidelines", [
+          { ...profile("bad"), promptGuidelines: ["Use this tool for review."] },
+        ]),
+      ),
+    ).toThrow("naming bad");
     expect(registry.profiles()).toHaveLength(1);
   });
 });

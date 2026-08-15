@@ -406,9 +406,11 @@ export function createSubagentToolkit(
             const finalOutcome = {
               ...outcome,
               ...(report === undefined ? {} : { report }),
-              ...(cancelled || policyFailure === undefined
-                ? {}
-                : { state: "failed" as const, failure: policyFailure }),
+              ...(cancelled
+                ? { state: "cancelled" as const }
+                : policyFailure === undefined
+                  ? {}
+                  : { state: "failed" as const, failure: policyFailure }),
             };
             const details = detailsFromOutcome(
               profile.id,

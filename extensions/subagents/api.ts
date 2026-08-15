@@ -137,7 +137,13 @@ export interface ProfileContext<TArgs> {
 export const PostRunResultSchema = Type.Object(
   {
     report: Type.Optional(Type.String()),
-    failure: Type.Optional(Type.String({ maxLength: MAX_EXECUTION_FACT_CHARACTERS })),
+    failure: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: MAX_EXECUTION_FACT_CHARACTERS,
+        pattern: "\\S",
+      }),
+    ),
     profileData: Type.Optional(JsonValueSchema),
   },
   { additionalProperties: false },

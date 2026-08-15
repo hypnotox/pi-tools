@@ -582,14 +582,18 @@ describe("subagent toolkit adapter", () => {
     });
 
     const cancelled = fakePi();
+    const controller = new AbortController();
     createSubagentToolkit(cancelled.api, {
       runner: {
-        run: vi.fn(async () => ({ ...completedOutcome(), state: "cancelled" as const })),
+        run: vi.fn(async () => completedOutcome()),
         shutdown: vi.fn(async () => undefined),
       },
       profiles: [
         customProfile({
-          afterRun: () => ({ failure: "commit policy failed", profileData: { summary: "audit" } }),
+          afterRun: () => {
+            controller.abort();
+            return { failure: "commit policy failed", profileData: { summary: "audit" } };
+          },
         }),
       ],
     });
@@ -597,7 +601,7 @@ describe("subagent toolkit adapter", () => {
     const result = await cancelled.tools[0]?.execute(
       "call",
       { task: "focus" },
-      undefined,
+      controller.signal,
       undefined,
       context(),
     );
@@ -606,6 +610,43 @@ describe("subagent toolkit adapter", () => {
       profileData: { summary: "audit" },
     });
     expect(result?.details.failure).not.toBe("commit policy failed");
+
+    const failedChild = fakePi();
+    createSubagentToolkit(failedChild.api, {
+      runner: {
+        run: vi.fn(async () => ({
+          ...completedOutcome(),
+          state: "failed" as const,
+          failure: "child failed",
+        })),
+        shutdown: vi.fn(async () => undefined),
+      },
+      profiles: [
+        customProfile({
+          afterRun: () => ({ failure: "commit policy failed", profileData: { summary: "audit" } }),
+        }),
+      ],
+    });
+    failedChild.start();
+    const failedResult = await failedChild.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(failedResult?.content).toEqual([{ type: "text", text: "commit policy failed" }]);
+    expect(failedResult?.details).toMatchObject({
+      profileId: "custom",
+      cwd: "/parent",
+      model: { provider: "p", id: "m" },
+      state: "failed",
+      failure: "commit policy failed",
+      profileData: { summary: "audit" },
+      retries: 1,
+      activity: [{ kind: "tool_end", text: "read" }],
+      usage: { input: 1 },
+    });
   });
 
   it("fails closed only for uncorrelated exclusive calls", () => {
@@ -656,6 +697,7 @@ describe("subagent toolkit adapter", () => {
 
     const consumerFirst = fakePi();
     const consumerFirstReceipts: unknown[] = [];
+    const consumerFirstResults: ProfileRegistrationResult[] = [];
     const correlationId = "consumer-first";
     consumerFirst.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
       const capability = data as ProfileCapability;
@@ -665,6 +707,10 @@ describe("subagent toolkit adapter", () => {
       )
         return;
       consumerFirstReceipts.push(capability.register(registration));
+    });
+    consumerFirst.api.events.on(SUBAGENT_PROFILE_REGISTRATION_RESULT_EVENT, (data) => {
+      consumerFirstResults.push(data as ProfileRegistrationResult);
+      expect(consumerFirst.tools.map((tool) => tool.name)).toContain("custom_agent");
     });
     consumerFirst.api.events.emit(SUBAGENT_PROFILE_REQUEST_EVENT, {
       protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
@@ -677,12 +723,20 @@ describe("subagent toolkit adapter", () => {
     expect(consumerFirst.tools.map((tool) => tool.name)).toEqual(["custom_agent"]);
     expect(consumerFirstReceipts).toHaveLength(1);
     expect(consumerFirstReceipts[0]).toMatchObject({ state: "registered" });
+    expect(consumerFirstResults).toEqual([
+      { protocolVersion: 2, registrationId: "consumer:review", state: "registered" },
+    ]);
 
     const toolkitFirst = fakePi();
     createSubagentToolkit(toolkitFirst.api, {
       runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
     });
     const toolkitFirstReceipts: unknown[] = [];
+    const toolkitFirstResults: ProfileRegistrationResult[] = [];
+    toolkitFirst.api.events.on(SUBAGENT_PROFILE_REGISTRATION_RESULT_EVENT, (data) => {
+      toolkitFirstResults.push(data as ProfileRegistrationResult);
+      expect(toolkitFirst.tools.map((tool) => tool.name)).toContain("custom_agent");
+    });
     toolkitFirst.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
       const capability = data as ProfileCapability;
       if (capability.correlationId !== "toolkit-first") return;
@@ -698,6 +752,9 @@ describe("subagent toolkit adapter", () => {
     toolkitFirst.start();
     expect(toolkitFirst.tools.map((tool) => tool.name)).toEqual(["custom_agent"]);
     expect(toolkitFirstReceipts[0]).toMatchObject({ state: "registered" });
+    expect(toolkitFirstResults).toEqual([
+      { protocolVersion: 2, registrationId: "consumer:review", state: "registered" },
+    ]);
   });
 
   it("keeps the standalone default for absent or incompatible consumers and rejects late batches", () => {
@@ -800,6 +857,10 @@ describe("subagent toolkit adapter", () => {
 
   it("does not override configured inactive tools during finalization", () => {
     const harness = fakePi(["read", "inactive_agent"]);
+    const results: ProfileRegistrationResult[] = [];
+    harness.api.events.on(SUBAGENT_PROFILE_REGISTRATION_RESULT_EVENT, (data) => {
+      results.push(data as ProfileRegistrationResult);
+    });
     harness.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
       (data as ProfileCapability).register({
         registrationId: "collision",
@@ -812,6 +873,14 @@ describe("subagent toolkit adapter", () => {
     });
     harness.start();
     expect(harness.tools.map((tool) => tool.name)).toEqual(["subagent"]);
+    expect(results).toEqual([
+      {
+        protocolVersion: 2,
+        registrationId: "collision",
+        state: "rejected",
+        reason: "Profile tool collision: inactive_agent",
+      },
+    ]);
   });
 
   it("awaits runner shutdown", async () => {

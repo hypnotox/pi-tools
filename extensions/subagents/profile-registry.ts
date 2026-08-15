@@ -31,10 +31,15 @@ function validateProfile(profile: ProfileDefinition): void {
       profile.promptGuidelines.length > 64 ||
       profile.promptGuidelines.some(
         (guideline) =>
-          typeof guideline !== "string" || !guideline.trim() || guideline.length > 4096,
+          typeof guideline !== "string" ||
+          !guideline.trim() ||
+          guideline.length > 4096 ||
+          !guideline.includes(profile.toolName),
       ))
   )
-    throw new Error(`Profile ${profile.id} promptGuidelines must be bounded non-empty strings`);
+    throw new Error(
+      `Profile ${profile.id} promptGuidelines must be bounded non-empty strings naming ${profile.toolName}`,
+    );
   if (!isTypeBoxSchema(profile.parameters))
     throw new Error(`Profile ${profile.id} requires a TypeBox parameter schema`);
   if (!isTypeBoxSchema(profile.profileDataSchema))
