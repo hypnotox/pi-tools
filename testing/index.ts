@@ -269,7 +269,8 @@ export function createRecordingEventBus(): RecordingEventBus {
     },
     emit(event, value) {
       emissions.push([event, value]);
-      for (const registration of registrations.get(event) ?? []) registration.listener(value);
+      for (const registration of [...(registrations.get(event) ?? [])])
+        registration.listener(value);
     },
   };
 }

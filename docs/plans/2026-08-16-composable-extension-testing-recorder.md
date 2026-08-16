@@ -175,3 +175,6 @@ shared duplicate-preserving recording bus, removed Set compatibility, preserved 
 session cwd, constrained typed additions, injected `setActiveTools`, used exact `ToolInfo` and Pi
 model types, confined nominal registry translation to context composition, and migrated affected
 consumer fixtures. Focused type and 52-test evidence passed before the complete settlement gate.
+Renewed review found one mechanical live-array emission defect: self-unsubscribe skipped the following
+listener. A failing regression test reproduced it, and per-emission registration snapshots fixed it
+without changing nested synchronous emission semantics.

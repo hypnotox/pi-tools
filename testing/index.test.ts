@@ -164,6 +164,17 @@ describe("createExtensionRecorder", () => {
     unsubscribeFinal();
     recorder.api.events.emit("exact", undefined);
     expect(exactOrder).toEqual(["repeated", "middle"]);
+
+    const mutationOrder: string[] = [];
+    let unsubscribeSelf!: () => void;
+    unsubscribeSelf = recorder.api.events.on("mutation", () => {
+      mutationOrder.push("self");
+      unsubscribeSelf();
+    });
+    recorder.api.events.on("mutation", () => mutationOrder.push("following"));
+    recorder.api.events.emit("mutation", undefined);
+    recorder.api.events.emit("mutation", undefined);
+    expect(mutationOrder).toEqual(["self", "following", "following"]);
   });
 
   it("records setActiveTools before injected behavior and exposes exact ToolInfo values", () => {
