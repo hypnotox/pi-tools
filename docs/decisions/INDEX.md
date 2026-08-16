@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-_No decisions are in flight._
+- [ADR-0011: Align Node Runtime Baseline with Pi](0011-align-node-runtime-baseline-with-pi.md) (Proposed)
 
 ## History
 
