@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: composable-extension-testing-recorder
-status: Implementing
+status: Implemented
 date: 2026-08-16
 ---
 # ADR-0010: Composable Extension Testing Recorder
@@ -78,3 +78,4 @@ version this repository currently develops and verifies against.
 - 2026-08-16: Proposed
 - 2026-08-16: Implementing; content-sha256: 46359a2c2334cc59374d1572ed570353bc254dba9c38151951ba2d7101ef62c8
 - 2026-08-16: Applied; operations: update `development/extension-toolchain:reusable-extension-testing`
+- 2026-08-16: Implemented; content-sha256: 46359a2c2334cc59374d1572ed570353bc254dba9c38151951ba2d7101ef62c8

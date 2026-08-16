@@ -2,7 +2,7 @@
 format: plan-v2
 date: 2026-08-16
 adrs: [composable-extension-testing-recorder]
-status: Proposed
+status: Implemented
 ---
 # Plan: Composable Extension Testing Recorder
 
