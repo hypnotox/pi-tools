@@ -81,10 +81,10 @@ The resource directories are declared in `package.json`, so this repository can 
 Install a tagged release so the package stays pinned until its configured ref changes:
 
 ```bash
-pi install git:github.com/hypnotox/pi-tools@v0.2.0
+pi install git:github.com/hypnotox/pi-tools@v0.3.0
 ```
 
-Omit `@v0.2.0` only when intentionally following the repository's latest revision. For local development without installing a second copy:
+Omit `@v0.3.0` only when intentionally following the repository's latest revision. For local development without installing a second copy:
 
 ```bash
 pi install /absolute/path/to/pi-tools
