@@ -51,11 +51,15 @@ function boundedLines(text: string, width: number): string[] {
   return wrapTextWithAnsi(text, Math.max(1, width)).map((line) => truncateToWidth(line, width));
 }
 
-function firstLogicalLine(value: string): string {
-  const indexes = ["\r", "\n", "\u0085", "\u2028", "\u2029"]
-    .map((separator) => value.indexOf(separator))
-    .filter((index) => index >= 0);
-  return indexes.length > 0 ? value.slice(0, Math.min(...indexes)) : value;
+function boundedPreviewLines(text: string, width: number, maxLines: number): string[] {
+  const wrapped = boundedLines(text, width);
+  if (wrapped.length <= maxLines) return wrapped;
+  const preview = wrapped.slice(0, maxLines);
+  const ellipsis = truncateToWidth("...", width, "");
+  const last = preview.at(-1) ?? "";
+  preview[preview.length - 1] =
+    truncateToWidth(last, Math.max(0, width - visibleWidth(ellipsis)), "") + ellipsis;
+  return preview;
 }
 
 function omittedRowsLine(omitted: number, discarded: number): string | undefined {
@@ -114,6 +118,9 @@ class ExecutionView implements Component {
     const addWrapped = (line: string): void => {
       lines.push(...boundedLines(line, width));
     };
+    const addPreview = (line: string): void => {
+      lines.push(...boundedPreviewLines(line, width, 24));
+    };
     const execution = details.execution;
     const elapsed = execution ? ` · ${formatElapsed(execution.elapsedMs)}` : "";
     add(
@@ -134,23 +141,31 @@ class ExecutionView implements Component {
     }
 
     const settled = !isLive(details);
-    if (settled && (details.failure || details.report))
-      addWrapped(
-        this.theme.fg(details.failure ? "error" : "text", details.failure ?? details.report ?? ""),
+    const completeHistory = execution
+      ? [
+          ...execution.activity,
+          ...(execution.unfinishedThinking
+            ? [{ kind: "thinking" as const, text: execution.unfinishedThinking }]
+            : []),
+        ]
+      : [];
+    const history = completeHistory.slice(-(this.expanded ? 50 : 25));
+    const omission = execution
+      ? omittedRowsLine(completeHistory.length - history.length, execution.omittedActivity)
+      : undefined;
+    if (settled && (details.failure || details.report)) {
+      const result = this.theme.fg(
+        details.failure ? "error" : "text",
+        details.failure ?? details.report ?? "",
       );
+      if (this.expanded) addWrapped(result);
+      else {
+        if (omission) addWrapped(this.theme.fg("dim", omission));
+        addPreview(result);
+      }
+    }
 
     if (execution && (!settled || this.expanded)) {
-      const completeHistory = [
-        ...execution.activity,
-        ...(execution.unfinishedThinking
-          ? [{ kind: "thinking" as const, text: execution.unfinishedThinking }]
-          : []),
-      ];
-      const history = completeHistory.slice(-(this.expanded ? 50 : 25));
-      const omission = omittedRowsLine(
-        completeHistory.length - history.length,
-        execution.omittedActivity,
-      );
       if (omission) addWrapped(this.theme.fg("dim", omission));
       for (const entry of history) {
         if (entry.kind === "thinking") addWrapped(this.theme.fg("dim", `thinking: ${entry.text}`));
@@ -163,11 +178,6 @@ class ExecutionView implements Component {
               `${entry.state} · ${entry.summary} · ${formatElapsed(entry.durationMs)}`,
             ),
           );
-          if (entry.result !== undefined) {
-            const result = `result: ${this.expanded ? entry.result : firstLogicalLine(entry.result)}`;
-            if (this.expanded) addWrapped(this.theme.fg("dim", result));
-            else add(this.theme.fg("dim", result));
-          }
         }
       }
     }
@@ -177,6 +187,12 @@ class ExecutionView implements Component {
 
     // Legacy details retain the former expanded activity and profile-data presentation.
     if (!execution && this.expanded) {
+      add(
+        this.theme.fg(
+          "dim",
+          `usage ${details.usage.input} in / ${details.usage.output} out / ${details.usage.cacheRead} cache read / ${details.usage.cacheWrite} cache write · $${details.usage.cost.total.toFixed(4)}`,
+        ),
+      );
       for (const entry of details.activity)
         addWrapped(this.theme.fg("dim", `${entry.kind}: ${entry.text}`));
       if (details.omittedActivity > 0)
@@ -200,26 +216,5 @@ export function renderExecution(
   theme: Theme,
 ): Component {
   if (!details) return new Text(theme.fg("warning", "Invalid subagent result"), 0, 0);
-  // Historical session entries have no execution projection, so retain their established rendering.
-  if (!details.execution) {
-    let text = `${status(details)} ${theme.bold(details.profileId)} · ${details.state} · ${details.model.provider}/${details.model.id} · ${details.thinkingLevel}`;
-    text += `\n${theme.fg("dim", details.cwd)}`;
-    if (details.queuePosition !== undefined)
-      text += `\n${theme.fg("dim", `queue position ${details.queuePosition}`)}`;
-    if (details.retries > 0 || details.retryActive)
-      text += `\n${theme.fg("dim", `retries ${details.retries}${details.retryActive ? " (active)" : ""}`)}`;
-    if (details.failure) text += `\n${theme.fg("error", details.failure)}`;
-    else if (details.report) text += `\n${details.report}`;
-    if (expanded) {
-      text += `\n${theme.fg("dim", `usage ${details.usage.input} in / ${details.usage.output} out / ${details.usage.cacheRead} cache read / ${details.usage.cacheWrite} cache write · $${details.usage.cost.total.toFixed(4)}`)}`;
-      for (const entry of details.activity)
-        text += `\n${theme.fg("dim", `${entry.kind}: ${entry.text}`)}`;
-      if (details.omittedActivity > 0)
-        text += `\n${theme.fg("dim", `${details.omittedActivity} activity entries omitted`)}`;
-      if (details.profileData !== undefined)
-        text += `\n${theme.fg("dim", truncateUtf8(JSON.stringify(details.profileData, null, 2), MAX_PROFILE_DATA_BYTES))}`;
-    }
-    return new Text(text, 0, 0);
-  }
   return new ExecutionView(details, expanded, theme);
 }

@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: bound-subagent-terminal-results
-status: Proposed
+status: Implemented
 date: 2026-08-16
 ---
 # ADR-0009: Bound Subagent Terminal Results
@@ -40,3 +40,4 @@ This changes ADR-0007's result-persistence choice while retaining its omission-s
 ## Status history
 
 - 2026-08-16: Proposed
+- 2026-08-16: Implemented; content-sha256: f27a4b7530daa8d3f1fa1acb3b5831fbccc61e4c39786b79f66597a5ae827f0b

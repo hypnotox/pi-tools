@@ -9,7 +9,6 @@ import {
   JsonValueSchema,
   MAX_EXECUTION_ACTIVITY_CHARACTERS,
   MAX_EXECUTION_FACT_BYTES,
-  MAX_TOOL_RESULT_BYTES,
   PostRunResultSchema,
   PreparedRunSchema,
   type ProfileContext,
@@ -205,25 +204,7 @@ describe("profile API", () => {
               summary: "read",
               state: "success",
               durationMs: 1,
-              result: "x".repeat(MAX_TOOL_RESULT_BYTES),
-            },
-          ],
-        },
-      }),
-    ).toBe(true);
-    expect(
-      isExecutionDetails({
-        ...details,
-        execution: {
-          ...execution,
-          activity: [
-            {
-              kind: "tool",
-              toolCallId: "call",
-              summary: "read",
-              state: "success",
-              durationMs: 1,
-              result: "😀".repeat(MAX_TOOL_RESULT_BYTES / 2),
+              result: "child-owned result",
             },
           ],
         },

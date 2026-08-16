@@ -9,7 +9,6 @@ import {
   type ExecutionActivity,
   type ExecutionOutcome,
   type ExecutionProjection,
-  MAX_TOOL_RESULT_BYTES,
   type PreparedRun,
   type ThinkingLevel,
 } from "./api.js";
@@ -285,22 +284,6 @@ export class SubprocessRunner {
       }
       outcome.execution.activity.push(entry);
     };
-    const toolResultText = (value: unknown): string | undefined => {
-      if (!value || typeof value !== "object") return undefined;
-      const content = (value as { content?: unknown }).content;
-      if (!Array.isArray(content)) return undefined;
-      const text = content
-        .filter(
-          (part): part is { type: "text"; text: string } =>
-            !!part &&
-            typeof part === "object" &&
-            (part as { type?: unknown }).type === "text" &&
-            typeof (part as { text?: unknown }).text === "string",
-        )
-        .map((part) => part.text)
-        .join("\n");
-      return text ? truncateUtf8(text, MAX_TOOL_RESULT_BYTES) : undefined;
-    };
     let unfinishedThinking = "";
     const thinking = (delta: unknown): void => {
       if (typeof delta !== "string") return;
@@ -465,8 +448,6 @@ export class SubprocessRunner {
             active.entry.durationMs = Math.max(0, this.#deps.monotonicNow() - active.startedMono);
             active.entry.state =
               event.isError === true || event.error !== undefined ? "error" : "success";
-            const result = toolResultText(event.result);
-            if (result !== undefined) active.entry.result = result;
             activeTools.delete(toolCallId);
             emit();
           }

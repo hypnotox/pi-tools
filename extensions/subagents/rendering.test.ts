@@ -48,7 +48,7 @@ describe("renderExecution", () => {
         return text;
       },
       bold: (text) => text,
-    });
+    }).render(120);
     const renderedProfile = styled.at(-1) ?? "";
     expect(Buffer.byteLength(renderedProfile, "utf8")).toBeLessThanOrEqual(MAX_PROFILE_DATA_BYTES);
     expect(renderedProfile).toContain("...[truncated]");
@@ -183,8 +183,6 @@ describe("renderExecution", () => {
           summary: "read src",
           state: "running" as const,
           durationMs: 0.126,
-          result:
-            "first result line that is much wider than the compact terminal\nsecond result line",
         },
       ],
       omittedActivity: 0,
@@ -207,8 +205,6 @@ describe("renderExecution", () => {
             summary: "read src",
             state: "success" as const,
             durationMs: 3_665_000,
-            result:
-              "first result line that is much wider than the compact terminal\nsecond result line",
           },
         ],
       },
@@ -217,8 +213,6 @@ describe("renderExecution", () => {
       "running · read src · 0.13ms",
     );
     const compactRunning = renderExecution(running, false, theme).render(32);
-    expect(compactRunning.some((line) => line.includes("first result line"))).toBe(true);
-    expect(compactRunning.join("\n")).not.toContain("second result line");
     expect(compactRunning.every((line) => visibleWidth(line) <= 32)).toBe(true);
     const resumed = JSON.parse(JSON.stringify(settled)) as ExecutionDetails;
     const compact = renderExecution(resumed, false, theme).render(120).join("\n");
@@ -226,8 +220,30 @@ describe("renderExecution", () => {
     expect(compact).toContain("final report");
     expect(compact).not.toContain("read src");
     expect(expanded).toContain("success · read src · 1h 1m");
-    expect(expanded).toContain("first result line that is much wider than the compact terminal");
-    expect(expanded).toContain("second result line");
     expect(expanded).toContain("checking");
+  });
+
+  it("bounds the compact outer result preview and preserves discarded-row disclosure", () => {
+    const report = Array.from({ length: 30 }, (_, index) => `report-${index}`).join("\n");
+    const settled: ExecutionDetails = {
+      ...details,
+      report,
+      execution: {
+        prompt: "inspect",
+        activity: [{ kind: "thinking", text: "retained" }],
+        omittedActivity: 3,
+        elapsedMs: 1_000,
+        turns: 1,
+      },
+    };
+
+    const compact = renderExecution(settled, false, theme).render(120);
+    const compactReport = compact.filter((line) => line.startsWith("report-"));
+    expect(compactReport).toHaveLength(24);
+    expect(compactReport.at(-1)).toMatch(/\.\.\.$/);
+    expect(compact).toContain("3 rows discarded");
+
+    const expanded = renderExecution(settled, true, theme).render(120);
+    expect(expanded.filter((line) => line.startsWith("report-"))).toHaveLength(30);
   });
 });

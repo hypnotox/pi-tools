@@ -505,7 +505,6 @@ describe("SubprocessRunner", () => {
           summary: "read",
           state: "success",
           durationMs: 20,
-          result: "first line\nsecond line",
         },
         {
           kind: "tool",
@@ -513,13 +512,14 @@ describe("SubprocessRunner", () => {
           summary: "bash",
           state: "error",
           durationMs: 20,
-          result: "command failed",
         },
         { kind: "thinking", text: "second line" },
         { kind: "thinking", text: "third" },
       ],
     });
     expect(JSON.stringify(result)).not.toContain('"args"');
+    expect(JSON.stringify(result.execution?.activity)).not.toContain("first line");
+    expect(JSON.stringify(result.execution?.activity)).not.toContain("command failed");
     const liveTool = updates.find((update) =>
       (update.execution?.activity as Array<Record<string, unknown>> | undefined)?.some(
         (entry) => entry.toolCallId === "two" && entry.state === "running",
@@ -589,7 +589,7 @@ describe("SubprocessRunner", () => {
     });
   });
 
-  it("bounds persisted tool results to the child tool-output ceiling", async () => {
+  it("does not persist child tool results", async () => {
     const deps = dependencies();
     const { promise } = await launch(deps);
     const event = (value: unknown) =>
@@ -599,16 +599,15 @@ describe("SubprocessRunner", () => {
       type: "tool_execution_end",
       toolCallId: "large",
       toolName: "read",
-      result: { content: [{ type: "text", text: "😀".repeat(20_000) }] },
+      result: { content: [{ type: "text", text: "child-owned result" }] },
     });
     deps.child.emit("close", 0);
 
     const result = await promise;
     const tool = result.execution?.activity.find((entry) => entry.kind === "tool");
-    expect(tool).toMatchObject({ kind: "tool", result: expect.stringContaining("[truncated]") });
-    if (tool?.kind !== "tool" || tool.result === undefined) throw new Error("missing tool result");
-    expect(Buffer.byteLength(tool.result, "utf8")).toBeLessThanOrEqual(50 * 1024);
-    expect(tool.result).not.toContain("�");
+    expect(tool).toMatchObject({ kind: "tool", state: "success" });
+    expect(tool).not.toHaveProperty("result");
+    expect(JSON.stringify(result)).not.toContain("child-owned result");
   });
 
   it("truncates UTF-8 without splitting a code point", () => {
