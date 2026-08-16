@@ -1,18 +1,8 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createExtensionHarness } from "pi-tools/testing";
 import { describe, expect, it, vi } from "vitest";
 import { type HandoffDependencies, handoffEnvelope, registerHandoff } from "./index.js";
 
-type Hook = (event: unknown, context: unknown) => unknown;
-type Tool = { name: string; execute: (...args: unknown[]) => Promise<unknown> };
 type CountdownComponent = { handleInput(data: string): void };
-type NewSessionRequest = {
-  parentSession?: string;
-  setup?(manager: { cleanup(): Promise<void> }): Promise<void>;
-  withSession(context: {
-    ui: { notify(...args: unknown[]): void; setEditorText(text: string): void };
-    sendMessage(...args: unknown[]): Promise<void>;
-  }): Promise<void>;
-};
 
 function createHarness(
   options: {
@@ -25,16 +15,13 @@ function createHarness(
     existingTools?: string[];
   } = {},
 ) {
-  const hooks = new Map<string, Hook>();
-  const commands = new Map<string, { handler(token: string, context: unknown): Promise<void> }>();
-  let tool: Tool | undefined;
-  const registeredTools: Tool[] = [];
-  const queued: string[][] = [];
+  const shared = createExtensionHarness(() => undefined);
+  shared.allTools.push(...(options.existingTools ?? []).map((name) => ({ name })));
   const notices: unknown[][] = [];
   const editor: string[] = [];
   const replacementEditor: string[] = [];
   const sent: unknown[][] = [];
-  const sessions: NewSessionRequest[] = [];
+  const sessions: Array<{ parentSession?: string }> = [];
   const clearInterval = vi.fn();
   const clearTimeout = vi.fn();
   let intervalCallback: (() => void) | undefined;
@@ -52,37 +39,8 @@ function createHarness(
       content: [{ type: "toolCall", id: "call", name: "handoff_session" }],
     },
   };
-  const pi = {
-    on(name: string, hook: Hook) {
-      hooks.set(name, hook);
-    },
-    registerCommand(
-      name: string,
-      command: { handler(token: string, context: unknown): Promise<void> },
-    ) {
-      commands.set(name, command);
-    },
-    registerTool(next: Tool) {
-      tool = next;
-      registeredTools.push(next);
-    },
-    getAllTools() {
-      return [
-        ...(options.existingTools ?? []).map((name) => ({ name })),
-        ...registeredTools.map(({ name }) => ({ name })),
-      ];
-    },
-    queueCommand(name: string, token: string) {
-      if (queueFails) throw new Error("queue failed");
-      queued.push([name, token]);
-    },
-  } as unknown as ExtensionAPI;
-  const context = {
-    mode: "tui",
-    sessionManager: {
-      getSessionFile: () => sessionFile,
-      getLeafEntry: () => leaf,
-    },
+  const context = shared.makeCommandContext({
+    sessionManager: { getSessionFile: () => sessionFile, getLeafEntry: () => leaf } as never,
     ui: {
       notify: (...args: unknown[]) => {
         oldUiCalls += 1;
@@ -96,45 +54,48 @@ function createHarness(
       },
       custom: (factory: unknown) =>
         new Promise<boolean>((resolve) => {
-          const createComponent = factory as (
+          const make = factory as (
             tui: { requestRender(): void },
             theme: unknown,
-            keybindings: { matches(data: string, binding: string): boolean },
-            done: (result: boolean) => void,
+            keys: { matches(data: string, binding: string): boolean },
+            finish: (result: boolean) => void,
           ) => CountdownComponent;
           done = resolve;
-          component = createComponent(
+          component = make(
             { requestRender: vi.fn() },
             {},
-            { matches: (data: string) => data === "escape" },
+            { matches: (data) => data === "escape" },
             resolve,
           );
         }),
-    },
-    newSession: async (request: unknown) => {
-      const handoffRequest = request as NewSessionRequest;
-      sessions.push(handoffRequest);
+    } as never,
+    newSession: async (request) => {
+      sessions.push(request as { parentSession?: string });
       if (options.newCancelled) return { cancelled: true };
-      await handoffRequest.setup?.({ cleanup: vi.fn(async () => undefined) });
       if (options.newFails) {
         oldContextStale = options.staleAfterFailure ?? false;
         throw new Error("new session failed");
       }
-      await handoffRequest.withSession({
+      const replacement = shared.makeCommandContext({
+        sendMessage: async (...args: unknown[]) => {
+          sent.push(args);
+          if (options.sendFails) throw new Error("send failed");
+        },
         ui: {
           notify: (...args: unknown[]) => notices.push(args),
           setEditorText: (text: string) => {
             if (options.replacementEditorFails) throw new Error("replacement editor failed");
             replacementEditor.push(text);
           },
-        },
-        sendMessage: async (...args: unknown[]) => {
-          sent.push(args);
-          if (options.sendFails) throw new Error("send failed");
-        },
-      });
+        } as never,
+      } as never) as never;
+      await request?.withSession?.(replacement);
       return { cancelled: false };
     },
+  });
+  shared.api.queueCommand = (name, token) => {
+    if (queueFails) throw new Error("queue failed");
+    shared.queuedCommands.push([name, token]);
   };
   const dependencies: HandoffDependencies = {
     randomUUID: () => "request-id",
@@ -149,22 +110,19 @@ function createHarness(
     }),
     clearTimeout,
   };
-  registerHandoff(pi, dependencies);
-  hooks.get("session_start")?.({}, context);
+  registerHandoff(shared.api as never, dependencies);
+  void shared.invokeRaw("session_start", {}, context);
   return {
-    hooks,
-    commands,
-    queued,
-    registeredTools,
+    ...shared,
+    context,
     notices,
     editor,
     replacementEditor,
     sent,
     sessions,
-    context,
     execute: (kickoff = "Continue.") =>
-      tool?.execute("call", { kickoff }, undefined, undefined, context),
-    continue: () => commands.get("handoff-session-continue")?.handler("request-id", context),
+      shared.invokeToolDirect("handoff_session", { kickoff }, { id: "call", context }),
+    continue: () => shared.commands.get("handoff-session-continue")?.handler("request-id", context),
     finish: (value = true) => done?.(value),
     expireCountdown: () => timeoutCallback?.(),
     tickCountdown: () => intervalCallback?.(),
@@ -190,23 +148,23 @@ describe("fresh-session handoff extension", () => {
   it("yields tool ownership when another extension already provides handoff_session", () => {
     const h = createHarness({ existingTools: ["handoff_session"] });
 
-    expect(h.registeredTools).toHaveLength(0);
+    expect(h.tools).toHaveLength(0);
     expect(h.commands.size).toBe(0);
-    expect(
-      h.hooks.get("tool_call")?.({ toolCallId: "call", toolName: "handoff_session" }, h.context),
-    ).toBeUndefined();
+    expect(h.handlers.get("tool_call")).toBeDefined();
   });
 
   it("suppresses only the imminent threshold compaction while handoff is pending", async () => {
     const h = createHarness();
     await h.execute();
-    const beforeCompact = h.hooks.get("session_before_compact");
+    const beforeCompact = h.invokeRaw.bind(h, "session_before_compact");
 
-    expect(h.queued).toEqual([["handoff-session-continue", "request-id"]]);
-    expect(beforeCompact?.({ reason: "manual" }, h.context)).toBeUndefined();
-    expect(beforeCompact?.({ reason: "overflow" }, h.context)).toBeUndefined();
-    expect(beforeCompact?.({ reason: "threshold" }, h.context)).toEqual({ cancel: true });
-    expect(beforeCompact?.({ reason: "threshold" }, h.context)).toBeUndefined();
+    expect(h.queuedCommands).toEqual([["handoff-session-continue", "request-id"]]);
+    await expect(beforeCompact({ reason: "manual" }, h.context)).resolves.toEqual([undefined]);
+    await expect(beforeCompact({ reason: "overflow" }, h.context)).resolves.toEqual([undefined]);
+    await expect(beforeCompact({ reason: "threshold" }, h.context)).resolves.toEqual([
+      { cancel: true },
+    ]);
+    await expect(beforeCompact({ reason: "threshold" }, h.context)).resolves.toEqual([undefined]);
 
     const continuation = h.continue();
     h.finish();
@@ -306,8 +264,8 @@ describe("fresh-session handoff extension", () => {
       },
     });
     expect(
-      h.hooks.get("tool_call")?.({ toolCallId: "other", toolName: "read" }, h.context),
-    ).toMatchObject({ block: true });
+      await h.invokeRaw("tool_call", { toolCallId: "other", toolName: "read" }, h.context),
+    ).toMatchObject([{ block: true }]);
     h.dropSession();
     const fresh = createHarness();
     fresh.dropSession();
@@ -338,7 +296,7 @@ describe("fresh-session handoff extension", () => {
   it("clears pending state when shutdown or command completion occurs", async () => {
     const h = createHarness();
     await h.execute();
-    h.hooks.get("session_shutdown")?.({}, h.context);
+    h.invokeRaw("session_shutdown", {}, h.context);
     await expect(h.continue()).rejects.toThrow("matching pending");
     await h.execute();
     const pending = h.continue();

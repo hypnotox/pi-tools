@@ -4,7 +4,7 @@
 
 Runtime and public profile integration contracts for general-purpose subagent delegation.
 
-**Applicability:** Owning domain selectors: `biome.json`, `extensions/**`, `knip.json`, `package-lock.json`, `package.json`, `tsconfig.json`. Topic selectors: `extensions/subagents/**`. Both domain and topic selectors must match. Run `awf topic development/subagent-toolkit --coverage` for current applicable and owned paths and marker sites.
+**Applicability:** Owning domain selectors: `biome.json`, `extensions/**`, `knip.json`, `package-lock.json`, `package.json`, `testing/**`, `tests/**`, `tsconfig.json`. Topic selectors: `extensions/subagents/**`. Both domain and topic selectors must match. Run `awf topic development/subagent-toolkit --coverage` for current applicable and owned paths and marker sites.
 
 This topic records the active runtime and public integration contracts for the subagent toolkit.
 

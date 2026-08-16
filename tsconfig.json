@@ -13,7 +13,11 @@
     "noImplicitOverride": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "types": ["node", "vitest/globals"]
+    "types": ["node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "pi-tools/testing": ["./testing/index.ts"]
+    }
   },
-  "include": ["extensions/**/*.ts", "tests/**/*.ts", "types/**/*.d.ts"]
+  "include": ["extensions/**/*.ts", "testing/**/*.ts", "tests/**/*.ts", "types/**/*.d.ts"]
 }

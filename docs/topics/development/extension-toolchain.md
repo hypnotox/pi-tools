@@ -4,7 +4,7 @@
 
 Shared language, quality, and verification contracts for executable Pi extensions.
 
-**Applicability:** Owning domain selectors: `biome.json`, `extensions/**`, `knip.json`, `package-lock.json`, `package.json`, `tsconfig.json`. Topic selectors: `biome.json`, `extensions/**`, `knip.json`, `package-lock.json`, `package.json`, `tsconfig.json`. Both domain and topic selectors must match. Run `awf topic development/extension-toolchain --coverage` for current applicable and owned paths and marker sites.
+**Applicability:** Owning domain selectors: `biome.json`, `extensions/**`, `knip.json`, `package-lock.json`, `package.json`, `testing/**`, `tests/**`, `tsconfig.json`. Topic selectors: `biome.json`, `extensions/**`, `knip.json`, `package-lock.json`, `package.json`, `testing/**`, `tests/**`, `tsconfig.json`. Both domain and topic selectors must match. Run `awf topic development/extension-toolchain --coverage` for current applicable and owned paths and marker sites.
 
 This topic records the active language, quality, and verification contracts for executable Pi extensions.
 

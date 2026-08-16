@@ -8,6 +8,10 @@
   "exports": {
     "./subagent-profile": {
       "types": "./extensions/subagents/api.ts"
+    },
+    "./testing": {
+      "types": "./testing/index.ts",
+      "import": "./testing/index.ts"
     }
   },
   "keywords": [
