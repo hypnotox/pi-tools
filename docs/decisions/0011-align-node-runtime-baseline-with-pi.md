@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: align-node-runtime-baseline-with-pi
-status: Proposed
+status: Implemented
 date: 2026-08-16
 ---
 # ADR-0011: Align Node Runtime Baseline with Pi
@@ -53,3 +53,4 @@ engine requirement rises.
 ## Status history
 
 - 2026-08-16: Proposed
+- 2026-08-16: Implemented; content-sha256: a3a6ca7aff824c9b3f8bdc8822f785e1b14634c50bfb303292c0662fb13d9cbe

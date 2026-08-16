@@ -18,7 +18,7 @@
     "pi-package"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.19.0"
   },
   "scripts": {
     "format": "biome check --write .",

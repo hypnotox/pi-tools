@@ -12,9 +12,10 @@ This topic records the active language, quality, and verification contracts for 
 
 ### `rule: typescript-quality-gate`
 
-Executable extensions use the shared strict TypeScript configuration, Biome formatting, import organization, and linting, Knip dead-code and dependency analysis, and Vitest tests. `npm run check` runs those non-mutating checks as the project gate; the pre-commit flow runs it alongside `./awf check`. Imported Pi core packages remain wildcard peer dependencies, development tools remain development dependencies, and the npm lockfile is committed.
+Executable extensions require Node.js 22.19.0 or newer and use the shared strict TypeScript configuration, Biome formatting, import organization, and linting, Knip dead-code and dependency analysis, and Vitest tests. `npm run check` runs those non-mutating checks as the project gate; the pre-commit flow runs it alongside `./awf check`. Release candidates add a clean dependency installation and complete project gate on a supported Node.js 22 runtime at or above the declared floor. Imported Pi core packages remain wildcard peer dependencies, development tools remain development dependencies, and the npm lockfile is committed.
 
 Origin: ADR-0001
+Revised-by: ADR-0011
 
 ### `rule: reusable-extension-testing`
 

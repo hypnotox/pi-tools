@@ -31,7 +31,7 @@ Maintainers edit package resources directly. For governed workflow or generated 
 | Dependency | Role |
 |---|---|
 | Pi | Loads the package manifest and executes or presents its resources. |
-| Node.js 20 or newer | Runtime baseline declared by the package. |
+| Node.js 22.19.0 or newer | Runtime baseline declared by the package. |
 | awf | Pinned development tool that renders and checks the repository workflow. |
 | TypeScript, Biome, Knip, and Vitest | Development-only type, format, lint, dead-code, dependency, and test checks. |
 
