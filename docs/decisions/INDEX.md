@@ -3,6 +3,7 @@
 ## In flight
 
 - [ADR-0009: Bound Subagent Terminal Results](0009-bound-subagent-terminal-results.md) (Proposed)
+- [ADR-composable-extension-testing-recorder: Composable Extension Testing Recorder](composable-extension-testing-recorder.md) (Proposed)
 
 ## History
 
