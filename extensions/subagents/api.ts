@@ -309,6 +309,8 @@ export const ExecutionDetailsSchema = Type.Object(
       Type.Literal("cancelled"),
     ]),
     cwd: Type.String({ maxLength: MAX_EXECUTION_FACT_CHARACTERS }),
+    /** Optional so historical session details remain valid without migration. */
+    cwdDiffersFromParent: Type.Optional(Type.Boolean()),
     model: ConcreteModelSchema,
     thinkingLevel: ThinkingLevelSchema,
     queuePosition: Type.Optional(Type.Integer({ minimum: 1 })),

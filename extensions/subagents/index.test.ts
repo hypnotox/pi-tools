@@ -232,11 +232,47 @@ describe("subagent toolkit adapter", () => {
     expect(result?.content).toEqual([{ type: "text", text: "done" }]);
     expect(result?.details).toMatchObject({
       state: "completed",
+      cwdDiffersFromParent: false,
       retries: 1,
       usage: { input: 1, output: 2, reasoning: 1, cost: { total: 0.5 } },
     });
     expect(result?.usage).toEqual(result?.details.usage);
     expect(updates).toHaveLength(1);
+  });
+
+  it("marks live and persisted details when the prepared CWD differs from the parent", async () => {
+    const harness = createSubagentHarness();
+    const run = vi.fn(async (request: { onUpdate?: (value: ExecutionOutcome) => void }) => {
+      const outcome = completedOutcome();
+      request.onUpdate?.({ ...outcome, state: "running" });
+      return outcome;
+    });
+    await harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run, shutdown: vi.fn(async () => undefined) },
+        profiles: [
+          customProfile({
+            prepare: ({ args }) => ({
+              cwd: "/parent/../child",
+              systemPrompt: "custom system",
+              prompt: (args as { task: string }).task,
+              toolPolicy: { mode: "allowlist", tools: [] },
+            }),
+          }),
+        ],
+      }),
+    );
+    harness.start();
+    const updates: Array<{ details: ExecutionDetails }> = [];
+    const result = await harness.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      (update) => updates.push(update as { details: ExecutionDetails }),
+      context(),
+    );
+    expect(updates[0]?.details.cwdDiffersFromParent).toBe(true);
+    expect(result?.details.cwdDiffersFromParent).toBe(true);
   });
 
   it("carries immutable execution projections through live updates and persisted details", async () => {

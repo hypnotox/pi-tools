@@ -58,6 +58,25 @@ describe("renderExecution", () => {
     expect(renderExecution(details, true, theme).render(120).join("\n")).toContain("completed");
   });
 
+  it("shows a differing child CWD below the header and bounds it to the terminal width", () => {
+    const unchanged = {
+      ...details,
+      cwd: "/same",
+      cwdDiffersFromParent: false,
+    } as ExecutionDetails;
+    const historical = renderExecution(details, false, theme).render(120);
+    const unchangedLines = renderExecution(unchanged, false, theme).render(120);
+    expect(historical).not.toContain("/tmp");
+    expect(unchangedLines).not.toContain("/same");
+
+    const cwd = "/a/child/working/directory/that/is/too/long";
+    const changed = { ...details, cwd, cwdDiffersFromParent: true } as ExecutionDetails;
+    const lines = renderExecution(changed, false, theme).render(24);
+    expect(lines[1]).toContain("/a/child");
+    expect(lines[1]).not.toBe(cwd);
+    expect(visibleWidth(lines[1] ?? "")).toBeLessThanOrEqual(24);
+  });
+
   it("renders bounded compact and expanded live execution trajectories", () => {
     const trajectory = {
       prompt: `\u001b[31m${"very long prompt ".repeat(20)}\u001b[0m`,

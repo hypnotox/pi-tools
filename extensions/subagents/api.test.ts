@@ -192,6 +192,12 @@ describe("profile API", () => {
       execution,
     };
     expect(Value.Check(ExecutionDetailsSchema, details)).toBe(true);
+    expect(Value.Check(ExecutionDetailsSchema, { ...details, cwdDiffersFromParent: true })).toBe(
+      true,
+    );
+    expect(Value.Check(ExecutionDetailsSchema, { ...details, cwdDiffersFromParent: "yes" })).toBe(
+      false,
+    );
     expect(
       isExecutionDetails({
         ...details,

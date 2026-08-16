@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { clampThinkingLevel, getSupportedThinkingLevels, StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -155,11 +156,13 @@ function boundedExecutionFact(value: string): string {
 function boundedExecutionIdentity(
   profileId: string,
   cwd: string,
+  cwdDiffersFromParent: boolean | undefined,
   model: ConcreteModel,
-): Pick<ExecutionDetails, "profileId" | "cwd" | "model"> {
+): Pick<ExecutionDetails, "profileId" | "cwd" | "cwdDiffersFromParent" | "model"> {
   return {
     profileId: boundedExecutionFact(profileId),
     cwd: boundedExecutionFact(cwd),
+    ...(cwdDiffersFromParent === undefined ? {} : { cwdDiffersFromParent }),
     model: {
       ...model,
       provider: boundedExecutionFact(model.provider),
@@ -181,13 +184,14 @@ function initialExecution(prompt: string): NonNullable<ExecutionDetails["executi
 function detailsFromOutcome(
   profileId: string,
   cwd: string,
+  cwdDiffersFromParent: boolean | undefined,
   model: ConcreteModel,
   thinkingLevel: ThinkingLevel,
   outcome: ExecutionOutcome,
   extra: { queuePosition?: number; profileData?: ExecutionDetails["profileData"] } = {},
 ): ExecutionDetails {
   return {
-    ...boundedExecutionIdentity(profileId, cwd, model),
+    ...boundedExecutionIdentity(profileId, cwd, cwdDiffersFromParent, model),
     state: outcome.state,
     thinkingLevel,
     retryActive: outcome.retryActive,
@@ -327,18 +331,19 @@ export function createSubagentToolkit(
     let selectedModel = parentFallback;
     let thinkingLevel = (ctx.thinkingLevel ?? "off") as ThinkingLevel;
     let cwd = ctx.cwd;
+    let cwdDiffersFromParent: boolean | undefined;
     let preparedExecution: ExecutionDetails["execution"];
 
     const failureResult = (error: unknown, outcome?: ExecutionOutcome) => {
       const failure = truncateUtf8(error instanceof Error ? error.message : String(error));
       const details: ExecutionDetails = outcome
-        ? detailsFromOutcome(profile.id, cwd, selectedModel, thinkingLevel, {
+        ? detailsFromOutcome(profile.id, cwd, cwdDiffersFromParent, selectedModel, thinkingLevel, {
             ...outcome,
             state: signal?.aborted ? "cancelled" : "failed",
             failure,
           })
         : {
-            ...boundedExecutionIdentity(profile.id, cwd, selectedModel),
+            ...boundedExecutionIdentity(profile.id, cwd, cwdDiffersFromParent, selectedModel),
             state: signal?.aborted ? "cancelled" : "failed",
             thinkingLevel,
             retryActive: false,
@@ -396,6 +401,7 @@ export function createSubagentToolkit(
       if (!Value.Check(PreparedRunSchema, prepared))
         throw new Error("Profile prepared an invalid run");
       cwd = prepared.cwd;
+      cwdDiffersFromParent = resolve(prepared.cwd) !== resolve(parent.cwd);
       const execution = initialExecution(prepared.prompt);
       preparedExecution = execution;
       const tools = resolveTools(prepared.toolPolicy, parent.activeTools, registry.profileTools());
@@ -425,6 +431,7 @@ export function createSubagentToolkit(
                   const details = detailsFromOutcome(
                     profile.id,
                     prepared.cwd,
+                    cwdDiffersFromParent,
                     selectedModel,
                     thinkingLevel,
                     immutableSnapshot(update),
@@ -468,6 +475,7 @@ export function createSubagentToolkit(
             const details = detailsFromOutcome(
               profile.id,
               prepared.cwd,
+              cwdDiffersFromParent,
               selectedModel,
               thinkingLevel,
               finalOutcome,
@@ -489,7 +497,12 @@ export function createSubagentToolkit(
         },
         (queuePosition) => {
           const details: ExecutionDetails = {
-            ...boundedExecutionIdentity(profile.id, prepared.cwd, selectedModel),
+            ...boundedExecutionIdentity(
+              profile.id,
+              prepared.cwd,
+              cwdDiffersFromParent,
+              selectedModel,
+            ),
             state: "queued",
             thinkingLevel,
             queuePosition,
