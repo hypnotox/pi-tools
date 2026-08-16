@@ -58,6 +58,21 @@ export interface ExtensionHarness {
 }
 
 function createInertUi(): ExtensionUIContext {
+  const plain = (text: string): string => text;
+  const theme = {
+    fg: (_color: string, text: string) => text,
+    bg: (_color: string, text: string) => text,
+    bold: plain,
+    italic: plain,
+    underline: plain,
+    inverse: plain,
+    strikethrough: plain,
+    getFgAnsi: () => "",
+    getBgAnsi: () => "",
+    getColorMode: () => "truecolor",
+    getThinkingBorderColor: () => plain,
+    getBashModeBorderColor: () => plain,
+  } as unknown as ExtensionUIContext["theme"];
   return {
     select: async () => undefined,
     confirm: async () => false,
@@ -81,7 +96,7 @@ function createInertUi(): ExtensionUIContext {
     addAutocompleteProvider: () => undefined,
     setEditorComponent: () => undefined,
     getEditorComponent: () => undefined,
-    theme: {} as ExtensionUIContext["theme"],
+    theme,
     getAllThemes: () => [],
     getTheme: () => undefined,
     setTheme: () => ({ success: true }),
@@ -208,9 +223,9 @@ export function createExtensionHarness(
   const makeCommandContext = (
     overrides: Partial<ExtensionCommandContext> = {},
   ): ExtensionCommandContext => {
-    const replacement = () =>
+    const replacement = (sessionManager = SessionManager.inMemory(process.cwd())) =>
       ({
-        ...makeCommandContext(),
+        ...makeCommandContext({ sessionManager }),
         sendMessage: async () => undefined,
         sendUserMessage: async () => undefined,
       }) as ExtensionCommandContext & {
@@ -224,7 +239,7 @@ export function createExtensionHarness(
       newSession: async (request) => {
         const sessionManager = SessionManager.inMemory(process.cwd());
         await request?.setup?.(sessionManager);
-        await request?.withSession?.(replacement());
+        await request?.withSession?.(replacement(sessionManager));
         return { cancelled: false };
       },
       fork: async (_entryId, request) => {

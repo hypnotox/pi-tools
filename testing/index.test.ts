@@ -95,15 +95,30 @@ describe("createExtensionHarness", () => {
     expect("newSession" in ordinary).toBe(false);
     expect(ordinary.sessionManager.getCwd()).toBe(process.cwd());
     expect(ordinary.ui.getEditorText()).toBe("");
+    expect(ordinary.ui.theme.fg("accent", "plain")).toBe("plain");
     expect(ordinary.modelRegistry.getAll()).toEqual([]);
 
-    await command.newSession({ withSession: async (context) => void replacements.push(context) });
+    let setupSessionId: string | undefined;
+    let replacementSessionId: string | undefined;
+    await command.newSession({
+      setup: async (sessionManager) => {
+        setupSessionId = sessionManager.getSessionId();
+      },
+      withSession: async (context) => {
+        replacementSessionId = context.sessionManager.getSessionId();
+        replacements.push(context);
+      },
+    });
+    await command.fork("entry-id", {
+      withSession: async (context) => void replacements.push(context),
+    });
     await command.switchSession("other.jsonl", {
       withSession: async (context) => void replacements.push(context),
     });
 
-    expect(replacements).toHaveLength(2);
-    expect(replacements[0]).not.toBe(replacements[1]);
+    expect(replacementSessionId).toBe(setupSessionId);
+    expect(replacements).toHaveLength(3);
+    expect(new Set(replacements).size).toBe(3);
     for (const replacement of replacements) {
       expect(replacement).toMatchObject({
         sendMessage: expect.any(Function),

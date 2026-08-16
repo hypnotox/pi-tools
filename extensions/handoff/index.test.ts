@@ -106,9 +106,10 @@ async function createHarness(
       return { cancelled: false };
     },
   });
+  const queueCommand = shared.api.queueCommand.bind(shared.api);
   shared.api.queueCommand = (name, token) => {
     if (queueFails) throw new Error("queue failed");
-    shared.queuedCommands.push([name, token]);
+    queueCommand(name, token);
   };
   await shared.ready;
   await shared.invokeRaw("session_start", {}, context);
