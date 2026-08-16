@@ -15,7 +15,7 @@ Compact and expanded rendering need different presentations of the same persiste
 ## Decision
 
 1. `decision: retain-bounded-tool-results` Persist an optional text result captured from `tool_execution_end` on each retained subagent tool row, bounded by Pi's 50 KiB tool-output ceiling. Compact rendering shows the first logical result line within terminal width; expanded and resumed rendering wrap the stored bounded result.
-2. `decision: disclose-hidden-activity` Show a summary immediately above the activity rows whenever retained rows are omitted from the current view or older rows were discarded, formatted `N rows omitted; M rows discarded` when both counts are nonzero.
+2. `decision: disclose-hidden-activity` Show a summary immediately above the activity rows whenever retained rows are omitted from the current view or older rows were discarded. Render each nonzero component as `N rows omitted` and/or `M rows discarded`, in that order and separated by `; ` when both appear.
 3. `decision: scale-human-readable-durations` Format elapsed and tool durations with at most two decimal places below one millisecond, then use millisecond, second, minute, and hour scales as their magnitude increases.
 
 ## State changes
