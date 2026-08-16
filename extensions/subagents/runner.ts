@@ -277,16 +277,20 @@ export class SubprocessRunner {
       else outcome.omittedActivity++;
       emit();
     };
-    const history = (entry: ExecutionProjection["activity"][number]): void => {
-      if (outcome.execution.activity.length === MAX_EXECUTION_HISTORY) {
+    const boundHistory = (reservedRows: number): void => {
+      while (outcome.execution.activity.length > MAX_EXECUTION_HISTORY - reservedRows) {
         outcome.execution.activity.shift();
         outcome.execution.omittedActivity++;
       }
+    };
+    const history = (entry: ExecutionProjection["activity"][number]): void => {
       outcome.execution.activity.push(entry);
+      boundHistory(outcome.execution.unfinishedThinking === undefined ? 0 : 1);
     };
     let unfinishedThinking = "";
     const thinking = (delta: unknown): void => {
       if (typeof delta !== "string") return;
+      delete outcome.execution.unfinishedThinking;
       const lines = (unfinishedThinking + delta).split("\n");
       unfinishedThinking = truncateUtf8(lines.pop() ?? "", MAX_ACTIVITY_TEXT_BYTES);
       for (const line of lines) {
@@ -294,15 +298,16 @@ export class SubprocessRunner {
         if (text) history({ kind: "thinking", text: truncateUtf8(text, MAX_ACTIVITY_TEXT_BYTES) });
       }
       const unfinished = unfinishedThinking.trim();
-      if (unfinished)
+      if (unfinished) {
         outcome.execution.unfinishedThinking = truncateUtf8(unfinished, MAX_ACTIVITY_TEXT_BYTES);
-      else delete outcome.execution.unfinishedThinking;
+        boundHistory(1);
+      } else delete outcome.execution.unfinishedThinking;
     };
     const flushThinking = (): void => {
       const text = unfinishedThinking.trim();
-      if (text) history({ kind: "thinking", text: truncateUtf8(text, MAX_ACTIVITY_TEXT_BYTES) });
       unfinishedThinking = "";
       delete outcome.execution.unfinishedThinking;
+      if (text) history({ kind: "thinking", text: truncateUtf8(text, MAX_ACTIVITY_TEXT_BYTES) });
     };
 
     let childCwd = "";

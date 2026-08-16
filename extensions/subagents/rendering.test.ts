@@ -61,7 +61,7 @@ describe("renderExecution", () => {
   it("renders bounded compact and expanded live execution trajectories", () => {
     const trajectory = {
       prompt: `\u001b[31m${"very long prompt ".repeat(20)}\u001b[0m`,
-      activity: Array.from({ length: 50 }, (_, index) => ({
+      activity: Array.from({ length: 49 }, (_, index) => ({
         kind: "thinking" as const,
         text: `thought-${index}`,
       })),
@@ -81,17 +81,15 @@ describe("renderExecution", () => {
     expect(compactLines).toContainEqual(expect.stringContaining("running"));
     expect(compactLines).toContainEqual(expect.stringContaining("1.2s"));
     expect(queuedLines.join("\n")).toContain("queue position 2");
-    expect(queuedLines.join("\n")).toContain("thought-26");
+    expect(queuedLines.join("\n")).toContain("thought-25");
     expect(
       compactLines.filter((line) => line.includes("thought-") || line.includes("unfinished")),
     ).toHaveLength(25);
     expect(
       expandedLines.filter((line) => line.includes("thought-") || line.includes("unfinished")),
     ).toHaveLength(50);
-    const compactOmission = compactLines.findIndex((line) => line.startsWith("26 rows omitted;"));
-    const expandedOmission = expandedLines.findIndex((line) =>
-      line.startsWith("1 row omitted; 3 rows"),
-    );
+    const compactOmission = compactLines.findIndex((line) => line.startsWith("25 rows omitted;"));
+    const expandedOmission = expandedLines.findIndex((line) => line.startsWith("3 rows discarded"));
     expect(compactOmission).toBeGreaterThanOrEqual(0);
     expect(compactLines.slice(compactOmission, compactOmission + 2).join(" ")).toContain(
       "3 rows discarded",

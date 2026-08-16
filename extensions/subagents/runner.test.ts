@@ -561,10 +561,10 @@ describe("SubprocessRunner", () => {
     ]);
   });
 
-  it("evicts the oldest thinking and tool rows while retaining the unfinished thinking line", async () => {
+  it("counts the unfinished thinking line toward the retained execution history", async () => {
     const deps = dependencies();
     const { promise } = await launch(deps);
-    for (let index = 0; index < 51; index++)
+    for (let index = 0; index < 50; index++)
       deps.child.stdout.emit(
         "data",
         Buffer.from(
@@ -583,7 +583,7 @@ describe("SubprocessRunner", () => {
       omittedActivity: 1,
       unfinishedThinking: "unfinished",
     });
-    expect(result.execution.activity).toHaveLength(50);
+    expect(result.execution.activity).toHaveLength(49);
     expect((result.execution.activity as Array<Record<string, unknown>>)[0]).toMatchObject({
       text: "line 1",
     });
