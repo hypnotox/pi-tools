@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-_No decisions are in flight._
+- [ADR-composable-extension-testing-recorder: Composable Extension Testing Recorder](composable-extension-testing-recorder.md) (Implementing)
 
 ## History
 

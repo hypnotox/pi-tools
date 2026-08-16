@@ -138,9 +138,10 @@ Commit `.awf/awf.lock`, authored `.awf/` changes, and regenerated outputs togeth
 TypeScript-aware extension tests can import the source-only `pi-tools/testing` boundary:
 
 ```ts
-import { createExtensionHarness } from "pi-tools/testing";
-const harness = createExtensionHarness(myExtension);
-await harness.ready; // Required before inspecting registrations from an async factory.
+import { createExtensionRecorder } from "pi-tools/testing";
+const recorder = createExtensionRecorder({ exec: async () => ({ stdout: "", stderr: "", code: 0, killed: false }) });
+const installation = recorder.install(myExtension);
+await installation; // Await an async factory before inspecting its registrations.
 ```
 
-The framework-neutral harness is the complete repository home for reusable documented Pi extension seams, contexts, lifecycle handlers, registrations, discovery, event traffic, and direct invocation. `invokeRaw` and `invokeToolDirect` intentionally call handlers and tools directly: they do not simulate Pi middleware, error envelopes, or session scheduling. It is developed against the Pi version pinned for this repository. Reusable Pi-boundary fixtures belong here; extension-specific clocks, countdowns, schedulers, runners, rendering, policy, deferred outcomes, models, subprocesses, streams, and schemas remain local to their domain tests. A separate credential-free test proves real extension loading and tool registration through Pi's public SDK.
+The framework-neutral recorder is the complete repository home for reusable documented Pi extension seams, contexts, lifecycle handlers, registrations, discovery, event traffic, injectable `exec`, recording UI, mutable model registry, and direct invocation. Configure omissions and injected behavior before installing factories. `invokeRaw`, `invokeToolDirect`, and `invokeCommandDirect` intentionally call registered functions directly: raw listener-error propagation is recorder behavior, not Pi runtime fidelity, and these helpers do not simulate Pi middleware, error envelopes, command routing, or session scheduling. The recorder deliberately does not mirror every `ExtensionAPI` capability. It is developed against the Pi version pinned for this repository. Reusable Pi-boundary fixtures belong here; extension-specific clocks, countdowns, schedulers, runners, rendering, policy, deferred outcomes, models, subprocesses, streams, and schemas remain local to their domain tests. A separate credential-free test proves real extension loading and tool registration through Pi's public SDK.

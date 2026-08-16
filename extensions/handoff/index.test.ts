@@ -1,8 +1,24 @@
-import { createExtensionHarness } from "pi-tools/testing";
+import type { ToolInfo } from "@earendil-works/pi-coding-agent";
+import { createExtensionRecorder } from "pi-tools/testing";
+import { Type } from "typebox";
 import { describe, expect, it, vi } from "vitest";
 import { type HandoffDependencies, handoffEnvelope, registerHandoff } from "./index.js";
 
 type CountdownComponent = { handleInput(data: string): void };
+
+function toolInfo(name: string): ToolInfo {
+  return {
+    name,
+    description: `${name} test tool`,
+    parameters: Type.Object({}),
+    sourceInfo: {
+      path: `<test:${name}>`,
+      source: "test",
+      scope: "temporary",
+      origin: "top-level",
+    },
+  };
+}
 
 async function createHarness(
   options: {
@@ -32,8 +48,9 @@ async function createHarness(
     }),
     clearTimeout,
   };
-  const shared = createExtensionHarness((pi) => registerHandoff(pi, dependencies));
-  shared.allTools.push(...(options.existingTools ?? []).map((name) => ({ name })));
+  const shared = createExtensionRecorder();
+  void shared.install((pi) => registerHandoff(pi, dependencies));
+  shared.allTools.push(...(options.existingTools ?? []).map(toolInfo));
   const notices: unknown[][] = [];
   const editor: string[] = [];
   const replacementEditor: string[] = [];
@@ -123,7 +140,7 @@ async function createHarness(
     sessions,
     execute: (kickoff = "Continue.") =>
       shared.invokeToolDirect("handoff_session", { kickoff }, { id: "call", context }),
-    continue: () => shared.commands.get("handoff-session-continue")?.handler("request-id", context),
+    continue: () => shared.invokeCommandDirect("handoff-session-continue", "request-id", context),
     finish: (value = true) => done?.(value),
     expireCountdown: () => timeoutCallback?.(),
     tickCountdown: () => intervalCallback?.(),
@@ -154,7 +171,7 @@ describe("fresh-session handoff extension", () => {
     ).resolves.toEqual([undefined]);
 
     expect(h.tools).toHaveLength(0);
-    expect(h.commands.size).toBe(0);
+    expect(h.commands).toHaveLength(0);
   });
 
   it("suppresses only the imminent threshold compaction while handoff is pending", async () => {

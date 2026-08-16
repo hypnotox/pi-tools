@@ -1,4 +1,4 @@
-import { createExtensionHarness } from "pi-tools/testing";
+import { createExtensionRecorder } from "pi-tools/testing";
 import { describe, expect, it } from "vitest";
 import { contextUsageLine, formatCount, registerContextUsage } from "./index.js";
 
@@ -32,7 +32,8 @@ describe("context usage extension", () => {
   });
 
   it("injects a fresh hidden, package-neutral message for each model request", async () => {
-    const harness = createExtensionHarness(registerContextUsage);
+    const harness = createExtensionRecorder();
+    void harness.install(registerContextUsage);
     const messages = [{ role: "user", content: "hello" }];
     const context = harness.makeContext({
       getContextUsage: () => ({ tokens: 2_000, contextWindow: 4_000, percent: 50 }),

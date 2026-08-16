@@ -1,4 +1,4 @@
-import { createExtensionHarness } from "pi-tools/testing";
+import { createExtensionRecorder } from "pi-tools/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { guardRuntime, versionSupported } from "./runtime-guard.js";
 
@@ -26,12 +26,10 @@ describe("runtime compatibility guard", () => {
 
   it.each(REQUIRED_APIS)("refuses registration when %s is missing", async (missingApi) => {
     let supported = true;
-    const harness = createExtensionHarness(
-      (pi) => {
-        supported = guardRuntime(pi, [missingApi]);
-      },
-      { omit: [missingApi] },
-    );
+    const harness = createExtensionRecorder({ omit: [missingApi] });
+    void harness.install((pi) => {
+      supported = guardRuntime(pi, [missingApi]);
+    });
 
     expect(await harness.ready).toBeUndefined();
     expect(supported).toBe(false);
@@ -52,7 +50,8 @@ describe("runtime compatibility guard", () => {
     "refuses registration and notifies once for unsupported runtime %s",
     async (runtimeVersion) => {
       let supported = true;
-      const harness = createExtensionHarness((pi) => {
+      const harness = createExtensionRecorder();
+      void harness.install((pi) => {
         supported = guardRuntime(pi, REQUIRED_APIS, runtimeVersion);
       });
       const notify = vi.fn();
@@ -71,7 +70,8 @@ describe("runtime compatibility guard", () => {
 
   it("accepts the installed runtime when requested APIs are present", async () => {
     let supported = false;
-    const harness = createExtensionHarness((pi) => {
+    const harness = createExtensionRecorder();
+    void harness.install((pi) => {
       supported = guardRuntime(pi, REQUIRED_APIS);
     });
 

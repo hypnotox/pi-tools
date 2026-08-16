@@ -1,10 +1,11 @@
+import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 import type {
   ExecutionDetails,
   ProfileCapability,
   ProfileDefinition,
   ProfileRegistration,
 } from "pi-tools/subagent-profile";
-import { createExtensionHarness } from "pi-tools/testing";
+import { createExtensionRecorder } from "pi-tools/testing";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import ts from "typescript";
@@ -45,6 +46,20 @@ const consumerProfile: ProfileDefinition<
   }),
 };
 
+function toolInfo(name: string): ToolInfo {
+  return {
+    name,
+    description: `${name} test tool`,
+    parameters: Type.Object({}),
+    sourceInfo: {
+      path: `<test:${name}>`,
+      source: "test",
+      scope: "temporary",
+      origin: "top-level",
+    },
+  };
+}
+
 interface RegisteredTool {
   name: string;
   execute: (
@@ -62,9 +77,10 @@ interface RegisteredTool {
 }
 
 function integrationHarness() {
-  const harness = createExtensionHarness(() => undefined);
+  const harness = createExtensionRecorder();
+  void harness.install(() => undefined);
   harness.activeTools.push("read");
-  harness.allTools.push({ name: "read" });
+  harness.allTools.push(toolInfo("read"));
   const context = harness.makeContext({
     cwd: "/consumer/project",
     model: { provider: "provider", id: "model", reasoning: false, thinkingLevelMap: {} },
