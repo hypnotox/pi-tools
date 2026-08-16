@@ -35,9 +35,11 @@ Consumers running Node.js 20 must upgrade before installing v0.3.0. This is a br
 change, but it removes a package promise that current Pi cannot satisfy and avoids failures during
 module import.
 
-Release evidence moves to Node.js 22. A clean run on Node.js 22.23.2 proves the new floor with the
-current lockfile, while ordinary development may use a newer supported runtime. Future Pi upgrades
-must prompt another baseline review when their engine requirement rises.
+Release evidence moves to Node.js 22. A clean run on the approved Node.js 22.23.2 verification
+runtime proves the current lockfile on that supported version; the exact 22.19.0 floor follows the
+current Pi dependency engine contracts rather than a direct 22.19.0 run. Ordinary development may
+use a newer supported runtime. Future Pi upgrades must prompt another baseline review when their
+engine requirement rises.
 
 ## Alternatives Considered
 
@@ -45,6 +47,7 @@ must prompt another baseline review when their engine requirement rises.
 |---|---|
 | Waive the Node.js 20 failure | Publishes a false engine contract and contradicts the required release gate. |
 | Keep advertising Node.js 20 without testing it | Moves the failure to consumers and leaves documentation inconsistent with dependencies. |
+| Downgrade Pi to a release that supports Node.js 20 | Abandons the approved current Pi 0.84.2 SDK target and requires renewed compatibility work for the completed v0.3.0 recorder. |
 | Decouple every test and extension from Pi runtime imports | Expands into a broad compatibility architecture change and still cannot validate the current public SDK on an unsupported runtime. |
 
 ## Status history
