@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: reusable-extension-testing-boundary
-status: Proposed
+status: Implementing
 date: 2026-08-16
 ---
 # ADR-reusable-extension-testing-boundary: Reusable Extension Testing Boundary
@@ -65,3 +65,5 @@ error conversion, loading, and session behavior require the separate SDK-backed 
 ## Status history
 
 - 2026-08-16: Proposed
+- 2026-08-16: Implementing; content-sha256: 09bba0c9054d48d0a8945adb07ae5a8a015ccb77aeb2d7f6cd8706395b7048dc
+- 2026-08-16: Applied; operations: add `development/extension-toolchain:reusable-extension-testing`

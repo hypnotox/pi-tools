@@ -1,10 +1,10 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type {
   ExecutionDetails,
   ProfileCapability,
   ProfileDefinition,
   ProfileRegistration,
 } from "pi-tools/subagent-profile";
+import { createExtensionHarness } from "pi-tools/testing";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import ts from "typescript";
@@ -61,40 +61,12 @@ interface RegisteredTool {
 }
 
 function integrationHarness() {
-  const tools: RegisteredTool[] = [];
-  const lifecycle = new Map<string, Array<(event: unknown, context: unknown) => unknown>>();
-  const bus = new Map<string, Array<(data: unknown) => void>>();
-  const api = {
-    registerTool: (tool: RegisteredTool) => tools.push(tool),
-    getActiveTools: () => ["read"],
-    getAllTools: () => [{ name: "read" }, ...tools.map(({ name }) => ({ name }))],
-    setActiveTools: vi.fn(),
-    on: (event: string, handler: (event: unknown, context: unknown) => unknown) => {
-      const handlers = lifecycle.get(event) ?? [];
-      handlers.push(handler);
-      lifecycle.set(event, handlers);
-    },
-    events: {
-      on: (event: string, handler: (data: unknown) => void) => {
-        const handlers = bus.get(event) ?? [];
-        handlers.push(handler);
-        bus.set(event, handlers);
-        return () => undefined;
-      },
-      emit: (event: string, data: unknown) =>
-        bus.get(event)?.forEach((handler) => {
-          handler(data);
-        }),
-    },
-  };
-  const context = {
+  const harness = createExtensionHarness(() => undefined);
+  harness.activeTools.push("read");
+  harness.allTools.push({ name: "read" });
+  const context = harness.makeContext({
     cwd: "/consumer/project",
-    model: {
-      provider: "provider",
-      id: "model",
-      reasoning: false,
-      thinkingLevelMap: {},
-    },
+    model: { provider: "provider", id: "model", reasoning: false, thinkingLevelMap: {} },
     thinkingLevel: "off",
     isProjectTrusted: () => true,
     modelRegistry: {
@@ -102,14 +74,18 @@ function integrationHarness() {
         provider === "provider" && id === "model"
           ? { provider, id, reasoning: false, thinkingLevelMap: {} }
           : undefined,
+    } as never,
+    sessionManager: { getBranch: () => [] } as never,
+  } as never);
+  return {
+    ...harness,
+    tools: harness.tools as unknown as RegisteredTool[],
+    context,
+    start: () => {
+      for (const handler of harness.handlers.get("session_start") ?? [])
+        handler({} as never, context);
     },
-    sessionManager: { getBranch: () => [] },
   };
-  const start = () =>
-    lifecycle.get("session_start")?.forEach((handler) => {
-      handler({}, context);
-    });
-  return { api: api as unknown as ExtensionAPI, tools, start, context };
 }
 
 describe("subagent profile package contract", () => {
@@ -126,27 +102,29 @@ describe("subagent profile package contract", () => {
       if (capability.protocolVersion !== SUBAGENT_PROFILE_PROTOCOL_VERSION) return;
       receipt = capability.register(batch);
     });
-    createSubagentToolkit(harness.api, {
-      runner: {
-        run: vi.fn(async () => ({
-          state: "completed" as const,
-          report: "raw",
-          usage: {
-            input: 1,
-            output: 2,
-            cacheRead: 0,
-            cacheWrite: 0,
-            totalTokens: 3,
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-          },
-          activity: [],
-          omittedActivity: 0,
-          retries: 0,
-          retryActive: false,
-        })),
-        shutdown: vi.fn(async () => undefined),
-      },
-    });
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: {
+          run: vi.fn(async () => ({
+            state: "completed" as const,
+            report: "raw",
+            usage: {
+              input: 1,
+              output: 2,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 3,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+            activity: [],
+            omittedActivity: 0,
+            retries: 0,
+            retryActive: false,
+          })),
+          shutdown: vi.fn(async () => undefined),
+        },
+      }),
+    );
     expect(receipt?.state).toBe("pending");
     harness.start();
     expect(receipt?.state).toBe("registered");

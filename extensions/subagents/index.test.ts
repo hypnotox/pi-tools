@@ -1,6 +1,6 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createExtensionHarness } from "pi-tools/testing";
 import { Type } from "typebox";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ExecutionDetails,
   ExecutionOutcome,
@@ -48,65 +48,30 @@ interface RegisteredTool {
   }>;
 }
 
-type Handler = (event: unknown, context: unknown) => unknown;
-
-function fakePi(
+function createSubagentHarness(
   configuredTools = ["read"],
-  eventHandlers = new Map<string, Array<(data: unknown) => void>>(),
+  eventBus?: Map<string, Set<(data: unknown) => void>>,
 ) {
-  const tools: RegisteredTool[] = [];
-  const handlers = new Map<string, Handler[]>();
-  let activeTools = [...configuredTools];
-  const api = {
-    registerTool: (tool: RegisteredTool) => tools.push(tool),
-    getActiveTools: () => [...activeTools],
-    getAllTools: () => [
-      ...configuredTools.map((name) => ({ name })),
-      ...tools.map(({ name }) => ({ name })),
-    ],
-    setActiveTools: (names: string[]) => {
-      activeTools = [...names];
-    },
-    on: (event: string, handler: Handler) => {
-      const existing = handlers.get(event) ?? [];
-      existing.push(handler);
-      handlers.set(event, existing);
-    },
-    events: {
-      on: (event: string, handler: (data: unknown) => void) => {
-        const existing = eventHandlers.get(event) ?? [];
-        existing.push(handler);
-        eventHandlers.set(event, existing);
-        return () => {
-          const current = eventHandlers.get(event) ?? [];
-          eventHandlers.set(
-            event,
-            current.filter((candidate) => candidate !== handler),
-          );
-        };
-      },
-      emit: (event: string, data: unknown) => {
-        eventHandlers.get(event)?.forEach((handler) => {
-          handler(data);
-        });
-      },
-    },
+  const harness = createExtensionHarness(
+    () => undefined,
+    eventBus === undefined ? {} : { eventBus },
+  );
+  harness.activeTools.push(...configuredTools);
+  harness.allTools.push(...configuredTools.map((name) => ({ name })));
+  const start = () => {
+    for (const handler of harness.handlers.get("session_start") ?? [])
+      handler({} as never, context() as never);
   };
-  const start = () =>
-    handlers.get("session_start")?.forEach((handler) => {
-      handler({}, context());
-    });
   const shutdown = async () => {
-    for (const handler of handlers.get("session_shutdown") ?? []) await handler({}, context());
+    for (const handler of harness.handlers.get("session_shutdown") ?? [])
+      await handler({} as never, context() as never);
   };
   return {
-    api: api as unknown as ExtensionAPI,
-    tools,
-    handlers,
-    eventHandlers,
+    ...harness,
+    tools: harness.tools as unknown as RegisteredTool[],
     start,
     shutdown,
-    activeTools: () => [...activeTools],
+    activeTools: () => [...harness.activeTools],
   };
 }
 
@@ -178,44 +143,57 @@ function completedOutcome(): ExecutionOutcome {
   };
 }
 
+beforeEach(() => {
+  delete process.env[CHILD_MARKER];
+});
+
 afterEach(() => {
   delete process.env[CHILD_MARKER];
 });
 
 describe("subagent toolkit adapter", () => {
   it("registers exactly one default tool and deactivates it in marked children", () => {
-    const parent = fakePi();
-    createSubagentToolkit(parent.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    const parent = createSubagentHarness();
+    void parent.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     parent.start();
     expect(parent.tools.map((tool) => tool.name)).toEqual(["subagent"]);
 
     process.env[CHILD_MARKER] = "1";
-    const child = fakePi();
+    const child = createSubagentHarness();
     let summaryAnnouncements = 0;
     child.api.events.on(SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT, () => {
       summaryAnnouncements++;
     });
-    createSubagentToolkit(child.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    void child.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     child.start();
     expect(child.tools).toHaveLength(0);
+    child.api.events.emit(SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT, {
+      protocolVersion: SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION,
+      correlationId: "marked-child",
+    });
     expect(summaryAnnouncements).toBe(0);
-    expect(child.eventHandlers.get(SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT)).toBeUndefined();
   });
 
   it("resolves the registry model, clamps thinking, removes profile tools, and preserves facts", async () => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const run = vi.fn(async (request: { onUpdate?: (value: ExecutionOutcome) => void }) => {
       const outcome = completedOutcome();
       request.onUpdate?.({ ...outcome, state: "running" });
       return outcome;
     });
-    createSubagentToolkit(harness.api, {
-      runner: { run, shutdown: vi.fn(async () => undefined) },
-    });
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run, shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     harness.start();
     const updates: unknown[] = [];
     const result = await harness.tools[0]?.execute(
@@ -248,7 +226,7 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("carries immutable execution projections through live updates and persisted details", async () => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const execution = {
       prompt: "prepared task",
       activity: [{ kind: "thinking" as const, text: "live thought" }],
@@ -262,7 +240,9 @@ describe("subagent toolkit adapter", () => {
       request.onUpdate?.({ ...outcome, state: "running" });
       return outcome;
     });
-    createSubagentToolkit(harness.api, { runner: { run, shutdown: vi.fn(async () => undefined) } });
+    void harness.install((api) =>
+      createSubagentToolkit(api, { runner: { run, shutdown: vi.fn(async () => undefined) } }),
+    );
     harness.start();
     const updates: unknown[] = [];
     const result = await harness.tools[0]?.execute(
@@ -291,12 +271,14 @@ describe("subagent toolkit adapter", () => {
     ["synchronous", () => ({ provider: "p", id: "m", thinkingLevels: ["off"] as ["off"] })],
     ["asynchronous", async () => ({ provider: "p", id: "m", thinkingLevels: ["off"] as ["off"] })],
   ])("awaits %s model selection before validation and lookup", async (_kind, selectModel) => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const run = vi.fn(async () => completedOutcome());
-    createSubagentToolkit(harness.api, {
-      runner: { run, shutdown: vi.fn(async () => undefined) },
-      profiles: [customProfile({ selectModel })],
-    });
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run, shutdown: vi.fn(async () => undefined) },
+        profiles: [customProfile({ selectModel })],
+      }),
+    );
     harness.start();
     const result = await harness.tools[0]?.execute(
       "call",
@@ -315,12 +297,14 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("rejects an invalid asynchronously selected model before registry lookup", async () => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const run = vi.fn();
-    createSubagentToolkit(harness.api, {
-      runner: { run, shutdown: vi.fn(async () => undefined) },
-      profiles: [customProfile({ selectModel: async () => ({ provider: "p" }) as never })],
-    });
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run, shutdown: vi.fn(async () => undefined) },
+        profiles: [customProfile({ selectModel: async () => ({ provider: "p" }) as never })],
+      }),
+    );
     harness.start();
     const toolContext = context();
     const find = vi.fn();
@@ -341,19 +325,21 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("transfers callback state, transforms reports, and persists schema-validated data", async () => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const beforeRun = vi.fn(() => ({ token: "prepared" }));
     const afterRun = vi.fn((_outcome, state) => ({
       report: `transformed ${String((state as { token: string }).token)}`,
       profileData: { summary: "bounded" },
     }));
-    createSubagentToolkit(harness.api, {
-      runner: {
-        run: vi.fn(async () => completedOutcome()),
-        shutdown: vi.fn(async () => undefined),
-      },
-      profiles: [customProfile({ beforeRun, afterRun })],
-    });
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: {
+          run: vi.fn(async () => completedOutcome()),
+          shutdown: vi.fn(async () => undefined),
+        },
+        profiles: [customProfile({ beforeRun, afterRun })],
+      }),
+    );
     harness.start();
     const result = await harness.tools[0]?.execute(
       "call",
@@ -371,30 +357,32 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("protects runner outcomes and detaches validated profile data from callback aliases", async () => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const originalOutcome = completedOutcome();
     let callbackOutcome: ExecutionOutcome | undefined;
     const retained = { summary: "bounded", nested: { value: "original" } };
-    createSubagentToolkit(harness.api, {
-      runner: {
-        run: vi.fn(async () => originalOutcome),
-        shutdown: vi.fn(async () => undefined),
-      },
-      profiles: [
-        customProfile({
-          profileDataSchema: Type.Object({
-            summary: Type.String(),
-            nested: Type.Object({ value: Type.String() }),
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: {
+          run: vi.fn(async () => originalOutcome),
+          shutdown: vi.fn(async () => undefined),
+        },
+        profiles: [
+          customProfile({
+            profileDataSchema: Type.Object({
+              summary: Type.String(),
+              nested: Type.Object({ value: Type.String() }),
+            }),
+            afterRun: (outcome) => {
+              callbackOutcome = outcome;
+              Reflect.set(outcome, "report", "tampered");
+              Reflect.set(outcome.activity[0] ?? {}, "text", "tampered");
+              return { profileData: retained };
+            },
           }),
-          afterRun: (outcome) => {
-            callbackOutcome = outcome;
-            Reflect.set(outcome, "report", "tampered");
-            Reflect.set(outcome.activity[0] ?? {}, "text", "tampered");
-            return { profileData: retained };
-          },
-        }),
-      ],
-    });
+        ],
+      }),
+    );
     harness.start();
     const result = await harness.tools[0]?.execute(
       "call",
@@ -422,18 +410,20 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("normalizes callback failures and profile-data schema mismatches", async () => {
-    const harness = fakePi();
-    createSubagentToolkit(harness.api, {
-      runner: {
-        run: vi.fn(async () => completedOutcome()),
-        shutdown: vi.fn(async () => undefined),
-      },
-      profiles: [
-        customProfile({
-          afterRun: () => ({ profileData: { summary: 42 } }) as never,
-        }),
-      ],
-    });
+    const harness = createSubagentHarness();
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: {
+          run: vi.fn(async () => completedOutcome()),
+          shutdown: vi.fn(async () => undefined),
+        },
+        profiles: [
+          customProfile({
+            afterRun: () => ({ profileData: { summary: 42 } }) as never,
+          }),
+        ],
+      }),
+    );
     harness.start();
     const invalid = await harness.tools[0]?.execute(
       "call",
@@ -460,20 +450,22 @@ describe("subagent toolkit adapter", () => {
     });
     expect(invalid?.usage).toEqual(invalid?.details.usage);
 
-    const throwing = fakePi();
-    createSubagentToolkit(throwing.api, {
-      runner: {
-        run: vi.fn(async () => completedOutcome()),
-        shutdown: vi.fn(async () => undefined),
-      },
-      profiles: [
-        customProfile({
-          beforeRun: () => {
-            throw new Error("callback failed");
-          },
-        }),
-      ],
-    });
+    const throwing = createSubagentHarness();
+    void throwing.install((api) =>
+      createSubagentToolkit(api, {
+        runner: {
+          run: vi.fn(async () => completedOutcome()),
+          shutdown: vi.fn(async () => undefined),
+        },
+        profiles: [
+          customProfile({
+            beforeRun: () => {
+              throw new Error("callback failed");
+            },
+          }),
+        ],
+      }),
+    );
     throwing.start();
     const failed = await throwing.tools[0]?.execute(
       "call",
@@ -491,19 +483,27 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("retains the prepared prompt when a queued invocation is cancelled", async () => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const firstOutcome = deferred<ExecutionOutcome>();
     const run = vi
       .fn()
       .mockImplementationOnce(() => firstOutcome.promise)
       .mockResolvedValueOnce(completedOutcome());
-    createSubagentToolkit(harness.api, {
-      runner: { run, shutdown: vi.fn(async () => undefined) },
-      profiles: [customProfile()],
-    });
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run, shutdown: vi.fn(async () => undefined) },
+        profiles: [customProfile()],
+      }),
+    );
     harness.start();
     const tool = harness.tools[0];
-    const first = tool?.execute("first", { task: "first task" }, undefined, undefined, context());
+    const first = tool?.execute(
+      "first",
+      { task: "first task" },
+      undefined,
+      undefined,
+      context() as never,
+    );
     await new Promise((resolve) => setTimeout(resolve, 0));
     const controller = new AbortController();
     const updates: Array<{ details: ExecutionDetails }> = [];
@@ -532,22 +532,24 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("rejects duplicate prepared tool names before launching", async () => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const run = vi.fn(async () => completedOutcome());
-    createSubagentToolkit(harness.api, {
-      runner: { run, shutdown: vi.fn(async () => undefined) },
-      profiles: [
-        customProfile({
-          prepare: ({ parent }) =>
-            ({
-              cwd: parent.cwd,
-              systemPrompt: "custom system",
-              prompt: "focus",
-              toolPolicy: { mode: "allowlist", tools: ["child_only", "child_only"] },
-            }) as never,
-        }),
-      ],
-    });
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run, shutdown: vi.fn(async () => undefined) },
+        profiles: [
+          customProfile({
+            prepare: ({ parent }) =>
+              ({
+                cwd: parent.cwd,
+                systemPrompt: "custom system",
+                prompt: "focus",
+                toolPolicy: { mode: "allowlist", tools: ["child_only", "child_only"] },
+              }) as never,
+          }),
+        ],
+      }),
+    );
     harness.start();
     const result = await harness.tools[0]?.execute(
       "call",
@@ -565,12 +567,14 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("rejects invalid thinking callback output before launching", async () => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const run = vi.fn(async () => completedOutcome());
-    createSubagentToolkit(harness.api, {
-      runner: { run, shutdown: vi.fn(async () => undefined) },
-      profiles: [customProfile({ selectThinkingLevel: () => "invalid" as never })],
-    });
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run, shutdown: vi.fn(async () => undefined) },
+        profiles: [customProfile({ selectThinkingLevel: () => "invalid" as never })],
+      }),
+    );
     harness.start();
     const result = await harness.tools[0]?.execute(
       "call",
@@ -588,26 +592,28 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("bounds persisted profile and CWD execution facts", async () => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const oversized = "é".repeat(MAX_EXECUTION_FACT_BYTES);
     const characterBoundary = `${"a".repeat(MAX_EXECUTION_FACT_CHARACTERS - 1)}😀z`;
-    createSubagentToolkit(harness.api, {
-      runner: {
-        run: vi.fn(async () => completedOutcome()),
-        shutdown: vi.fn(async () => undefined),
-      },
-      profiles: [
-        customProfile({
-          id: characterBoundary,
-          prepare: ({ args }) => ({
-            cwd: oversized,
-            systemPrompt: "system",
-            prompt: (args as { task: string }).task,
-            toolPolicy: { mode: "allowlist", tools: [] },
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: {
+          run: vi.fn(async () => completedOutcome()),
+          shutdown: vi.fn(async () => undefined),
+        },
+        profiles: [
+          customProfile({
+            id: characterBoundary,
+            prepare: ({ args }) => ({
+              cwd: oversized,
+              systemPrompt: "system",
+              prompt: (args as { task: string }).task,
+              toolPolicy: { mode: "allowlist", tools: [] },
+            }),
           }),
-        }),
-      ],
-    });
+        ],
+      }),
+    );
     harness.start();
     const result = await harness.tools[0]?.execute(
       "call",
@@ -626,17 +632,19 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("retains usage on terminal cancellation after child launch", async () => {
-    const harness = fakePi();
-    createSubagentToolkit(harness.api, {
-      runner: {
-        run: vi.fn(async () => ({
-          ...completedOutcome(),
-          state: "cancelled" as const,
-          failure: "cancelled",
-        })),
-        shutdown: vi.fn(async () => undefined),
-      },
-    });
+    const harness = createSubagentHarness();
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: {
+          run: vi.fn(async () => ({
+            ...completedOutcome(),
+            state: "cancelled" as const,
+            failure: "cancelled",
+          })),
+          shutdown: vi.fn(async () => undefined),
+        },
+      }),
+    );
     harness.start();
     const result = await harness.tools[0]?.execute(
       "call",
@@ -650,10 +658,12 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("normalizes unknown models and marks terminal results as errors", async () => {
-    const harness = fakePi();
-    createSubagentToolkit(harness.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    const harness = createSubagentHarness();
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     harness.start();
     const result = await harness.tools[0]?.execute(
       "call",
@@ -675,14 +685,14 @@ describe("subagent toolkit adapter", () => {
           details: result?.details,
           content: result?.content,
           isError: false,
-        },
-        context(),
+        } as never,
+        context() as never,
       ),
     ).toEqual({ isError: true });
   });
 
   it("forwards prompt metadata and publishes finalization only after tool installation", () => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const results: ProfileRegistrationResult[] = [];
     harness.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
       (data as ProfileCapability).register({
@@ -700,9 +710,11 @@ describe("subagent toolkit adapter", () => {
       results.push(data as ProfileRegistrationResult);
       expect(harness.tools.map((tool) => tool.name)).toContain("custom_agent");
     });
-    createSubagentToolkit(harness.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     harness.start();
     expect(harness.tools[0]).toMatchObject({
       name: "custom_agent",
@@ -715,18 +727,23 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("turns a returned policy failure into a failed result while cancellation remains authoritative", async () => {
-    const policyFailure = fakePi();
-    createSubagentToolkit(policyFailure.api, {
-      runner: {
-        run: vi.fn(async () => completedOutcome()),
-        shutdown: vi.fn(async () => undefined),
-      },
-      profiles: [
-        customProfile({
-          afterRun: () => ({ failure: "commit policy failed", profileData: { summary: "audit" } }),
-        }),
-      ],
-    });
+    const policyFailure = createSubagentHarness();
+    void policyFailure.install((api) =>
+      createSubagentToolkit(api, {
+        runner: {
+          run: vi.fn(async () => completedOutcome()),
+          shutdown: vi.fn(async () => undefined),
+        },
+        profiles: [
+          customProfile({
+            afterRun: () => ({
+              failure: "commit policy failed",
+              profileData: { summary: "audit" },
+            }),
+          }),
+        ],
+      }),
+    );
     policyFailure.start();
     const failed = await policyFailure.tools[0]?.execute(
       "call",
@@ -744,22 +761,24 @@ describe("subagent toolkit adapter", () => {
       usage: { input: 1 },
     });
 
-    const cancelled = fakePi();
+    const cancelled = createSubagentHarness();
     const controller = new AbortController();
-    createSubagentToolkit(cancelled.api, {
-      runner: {
-        run: vi.fn(async () => completedOutcome()),
-        shutdown: vi.fn(async () => undefined),
-      },
-      profiles: [
-        customProfile({
-          afterRun: () => {
-            controller.abort();
-            return { failure: "commit policy failed", profileData: { summary: "audit" } };
-          },
-        }),
-      ],
-    });
+    void cancelled.install((api) =>
+      createSubagentToolkit(api, {
+        runner: {
+          run: vi.fn(async () => completedOutcome()),
+          shutdown: vi.fn(async () => undefined),
+        },
+        profiles: [
+          customProfile({
+            afterRun: () => {
+              controller.abort();
+              return { failure: "commit policy failed", profileData: { summary: "audit" } };
+            },
+          }),
+        ],
+      }),
+    );
     cancelled.start();
     const result = await cancelled.tools[0]?.execute(
       "call",
@@ -774,22 +793,27 @@ describe("subagent toolkit adapter", () => {
     });
     expect(result?.details.failure).not.toBe("commit policy failed");
 
-    const failedChild = fakePi();
-    createSubagentToolkit(failedChild.api, {
-      runner: {
-        run: vi.fn(async () => ({
-          ...completedOutcome(),
-          state: "failed" as const,
-          failure: "child failed",
-        })),
-        shutdown: vi.fn(async () => undefined),
-      },
-      profiles: [
-        customProfile({
-          afterRun: () => ({ failure: "commit policy failed", profileData: { summary: "audit" } }),
-        }),
-      ],
-    });
+    const failedChild = createSubagentHarness();
+    void failedChild.install((api) =>
+      createSubagentToolkit(api, {
+        runner: {
+          run: vi.fn(async () => ({
+            ...completedOutcome(),
+            state: "failed" as const,
+            failure: "child failed",
+          })),
+          shutdown: vi.fn(async () => undefined),
+        },
+        profiles: [
+          customProfile({
+            afterRun: () => ({
+              failure: "commit policy failed",
+              profileData: { summary: "audit" },
+            }),
+          }),
+        ],
+      }),
+    );
     failedChild.start();
     const failedResult = await failedChild.tools[0]?.execute(
       "call",
@@ -813,24 +837,32 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("fails closed only for uncorrelated exclusive calls", () => {
-    const harness = fakePi();
-    createSubagentToolkit(harness.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    const harness = createSubagentHarness();
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     harness.start();
     const preflight = harness.handlers.get("tool_call")?.[0];
-    expect(preflight?.({ toolCallId: "missing", toolName: "subagent" }, context())).toEqual({
+    expect(
+      preflight?.({ toolCallId: "missing", toolName: "subagent" } as never, context() as never),
+    ).toEqual({
       block: true,
       reason: "Cannot verify this exclusive subagent call is alone; retry this tool alone",
     });
-    expect(preflight?.({ toolCallId: "missing", toolName: "read" }, context())).toBeUndefined();
+    expect(
+      preflight?.({ toolCallId: "missing", toolName: "read" } as never, context() as never),
+    ).toBeUndefined();
   });
 
   it("blocks an exclusive subagent when its assistant batch has siblings", () => {
-    const harness = fakePi();
-    createSubagentToolkit(harness.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    const harness = createSubagentHarness();
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     harness.start();
     const preflight = harness.handlers.get("tool_call")?.[0];
     const branch = [
@@ -845,7 +877,9 @@ describe("subagent toolkit adapter", () => {
         },
       },
     ];
-    expect(preflight?.({ toolCallId: "two", toolName: "subagent" }, context(branch))).toEqual({
+    expect(
+      preflight?.({ toolCallId: "two", toolName: "subagent" } as never, context(branch) as never),
+    ).toEqual({
       block: true,
       reason: "An exclusive subagent tool cannot run beside sibling tools",
     });
@@ -858,7 +892,7 @@ describe("subagent toolkit adapter", () => {
       suppressDefault: true,
     };
 
-    const consumerFirst = fakePi();
+    const consumerFirst = createSubagentHarness();
     const consumerFirstReceipts: unknown[] = [];
     const consumerFirstResults: ProfileRegistrationResult[] = [];
     const correlationId = "consumer-first";
@@ -879,9 +913,11 @@ describe("subagent toolkit adapter", () => {
       protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
       correlationId,
     });
-    createSubagentToolkit(consumerFirst.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    void consumerFirst.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     consumerFirst.start();
     expect(consumerFirst.tools.map((tool) => tool.name)).toEqual(["custom_agent"]);
     expect(consumerFirstReceipts).toHaveLength(1);
@@ -890,10 +926,12 @@ describe("subagent toolkit adapter", () => {
       { protocolVersion: 2, registrationId: "consumer:review", state: "registered" },
     ]);
 
-    const toolkitFirst = fakePi();
-    createSubagentToolkit(toolkitFirst.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    const toolkitFirst = createSubagentHarness();
+    void toolkitFirst.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     const toolkitFirstReceipts: unknown[] = [];
     const toolkitFirstResults: ProfileRegistrationResult[] = [];
     toolkitFirst.api.events.on(SUBAGENT_PROFILE_REGISTRATION_RESULT_EVENT, (data) => {
@@ -921,11 +959,13 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("keeps the standalone default for absent or incompatible consumers and rejects late batches", () => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     let capability: ProfileCapability | undefined;
-    createSubagentToolkit(harness.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     harness.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
       capability = data as ProfileCapability;
     });
@@ -951,30 +991,34 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("renegotiates on a replacement runtime without retaining stale request listeners", async () => {
-    const sharedBus = new Map<string, Array<(data: unknown) => void>>();
+    const sharedBus = new Map<string, Set<(data: unknown) => void>>();
     const registration = {
       registrationId: "consumer:replacement",
       profiles: [customProfile()],
       suppressDefault: true,
     };
     let correlatedReplies = 0;
-    const first = fakePi(["read"], sharedBus);
+    const first = createSubagentHarness(["read"], sharedBus);
     first.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
       const capability = data as ProfileCapability;
       if (capability.correlationId === "replacement-request") correlatedReplies++;
       capability.register(registration);
     });
-    createSubagentToolkit(first.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    void first.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     first.start();
     expect(first.tools.map((tool) => tool.name)).toEqual(["custom_agent"]);
     await first.shutdown();
 
-    const replacement = fakePi(["read"], sharedBus);
-    createSubagentToolkit(replacement.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    const replacement = createSubagentHarness(["read"], sharedBus);
+    void replacement.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     replacement.api.events.emit(SUBAGENT_PROFILE_REQUEST_EVENT, {
       protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
       correlationId: "replacement-request",
@@ -986,8 +1030,8 @@ describe("subagent toolkit adapter", () => {
 
   it("removes discovered profile names and releases marked-child bus listeners", async () => {
     process.env[CHILD_MARKER] = "1";
-    const sharedBus = new Map<string, Array<(data: unknown) => void>>();
-    const child = fakePi(["read", "subagent", "custom_agent"], sharedBus);
+    const sharedBus = new Map<string, Set<(data: unknown) => void>>();
+    const child = createSubagentHarness(["read", "subagent", "custom_agent"], sharedBus);
     let correlatedReplies = 0;
     child.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {
       const capability = data as ProfileCapability;
@@ -998,19 +1042,23 @@ describe("subagent toolkit adapter", () => {
         suppressDefault: true,
       });
     });
-    createSubagentToolkit(child.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    void child.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     child.start();
     expect(child.tools).toEqual([]);
     expect(child.activeTools()).toEqual(["read"]);
     await child.shutdown();
 
     delete process.env[CHILD_MARKER];
-    const replacement = fakePi(["read"], sharedBus);
-    createSubagentToolkit(replacement.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    const replacement = createSubagentHarness(["read"], sharedBus);
+    void replacement.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     replacement.api.events.emit(SUBAGENT_PROFILE_REQUEST_EVENT, {
       protocolVersion: SUBAGENT_PROFILE_PROTOCOL_VERSION,
       correlationId: "after-child-shutdown",
@@ -1019,7 +1067,7 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("does not override configured inactive tools during finalization", () => {
-    const harness = fakePi(["read", "inactive_agent"]);
+    const harness = createSubagentHarness(["read", "inactive_agent"]);
     const results: ProfileRegistrationResult[] = [];
     harness.api.events.on(SUBAGENT_PROFILE_REGISTRATION_RESULT_EVENT, (data) => {
       results.push(data as ProfileRegistrationResult);
@@ -1031,9 +1079,11 @@ describe("subagent toolkit adapter", () => {
         suppressDefault: true,
       });
     });
-    createSubagentToolkit(harness.api, {
-      runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
-    });
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run: vi.fn(), shutdown: vi.fn(async () => undefined) },
+      }),
+    );
     harness.start();
     expect(harness.tools.map((tool) => tool.name)).toEqual(["subagent"]);
     expect(results).toEqual([
@@ -1076,11 +1126,13 @@ describe("subagent toolkit adapter", () => {
         ],
       }),
     );
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const results: ToolSummaryRegistrationResult[] = [];
-    createSubagentToolkit(harness.api, {
-      runner: { run, shutdown: vi.fn(async () => undefined) },
-    });
+    void harness.install((api) =>
+      createSubagentToolkit(api, {
+        runner: { run, shutdown: vi.fn(async () => undefined) },
+      }),
+    );
 
     let capability: ToolSummaryCapability | undefined;
     harness.api.events.on(SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT, (data) => {
@@ -1174,15 +1226,25 @@ describe("subagent toolkit adapter", () => {
         resolvers: [{ toolName: "late", resolve: () => "late" }],
       }),
     ).toMatchObject({ state: "late" });
+    let summaryCapabilities = 0;
+    harness.api.events.on(SUBAGENT_TOOL_SUMMARY_CAPABILITY_EVENT, () => {
+      summaryCapabilities++;
+    });
     await harness.shutdown();
-    expect(harness.eventHandlers.get(SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT)).toEqual([]);
+    harness.api.events.emit(SUBAGENT_TOOL_SUMMARY_REQUEST_EVENT, {
+      protocolVersion: SUBAGENT_TOOL_SUMMARY_PROTOCOL_VERSION,
+      correlationId: "after-shutdown",
+    });
+    expect(summaryCapabilities).toBe(0);
   });
 
   it("awaits runner shutdown", async () => {
-    const harness = fakePi();
+    const harness = createSubagentHarness();
     const shutdown = vi.fn(async () => undefined);
-    createSubagentToolkit(harness.api, { runner: { run: vi.fn(), shutdown } });
-    await harness.handlers.get("session_shutdown")?.[0]?.({}, context());
+    void harness.install((api) =>
+      createSubagentToolkit(api, { runner: { run: vi.fn(), shutdown } }),
+    );
+    await harness.handlers.get("session_shutdown")?.[0]?.({} as never, context() as never);
     expect(shutdown).toHaveBeenCalledTimes(1);
   });
 

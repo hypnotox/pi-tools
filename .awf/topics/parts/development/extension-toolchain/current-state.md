@@ -7,3 +7,9 @@ This topic records the active language, quality, and verification contracts for 
 Executable extensions use the shared strict TypeScript configuration, Biome formatting, import organization, and linting, Knip dead-code and dependency analysis, and Vitest tests. `npm run check` runs those non-mutating checks as the project gate; the pre-commit flow runs it alongside `./awf check`. Imported Pi core packages remain wildcard peer dependencies, development tools remain development dependencies, and the npm lockfile is committed.
 
 Origin: ADR-0001
+
+### `rule: reusable-extension-testing`
+
+The public source-only `pi-tools/testing` boundary is the complete repository home for reusable documented Pi extension API, context, lifecycle, event-bus, discovery, registration, and direct-invocation fixtures. It is developed against the Pi version currently pinned here; specialized clocks, countdowns, schedulers, runners, rendering, policy, deferred outcomes, models, subprocesses, streams, and schemas remain in their domain suites. A separate credential-free public Pi SDK test proves real extension loading and tool registration without simulating Pi runtime behavior.
+
+Origin: ADR-reusable-extension-testing-boundary

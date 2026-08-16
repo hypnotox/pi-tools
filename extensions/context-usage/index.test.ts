@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createExtensionHarness } from "pi-tools/testing";
 import { describe, expect, it } from "vitest";
 import { contextUsageLine, formatCount, registerContextUsage } from "./index.js";
 
@@ -31,30 +31,25 @@ describe("context usage extension", () => {
     expect(formatCount(1_250_000)).toBe("1.3m");
   });
 
-  it("injects a fresh hidden, package-neutral message for each model request", () => {
-    let contextHandler:
-      | ((event: { messages: unknown[] }, context: unknown) => { messages: unknown[] })
-      | undefined;
-    const pi = {
-      on(name: string, handler: typeof contextHandler) {
-        if (name === "context") contextHandler = handler;
-      },
-    } as unknown as ExtensionAPI;
-
-    registerContextUsage(pi);
+  it("injects a fresh hidden, package-neutral message for each model request", async () => {
+    const harness = createExtensionHarness(registerContextUsage);
     const messages = [{ role: "user", content: "hello" }];
-    const context = {
-      getContextUsage: () => ({ tokens: 2_000, contextWindow: 4_000 }),
-      sessionManager: { getBranch: () => [{ type: "compaction" }] },
-    };
-    const result = contextHandler?.({ messages }, context);
+    const context = harness.makeContext({
+      getContextUsage: () => ({ tokens: 2_000, contextWindow: 4_000, percent: 50 }),
+      sessionManager: { getBranch: () => [{ type: "compaction" }] } as never,
+    });
+    const [result] = await harness.invokeRaw("context", { messages }, context);
 
-    expect(result?.messages).toHaveLength(2);
-    expect(result?.messages[1]).toMatchObject({
-      role: "custom",
-      customType: "context-usage",
-      content: "[session context] 2k/4k (50%); compactions=1",
-      display: false,
+    expect(result).toMatchObject({
+      messages: [
+        { role: "user", content: "hello" },
+        {
+          role: "custom",
+          customType: "context-usage",
+          content: "[session context] 2k/4k (50%); compactions=1",
+          display: false,
+        },
+      ],
     });
     expect(messages).toHaveLength(1);
   });

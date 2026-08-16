@@ -16,6 +16,8 @@ type ApiCall = { name: string; args: unknown[] };
 export interface ExtensionHarness {
   /** Resolves when an asynchronous extension factory has finished registering. */
   ready: Promise<void>;
+  /** Installs another extension factory on this recorder at the same Pi boundary edge. */
+  install(factory: ExtensionFactory): Promise<void>;
   handlers: Map<string, Handler[]>;
   tools: ToolDefinition[];
   commands: Map<string, Command>;
@@ -131,7 +133,7 @@ function createInertModelRegistry(): ExtensionContext["modelRegistry"] {
 
 export function createExtensionHarness(
   factory: ExtensionFactory,
-  options: { omit?: string[] } = {},
+  options: { omit?: string[]; eventBus?: Map<string, Set<(value: unknown) => void>> } = {},
 ): ExtensionHarness {
   const handlers = new Map<string, Handler[]>();
   const tools: ToolDefinition[] = [];
@@ -142,7 +144,7 @@ export function createExtensionHarness(
   const appendEntries: Array<[string, unknown]> = [];
   const activeTools: string[] = [];
   const allTools: Array<{ name: string }> = [];
-  const listeners = new Map<string, Set<(value: unknown) => void>>();
+  const listeners = options.eventBus ?? new Map<string, Set<(value: unknown) => void>>();
   const record = (name: string, args: unknown[]): void => {
     apiCalls.push({ name, args });
   };
@@ -257,11 +259,14 @@ export function createExtensionHarness(
   };
   const omitted = new Set(options.omit ?? []);
   for (const key of omitted) delete (api as Record<string, unknown>)[key];
-  // This is the sole partial-recorder to complete-ExtensionAPI translation point.
-  const ready = Promise.resolve(factory(api as unknown as ExtensionAPI));
+  // These are the partial-recorder to complete-ExtensionAPI translation points.
+  const install = (nextFactory: ExtensionFactory): Promise<void> =>
+    Promise.resolve(nextFactory(api as unknown as ExtensionAPI));
+  const ready = install(factory);
   void ready.catch(() => undefined);
   return {
     ready,
+    install,
     handlers,
     tools,
     commands,

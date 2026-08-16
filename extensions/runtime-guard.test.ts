@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createExtensionHarness } from "pi-tools/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { guardRuntime, versionSupported } from "./runtime-guard.js";
 
@@ -10,10 +10,6 @@ const REQUIRED_APIS = [
   "queueCommand",
   "getAllTools",
 ] as const;
-type Handler = (
-  event: unknown,
-  context: { ui: { notify(message: string, level: string): void } },
-) => void;
 
 afterEach(() => {
   delete (globalThis as unknown as Record<symbol, unknown>)[NOTICE_KEY];
@@ -28,50 +24,38 @@ describe("runtime compatibility guard", () => {
     expect(versionSupported("invalid")).toBe(false);
   });
 
-  it.each(REQUIRED_APIS)("refuses registration when %s is missing", (missingApi) => {
-    let sessionStart: Handler | undefined;
-    const pi = {
-      on(name: string, handler: Handler) {
-        if (name === "session_start") sessionStart = handler;
+  it.each(REQUIRED_APIS)("refuses registration when %s is missing", async (missingApi) => {
+    const harness = createExtensionHarness(
+      (pi) => {
+        guardRuntime(pi, [missingApi]);
       },
-      registerTool: vi.fn(),
-      registerCommand: vi.fn(),
-      queueCommand: vi.fn(),
-      getAllTools: vi.fn(() => []),
-    };
-    delete pi[missingApi];
+      { omit: [missingApi] },
+    );
 
-    expect(guardRuntime(pi as unknown as ExtensionAPI, [missingApi])).toBe(false);
+    expect(await harness.ready).toBeUndefined();
     if (missingApi === "on") {
-      expect(sessionStart).toBeUndefined();
+      expect(harness.handlers.get("session_start")).toBeUndefined();
       return;
     }
 
     const notify = vi.fn();
-    sessionStart?.({}, { ui: { notify } });
-    sessionStart?.({}, { ui: { notify } });
+    const context = harness.makeContext({ ui: { notify } } as never);
+    await harness.invokeRaw("session_start", {}, context);
+    await harness.invokeRaw("session_start", {}, context);
     expect(notify).toHaveBeenCalledTimes(1);
     expect(notify).toHaveBeenCalledWith(expect.stringContaining(missingApi), "error");
   });
 
   it.each(["0.81.0", "invalid"])(
     "refuses registration and notifies once for unsupported runtime %s",
-    (runtimeVersion) => {
-      let sessionStart: Handler | undefined;
-      const pi = {
-        on(name: string, handler: Handler) {
-          if (name === "session_start") sessionStart = handler;
-        },
-        registerTool: vi.fn(),
-        registerCommand: vi.fn(),
-        queueCommand: vi.fn(),
-        getAllTools: vi.fn(() => []),
-      } as unknown as ExtensionAPI;
-
-      expect(guardRuntime(pi, REQUIRED_APIS, runtimeVersion)).toBe(false);
+    async (runtimeVersion) => {
+      const harness = createExtensionHarness((pi) => {
+        guardRuntime(pi, REQUIRED_APIS, runtimeVersion);
+      });
       const notify = vi.fn();
-      sessionStart?.({}, { ui: { notify } });
-      sessionStart?.({}, { ui: { notify } });
+      const context = harness.makeContext({ ui: { notify } } as never);
+      await harness.invokeRaw("session_start", {}, context);
+      await harness.invokeRaw("session_start", {}, context);
       expect(notify).toHaveBeenCalledTimes(1);
       expect(notify).toHaveBeenCalledWith(
         expect.stringContaining(`found ${runtimeVersion}`),
@@ -80,16 +64,12 @@ describe("runtime compatibility guard", () => {
     },
   );
 
-  it("accepts the installed runtime when requested APIs are present", () => {
-    const pi = {
-      on: vi.fn(),
-      registerTool: vi.fn(),
-      registerCommand: vi.fn(),
-      queueCommand: vi.fn(),
-      getAllTools: vi.fn(() => []),
-    } as unknown as ExtensionAPI;
+  it("accepts the installed runtime when requested APIs are present", async () => {
+    const harness = createExtensionHarness((pi) => {
+      guardRuntime(pi, REQUIRED_APIS);
+    });
 
-    expect(guardRuntime(pi, REQUIRED_APIS)).toBe(true);
-    expect(pi.on).not.toHaveBeenCalled();
+    expect(await harness.ready).toBeUndefined();
+    expect(harness.handlers.get("session_start")).toBeUndefined();
   });
 });
