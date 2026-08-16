@@ -4,7 +4,7 @@ import { type HandoffDependencies, handoffEnvelope, registerHandoff } from "./in
 
 type CountdownComponent = { handleInput(data: string): void };
 
-function createHarness(
+async function createHarness(
   options: {
     queueFails?: boolean;
     sendFails?: boolean;
@@ -15,17 +15,30 @@ function createHarness(
     existingTools?: string[];
   } = {},
 ) {
-  const shared = createExtensionHarness(() => undefined);
+  const clearInterval = vi.fn();
+  const clearTimeout = vi.fn();
+  let intervalCallback: (() => void) | undefined;
+  let timeoutCallback: (() => void) | undefined;
+  const dependencies: HandoffDependencies = {
+    randomUUID: () => "request-id",
+    setInterval: vi.fn((callback) => {
+      intervalCallback = callback;
+      return "interval";
+    }),
+    clearInterval,
+    setTimeout: vi.fn((callback) => {
+      timeoutCallback = callback;
+      return "timeout";
+    }),
+    clearTimeout,
+  };
+  const shared = createExtensionHarness((pi) => registerHandoff(pi, dependencies));
   shared.allTools.push(...(options.existingTools ?? []).map((name) => ({ name })));
   const notices: unknown[][] = [];
   const editor: string[] = [];
   const replacementEditor: string[] = [];
   const sent: unknown[][] = [];
   const sessions: Array<{ parentSession?: string }> = [];
-  const clearInterval = vi.fn();
-  const clearTimeout = vi.fn();
-  let intervalCallback: (() => void) | undefined;
-  let timeoutCallback: (() => void) | undefined;
   let oldContextStale = false;
   let oldUiCalls = 0;
   let done: ((result: boolean) => void) | undefined;
@@ -97,21 +110,8 @@ function createHarness(
     if (queueFails) throw new Error("queue failed");
     shared.queuedCommands.push([name, token]);
   };
-  const dependencies: HandoffDependencies = {
-    randomUUID: () => "request-id",
-    setInterval: vi.fn((callback) => {
-      intervalCallback = callback;
-      return "interval";
-    }),
-    clearInterval,
-    setTimeout: vi.fn((callback) => {
-      timeoutCallback = callback;
-      return "timeout";
-    }),
-    clearTimeout,
-  };
-  registerHandoff(shared.api as never, dependencies);
-  void shared.invokeRaw("session_start", {}, context);
+  await shared.ready;
+  await shared.invokeRaw("session_start", {}, context);
   return {
     ...shared,
     context,
@@ -145,16 +145,19 @@ function createHarness(
 }
 
 describe("fresh-session handoff extension", () => {
-  it("yields tool ownership when another extension already provides handoff_session", () => {
-    const h = createHarness({ existingTools: ["handoff_session"] });
+  it("yields tool ownership when another extension already provides handoff_session", async () => {
+    const h = await createHarness({ existingTools: ["handoff_session"] });
+
+    await expect(
+      h.invokeRaw("tool_call", { toolCallId: "call", toolName: "handoff_session" }, h.context),
+    ).resolves.toEqual([undefined]);
 
     expect(h.tools).toHaveLength(0);
     expect(h.commands.size).toBe(0);
-    expect(h.handlers.get("tool_call")).toBeDefined();
   });
 
   it("suppresses only the imminent threshold compaction while handoff is pending", async () => {
-    const h = createHarness();
+    const h = await createHarness();
     await h.execute();
     const beforeCompact = h.invokeRaw.bind(h, "session_before_compact");
 
@@ -173,7 +176,7 @@ describe("fresh-session handoff extension", () => {
   });
 
   it("preserves exact kickoff text and parent linkage in the replacement session", async () => {
-    const h = createHarness();
+    const h = await createHarness();
     const kickoff = "  keep this exact prose  ";
     await h.execute(kickoff);
     const pending = h.continue();
@@ -189,7 +192,7 @@ describe("fresh-session handoff extension", () => {
   });
 
   it("cancels the countdown, clears pending state, and does not replace the session", async () => {
-    const h = createHarness();
+    const h = await createHarness();
     await h.execute();
     const pending = h.continue();
     h.cancel();
@@ -201,7 +204,7 @@ describe("fresh-session handoff extension", () => {
   });
 
   it("uses only the replacement context for delivery recovery", async () => {
-    const h = createHarness({ sendFails: true });
+    const h = await createHarness({ sendFails: true });
     await h.execute("recover exactly");
     const pending = h.continue();
     h.finish();
@@ -215,7 +218,7 @@ describe("fresh-session handoff extension", () => {
   });
 
   it("reports delivery failure when replacement editor recovery also fails", async () => {
-    const h = createHarness({ sendFails: true, replacementEditorFails: true });
+    const h = await createHarness({ sendFails: true, replacementEditorFails: true });
     await h.execute("cannot recover");
     const pending = h.continue();
     h.finish();
@@ -226,7 +229,7 @@ describe("fresh-session handoff extension", () => {
   });
 
   it("recovers in the original editor when session replacement is cancelled", async () => {
-    const h = createHarness({ newCancelled: true });
+    const h = await createHarness({ newCancelled: true });
     await h.execute("recover exactly");
     const pending = h.continue();
     h.finish();
@@ -239,7 +242,7 @@ describe("fresh-session handoff extension", () => {
   });
 
   it("never touches the stale original context after replacement teardown", async () => {
-    const h = createHarness({ newFails: true, staleAfterFailure: true });
+    const h = await createHarness({ newFails: true, staleAfterFailure: true });
     await h.execute("recover exactly");
     const pending = h.continue();
     h.finish();
@@ -248,7 +251,7 @@ describe("fresh-session handoff extension", () => {
   });
 
   it("rejects invalid kickoff, unsupported context, mixed batches, and queue failures", async () => {
-    const h = createHarness({ queueFails: true });
+    const h = await createHarness({ queueFails: true });
     await expect(h.execute(" ")).rejects.toThrow("kickoff");
     await expect(h.execute()).rejects.toThrow("queue failed");
     h.setQueueFails(false);
@@ -267,13 +270,13 @@ describe("fresh-session handoff extension", () => {
       await h.invokeRaw("tool_call", { toolCallId: "other", toolName: "read" }, h.context),
     ).toMatchObject([{ block: true }]);
     h.dropSession();
-    const fresh = createHarness();
+    const fresh = await createHarness();
     fresh.dropSession();
     await expect(fresh.execute()).rejects.toThrow("persisted interactive");
   });
 
   it("completes automatically after five seconds and clears both timers", async () => {
-    const h = createHarness();
+    const h = await createHarness();
     await h.execute();
     const pending = h.continue();
     h.tickCountdown();
@@ -286,17 +289,17 @@ describe("fresh-session handoff extension", () => {
   });
 
   it("enforces the 1,000 UTF-16 code-unit kickoff boundary", async () => {
-    await expect(createHarness().execute("x".repeat(1_000))).resolves.toMatchObject({
+    await expect((await createHarness()).execute("x".repeat(1_000))).resolves.toMatchObject({
       terminate: true,
     });
-    await expect(createHarness().execute("x".repeat(1_001))).rejects.toThrow("1000");
-    await expect(createHarness().execute("😀".repeat(501))).rejects.toThrow("1000");
+    await expect((await createHarness()).execute("x".repeat(1_001))).rejects.toThrow("1000");
+    await expect((await createHarness()).execute("😀".repeat(501))).rejects.toThrow("1000");
   });
 
   it("clears pending state when shutdown or command completion occurs", async () => {
-    const h = createHarness();
+    const h = await createHarness();
     await h.execute();
-    h.invokeRaw("session_shutdown", {}, h.context);
+    await h.invokeRaw("session_shutdown", {}, h.context);
     await expect(h.continue()).rejects.toThrow("matching pending");
     await h.execute();
     const pending = h.continue();

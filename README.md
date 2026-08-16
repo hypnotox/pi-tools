@@ -140,6 +140,7 @@ TypeScript-aware extension tests can import the source-only `pi-tools/testing` b
 ```ts
 import { createExtensionHarness } from "pi-tools/testing";
 const harness = createExtensionHarness(myExtension);
+await harness.ready; // Required before inspecting registrations from an async factory.
 ```
 
 The framework-neutral harness records documented Pi extension seams, contexts, registrations, discovery, and event traffic. `invokeRaw` and `invokeToolDirect` intentionally call handlers and tools directly: they do not simulate Pi middleware, error envelopes, or session scheduling. It is developed against the Pi version pinned for this repository. Reusable Pi-boundary fixtures belong here; extension-specific clocks, timers, processes, streams, and rendering fixtures remain local to their domain tests.
