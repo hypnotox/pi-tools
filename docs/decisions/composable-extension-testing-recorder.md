@@ -30,12 +30,13 @@ a synthetic cancellation union.
 
 ## Decision
 
-1. `decision: configurable-composable-recorder` Keep `pi-tools/testing` as the framework-neutral reusable owner of supported Pi extension-boundary recordings, but configure its capabilities and behaviors before installing any number of synchronous or asynchronous factories. Preserve explicit capability omission and permit typed opt-in additions for otherwise unmodeled `ExtensionAPI` capabilities instead of speculatively mirroring the complete API.
-2. `decision: deterministic-raw-semantics` Preserve each supported API call and registration in order. Raw event communication is synchronous, preserves duplicate listeners and nested emission, removes only the unsubscribed registration, records emission order, and propagates listener errors. Raw handler, tool, and command helpers await every prior factory installation and forward arguments, results, and failures without schema validation, middleware, error envelopes, session scheduling, command suffix routing, or other Pi runtime behavior.
-3. `decision: direct-command-selection` Preserve duplicate command registrations in order. Name-only direct invocation rejects zero or multiple matches; an explicit validated registration index selects a duplicate.
-4. `decision: injectable-exec-boundary` Model `exec` with Pi's exact public command, argument, option, and result types; record calls in order; support injected resolved, rejected, killed, and deferred outcomes; and fail clearly when no behavior is configured. Do not attach Git, AWF, subprocess, or other execution policy.
-5. `decision: composable-context-fixtures` Provide composable recording UI, mutable model-registry, ordinary context, command context, and fresh replacement-context fixtures. Record and inject the supported dialog and notification methods, model availability and configured-auth state, and command-session transitions while preserving new-session setup identity, without adding model routing, provider, TUI-rendering, lifecycle-scenario, or session-scheduling policy.
-6. `decision: bounded-adopter-neutrality` Keep adopter-specific seams local and exclude fake providers and Pi runtimes, lifecycle scenario engines, TUI or tool-render scenarios, file-mutation queues, and Git, worktree, filesystem, UUID, clock, subprocess, AWF, profile, routing, effort, or Remote Pi fixtures.
+1. `decision: configurable-composable-recorder` Keep `pi-tools/testing` as the framework-neutral reusable owner of supported Pi extension-boundary recordings, but configure its capabilities and behaviors before installing any number of synchronous or asynchronous factories. Track and expose every installation as awaitable, make each raw invocation await every prior installation, propagate asynchronous installation failures without an initial-only readiness hole, and preserve synchronous factory execution for factory-time negotiation. Preserve explicit capability omission and permit typed opt-in additions for otherwise unmodeled `ExtensionAPI` capabilities instead of speculatively mirroring the complete API.
+2. `decision: first-class-recording-surface` Expose recorded API calls, ordered handlers, tools, ordered command registrations, entry renderers, appended entries, queued commands, and mutable active and all-tool discovery. Keep `setActiveTools`, `invokeRaw`, `invokeToolDirect`, and `invokeCommandDirect` as first-class typed surfaces.
+3. `decision: deterministic-raw-semantics` Share one synchronous event bus across every installed factory so factory-time negotiation remains synchronous. Preserve duplicate listeners, registration and nested-emission order, per-registration unsubscribe, ordered emission history, and listener-error propagation. Raw handler, tool, and command helpers await every prior factory installation and forward arguments, results, and failures without schema validation, middleware, error envelopes, session scheduling, command suffix routing, or other Pi runtime behavior.
+4. `decision: direct-command-selection` Preserve duplicate command registrations in order. Name-only direct invocation rejects zero or multiple matches; an explicit validated registration index selects a duplicate.
+5. `decision: injectable-exec-boundary` Model `exec` with Pi's exact public command, argument, option, and result types; record calls in order; support injected resolved, rejected, killed, and deferred outcomes; and fail clearly when no behavior is configured. Do not attach Git, AWF, subprocess, or other execution policy.
+6. `decision: composable-context-fixtures` Provide a recording UI whose `notify`, `select`, `confirm`, and `input` calls are recorded, whose dialog responses are injectable, and whose remaining public methods are inert. Provide a mutable model registry with add, remove, and find controls plus availability and configured-auth state exposed through exact `getAll`, `getAvailable`, `find`, and `hasConfiguredAuth` query behavior. Compose ordinary and command contexts from those fixtures with an in-memory session, model, cwd, and caller overrides; produce fresh replacement contexts; and preserve new-session setup identity in its replacement context. Do not add model routing, provider, TUI-rendering, lifecycle-scenario, or session-scheduling policy.
+7. `decision: bounded-adopter-neutrality` Keep adopter-specific seams local and exclude fake providers and Pi runtimes, lifecycle scenario engines, TUI or tool-render scenarios, file-mutation queues, and Git, worktree, filesystem, UUID, clock, subprocess, AWF, profile, routing, effort, or Remote Pi fixtures.
 
 ## State changes
 
@@ -49,10 +50,12 @@ raw invocation observes the complete prior installation set. Exact `exec` types 
 fixtures make success, failure, cancellation, and deferred behavior explicit without spawning a
 process.
 
-The public pre-1.0 API breaks and requires a minor release. Supporting only selected capabilities
-means consumers must opt in when their extension crosses an unmodeled API seam. Raw helper behavior
-is intentionally easier to observe than Pi runtime behavior, so documentation and the separate SDK
-proof must keep that distinction explicit.
+The public pre-1.0 API breaks and requires a minor release. Existing consumers and repository tests
+must migrate construction, installation, invocation, fixture configuration, and duplicate-command
+selection to the redesigned contracts, creating one-time regression risk. Supporting only selected
+capabilities means consumers must opt in when their extension crosses an unmodeled API seam. Raw
+helper behavior is intentionally easier to observe than Pi runtime behavior, so documentation and
+the separate SDK proof must keep that distinction explicit.
 
 Mutable fixtures require a confined translation from their structural test representation to Pi
 context types. They do not become substitute providers, registries, runtimes, schedulers, or routing
@@ -64,6 +67,7 @@ version this repository currently develops and verifies against.
 | Alternative | Why not chosen |
 |---|---|
 | Add adopter-only helpers locally | Preserves duplicate generic Pi-boundary fixtures and leaves the public recorder insufficient for its intended adopters. |
+| Preserve the v0.2 API through incremental additions or an adapter | Constructor-time installation and lossy event and command representations conflict with configure-before-install and duplicate-preserving semantics; retaining both models would prolong ambiguity in a pre-1.0 boundary. |
 | Mirror every `ExtensionAPI` capability | Creates speculative maintenance and implies completeness the recorder does not provide. |
 | Reproduce Pi command, lifecycle, and error handling | Turns a raw test seam into a second runtime whose fidelity would be costly and misleading. |
 | Execute real subprocesses for `exec` | Adds machine and process policy where deterministic typed injection is sufficient. |
