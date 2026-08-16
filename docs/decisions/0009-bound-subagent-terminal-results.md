@@ -10,11 +10,12 @@ date: 2026-08-16
 
 ADR-0004 established a compact terminal presentation that replaces a settled child's activity with its final report or failure. ADR-0007 later added bounded result payloads to the persisted rows for the child's own tool calls and rendered those payloads in compact and expanded history. That addition conflated the outer subagent tool result with the results of tools owned by the child.
 
-The inner result rows duplicate evidence already consumed by the child, substantially enlarge persisted execution details, and add visual output beneath every retained child tool row. Meanwhile, the outer subagent report—the result the parent requested—renders nearly its entire 16 KiB safety bound in compact mode. Compact completion therefore spends its display budget on the wrong layer.
+The inner result rows duplicate evidence already consumed by the child, substantially enlarge persisted execution details, and add visual output beneath every retained child tool row. Meanwhile, the outer subagent report, which is the result the parent requested, renders nearly its entire 16 KiB safety bound in compact mode. Compact completion therefore spends its display budget on the wrong layer.
 
 ## Decision
 
-1. `decision: bound-terminal-result-presentation` Persist and render child-owned tool activity without child tool-result payloads. On settlement, compact presentation uses the bounded display region for at most 24 terminal-width-wrapped lines of the outer report or failure, marks truncation on the final visible line, and preserves the omission/discard summary above that preview when applicable. Expanded presentation retains the full safety-bounded outer report or failure and the child activity history.
+1. `decision: omit-child-tool-results` Do not capture, validate, persist, or render child-owned tool-result payloads. Retain each child tool call's safe summary, status, and duration.
+2. `decision: bound-outer-result-preview` On settlement, compact presentation uses the bounded display region for at most 24 terminal-width-wrapped lines of the outer report or failure, marks truncation with an ellipsis on the final visible line, and preserves the omission/discard summary above that preview when applicable. Expanded presentation retains the full safety-bounded outer report or failure and the child activity history.
 
 ## State changes
 
@@ -22,7 +23,7 @@ The inner result rows duplicate evidence already consumed by the child, substant
 
 ## Consequences
 
-Persisted execution details remain useful for understanding which child tools ran, their status, summaries, and duration, without duplicating their output. Existing session entries that contain inner results remain structurally readable but no longer display those payloads.
+Persisted execution details remain useful for understanding which child tools ran, their status, summaries, and duration, without duplicating their output. Existing session entries whose execution rows contain the removed result field no longer satisfy current execution-details validation.
 
 Compact settled results have a predictable vertical bound close to the live 25-row activity backbuffer. Reports longer than the preview require expansion to read in full. The omission/discard summary may add one line above the 24-line preview, keeping historical loss visible without allowing the terminal result to grow to the full report bound.
 
