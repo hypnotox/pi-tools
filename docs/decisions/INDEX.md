@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-_No decisions are in flight._
+- [ADR-reusable-extension-testing-boundary: Reusable Extension Testing Boundary](reusable-extension-testing-boundary.md) (Proposed)
 
 ## History
 
