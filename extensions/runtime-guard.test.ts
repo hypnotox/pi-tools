@@ -25,14 +25,16 @@ describe("runtime compatibility guard", () => {
   });
 
   it.each(REQUIRED_APIS)("refuses registration when %s is missing", async (missingApi) => {
+    let supported = true;
     const harness = createExtensionHarness(
       (pi) => {
-        guardRuntime(pi, [missingApi]);
+        supported = guardRuntime(pi, [missingApi]);
       },
       { omit: [missingApi] },
     );
 
     expect(await harness.ready).toBeUndefined();
+    expect(supported).toBe(false);
     if (missingApi === "on") {
       expect(harness.handlers.get("session_start")).toBeUndefined();
       return;
@@ -49,11 +51,14 @@ describe("runtime compatibility guard", () => {
   it.each(["0.81.0", "invalid"])(
     "refuses registration and notifies once for unsupported runtime %s",
     async (runtimeVersion) => {
+      let supported = true;
       const harness = createExtensionHarness((pi) => {
-        guardRuntime(pi, REQUIRED_APIS, runtimeVersion);
+        supported = guardRuntime(pi, REQUIRED_APIS, runtimeVersion);
       });
       const notify = vi.fn();
       const context = harness.makeContext({ ui: { notify } } as never);
+      expect(await harness.ready).toBeUndefined();
+      expect(supported).toBe(false);
       await harness.invokeRaw("session_start", {}, context);
       await harness.invokeRaw("session_start", {}, context);
       expect(notify).toHaveBeenCalledTimes(1);
@@ -65,11 +70,13 @@ describe("runtime compatibility guard", () => {
   );
 
   it("accepts the installed runtime when requested APIs are present", async () => {
+    let supported = false;
     const harness = createExtensionHarness((pi) => {
-      guardRuntime(pi, REQUIRED_APIS);
+      supported = guardRuntime(pi, REQUIRED_APIS);
     });
 
     expect(await harness.ready).toBeUndefined();
+    expect(supported).toBe(true);
     expect(harness.handlers.get("session_start")).toBeUndefined();
   });
 });

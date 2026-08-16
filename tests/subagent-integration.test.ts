@@ -102,7 +102,7 @@ describe("subagent profile package contract", () => {
       if (capability.protocolVersion !== SUBAGENT_PROFILE_PROTOCOL_VERSION) return;
       receipt = capability.register(batch);
     });
-    void harness.install((api) =>
+    await harness.install((api) =>
       createSubagentToolkit(api, {
         runner: {
           run: vi.fn(async () => ({
