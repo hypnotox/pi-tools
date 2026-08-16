@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-_No decisions are in flight._
+- [ADR-0009: Bound Subagent Terminal Results](0009-bound-subagent-terminal-results.md) (Proposed)
 
 ## History
 
