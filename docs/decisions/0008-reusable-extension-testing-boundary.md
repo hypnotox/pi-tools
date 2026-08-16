@@ -4,7 +4,7 @@ slug: reusable-extension-testing-boundary
 status: Implementing
 date: 2026-08-16
 ---
-# ADR-reusable-extension-testing-boundary: Reusable Extension Testing Boundary
+# ADR-0008: Reusable Extension Testing Boundary
 
 ## Context
 

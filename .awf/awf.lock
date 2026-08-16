@@ -475,7 +475,7 @@
       "templateId": "",
       "templateHash": "",
       "configHash": "sha256:619a4dec6900da1feb21570a9a316b719f4802bf7686ce13e6cd6114d391b3e6",
-      "outputHash": "sha256:7a72acb52399f5940f016f6463c2f9e44b9aa826faaa58ceeab4d0040cf9c0f0",
+      "outputHash": "sha256:015fa028de43a417ff98f8a663734842444b6d124d41f5f36cde3f9f8f3d87ac",
       "regenChecked": true
     },
     "docs/decisions/README.md": {
@@ -578,8 +578,8 @@
     "docs/topics/development/extension-toolchain.md": {
       "templateId": "topics/topic.md.tmpl",
       "templateHash": "sha256:25b4ec23c7a22667f9d78b1e5883af8702d82f67896c3a42ac0ad19032d7c7bb",
-      "configHash": "sha256:6496c0df44f894b82463fb753dd23964ab1caa73e5097816820b64691af50c33",
-      "outputHash": "sha256:094da418da52629c265080acccc0fc9806651931e24c0f85c8465eb10c45fa8b"
+      "configHash": "sha256:6956d77d23ef9eca3d86c8a98aea3ce7ba2cc293480b98e68e03f59884eaf0e9",
+      "outputHash": "sha256:c211f57874a65e01e516861ef9e9787ea8dd45a2069f73d60f3ec93caa05b239"
     },
     "docs/topics/development/index.md": {
       "templateId": "topics/index.md.tmpl",

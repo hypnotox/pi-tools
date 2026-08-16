@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-- [ADR-reusable-extension-testing-boundary: Reusable Extension Testing Boundary](reusable-extension-testing-boundary.md) (Implementing)
+- [ADR-0008: Reusable Extension Testing Boundary](0008-reusable-extension-testing-boundary.md) (Implementing)
 
 ## History
 
