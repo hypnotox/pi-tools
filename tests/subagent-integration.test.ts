@@ -1,3 +1,4 @@
+import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 import type {
   ExecutionDetails,
   ProfileCapability,
@@ -45,6 +46,20 @@ const consumerProfile: ProfileDefinition<
   }),
 };
 
+function toolInfo(name: string): ToolInfo {
+  return {
+    name,
+    description: `${name} test tool`,
+    parameters: Type.Object({}),
+    sourceInfo: {
+      path: `<test:${name}>`,
+      source: "test",
+      scope: "temporary",
+      origin: "top-level",
+    },
+  };
+}
+
 interface RegisteredTool {
   name: string;
   execute: (
@@ -65,7 +80,7 @@ function integrationHarness() {
   const harness = createExtensionRecorder();
   void harness.install(() => undefined);
   harness.activeTools.push("read");
-  harness.allTools.push({ name: "read" });
+  harness.allTools.push(toolInfo("read"));
   const context = harness.makeContext({
     cwd: "/consumer/project",
     model: { provider: "provider", id: "model", reasoning: false, thinkingLevelMap: {} },

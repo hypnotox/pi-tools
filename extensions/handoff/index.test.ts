@@ -1,8 +1,24 @@
+import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 import { createExtensionRecorder } from "pi-tools/testing";
+import { Type } from "typebox";
 import { describe, expect, it, vi } from "vitest";
 import { type HandoffDependencies, handoffEnvelope, registerHandoff } from "./index.js";
 
 type CountdownComponent = { handleInput(data: string): void };
+
+function toolInfo(name: string): ToolInfo {
+  return {
+    name,
+    description: `${name} test tool`,
+    parameters: Type.Object({}),
+    sourceInfo: {
+      path: `<test:${name}>`,
+      source: "test",
+      scope: "temporary",
+      origin: "top-level",
+    },
+  };
+}
 
 async function createHarness(
   options: {
@@ -34,7 +50,7 @@ async function createHarness(
   };
   const shared = createExtensionRecorder();
   void shared.install((pi) => registerHandoff(pi, dependencies));
-  shared.allTools.push(...(options.existingTools ?? []).map((name) => ({ name })));
+  shared.allTools.push(...(options.existingTools ?? []).map(toolInfo));
   const notices: unknown[][] = [];
   const editor: string[] = [];
   const replacementEditor: string[] = [];

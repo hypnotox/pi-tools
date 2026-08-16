@@ -1,4 +1,9 @@
-import { createExtensionRecorder } from "pi-tools/testing";
+import type { ToolInfo } from "@earendil-works/pi-coding-agent";
+import {
+  createExtensionRecorder,
+  createRecordingEventBus,
+  type RecordingEventBus,
+} from "pi-tools/testing";
 import { Type } from "typebox";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -48,13 +53,25 @@ interface RegisteredTool {
   }>;
 }
 
-function createSubagentHarness(configuredTools = ["read"], _sharedBus?: unknown) {
-  const harness = createExtensionRecorder(
-    _sharedBus === undefined ? {} : { eventBus: _sharedBus as Map<string, unknown> },
-  );
+function toolInfo(name: string): ToolInfo {
+  return {
+    name,
+    description: `${name} test tool`,
+    parameters: Type.Object({}),
+    sourceInfo: {
+      path: `<test:${name}>`,
+      source: "test",
+      scope: "temporary",
+      origin: "top-level",
+    },
+  };
+}
+
+function createSubagentHarness(configuredTools = ["read"], sharedBus?: RecordingEventBus) {
+  const harness = createExtensionRecorder(sharedBus === undefined ? {} : { eventBus: sharedBus });
   void harness.install(() => undefined);
   harness.activeTools.push(...configuredTools);
-  harness.allTools.push(...configuredTools.map((name) => ({ name })));
+  harness.allTools.push(...configuredTools.map(toolInfo));
   const start = () => {
     for (const handler of harness.handlers.get("session_start") ?? [])
       handler({} as never, context() as never);
@@ -988,7 +1005,7 @@ describe("subagent toolkit adapter", () => {
   });
 
   it("renegotiates on a replacement runtime without retaining stale request listeners", async () => {
-    const sharedBus = new Map<string, Set<(data: unknown) => void>>();
+    const sharedBus = createRecordingEventBus();
     const registration = {
       registrationId: "consumer:replacement",
       profiles: [customProfile()],
@@ -1027,7 +1044,7 @@ describe("subagent toolkit adapter", () => {
 
   it("removes discovered profile names and releases marked-child bus listeners", async () => {
     process.env[CHILD_MARKER] = "1";
-    const sharedBus = new Map<string, Set<(data: unknown) => void>>();
+    const sharedBus = createRecordingEventBus();
     const child = createSubagentHarness(["read", "subagent", "custom_agent"], sharedBus);
     let correlatedReplies = 0;
     child.api.events.on(SUBAGENT_PROFILE_CAPABILITY_EVENT, (data) => {

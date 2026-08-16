@@ -163,3 +163,15 @@ made the green starting dependency, complete snapshot gate, render-before-stage 
 documentation inventory, and focused prose review explicit; confined all Phase 1 settlement to its
 sole close commit; and recorded the separately governed version/tag/push transaction required to
 finish the user outcome.
+
+Phase 1 review settlement: independent review found settled installation failures could be forgotten,
+duplicate unsubscribe removed the wrong registration, a Set-compatible bus remained, replacement
+contexts discarded composed inputs, additions could replace supported recording methods without typed
+signatures, `setActiveTools` lacked behavior injection, all-tool and model catalogue values were too
+weakly typed, and the contract tests missed these cases. Each issue contradicted explicit ADR and D1
+semantics, so no new user decision was required despite the reviewer's classification. The settlement
+added failing regression coverage first, then retained all installation failures, introduced the
+shared duplicate-preserving recording bus, removed Set compatibility, preserved context inputs and
+session cwd, constrained typed additions, injected `setActiveTools`, used exact `ToolInfo` and Pi
+model types, confined nominal registry translation to context composition, and migrated affected
+consumer fixtures. Focused type and 52-test evidence passed before the complete settlement gate.

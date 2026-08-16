@@ -1,6 +1,5 @@
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type {
-  ExecOptions,
-  ExecResult,
   ExtensionAPI,
   ExtensionCommandContext,
   ExtensionContext,
@@ -12,9 +11,41 @@ import type {
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 
 type Handler = (event: never, context: ExtensionContext) => unknown;
-type Command = { handler(args: string, context: ExtensionCommandContext): Promise<void> };
+type Command = Parameters<ExtensionAPI["registerCommand"]>[1];
 type ApiCall = { name: string; args: unknown[] };
-type ExecBehavior = (command: string, args: string[], options?: ExecOptions) => Promise<ExecResult>;
+type ExecBehavior = ExtensionAPI["exec"];
+type SetActiveToolsBehavior = ExtensionAPI["setActiveTools"];
+type ModelRegistry = ExtensionContext["modelRegistry"];
+type ReplacedSessionContext = ExtensionCommandContext & {
+  sendMessage(...args: Parameters<ExtensionAPI["sendMessage"]>): Promise<void>;
+  sendUserMessage(...args: Parameters<ExtensionAPI["sendUserMessage"]>): Promise<void>;
+};
+
+type ModelRegistryQueries = Pick<
+  ModelRegistry,
+  "getAll" | "getAvailable" | "find" | "hasConfiguredAuth"
+>;
+
+type RecorderApi = Pick<
+  ExtensionAPI,
+  | "on"
+  | "registerTool"
+  | "registerCommand"
+  | "registerEntryRenderer"
+  | "appendEntry"
+  | "getActiveTools"
+  | "getAllTools"
+  | "setActiveTools"
+  | "exec"
+  | "events"
+> & {
+  queueCommand(name: string, args?: string): void;
+};
+
+type RecorderApiKey = keyof RecorderApi;
+type AdditionalCapabilities<T extends Record<string, unknown>> = T & {
+  [K in RecorderApiKey]?: never;
+};
 
 export interface RecordingUI {
   readonly calls: Array<{ name: "notify" | "select" | "confirm" | "input"; args: unknown[] }>;
@@ -25,42 +56,43 @@ export interface RecordingUI {
 }
 
 export interface ModelRegistryFixture {
-  registry: ExtensionContext["modelRegistry"];
-  models: unknown[];
-  available: unknown[];
+  /** Structurally typed test surface; it is translated to Pi's nominal registry only in a context. */
+  registry: ModelRegistryQueries & Record<string, unknown>;
+  models: Model<Api>[];
+  available: Model<Api>[];
   configuredAuth: boolean;
-  add(model: unknown, available?: boolean): void;
+  add(model: Model<Api>, available?: boolean): void;
   remove(provider: string, id: string): void;
 }
 
-export interface RecorderOptions {
-  omit?: string[];
-  additions?: Record<string, unknown>;
+interface EventRegistration {
+  listener(value: unknown): void;
+}
+
+/** A synchronous duplicate-preserving bus that can be shared by several recorders. */
+export interface RecordingEventBus {
+  readonly emissions: Array<[string, unknown]>;
+  on(event: string, listener: (value: unknown) => void): () => void;
+  emit(event: string, value?: unknown): void;
+}
+
+export interface RecorderOptions<
+  TAdditions extends Record<string, unknown> = Record<never, never>,
+  TOmitted extends RecorderApiKey = never,
+> {
+  omit?: readonly TOmitted[];
+  additions?: AdditionalCapabilities<TAdditions>;
   exec?: ExecBehavior;
+  setActiveTools?: SetActiveToolsBehavior;
   ui?: RecordingUI;
   modelRegistry?: ModelRegistryFixture;
   allTools?: ToolInfo[];
   activeTools?: string[];
-  /** Optional existing bus for compatibility tests; installed factories otherwise share this recorder's bus. */
-  eventBus?: Map<string, unknown>;
+  eventBus?: RecordingEventBus;
 }
 
 /** A framework-neutral recording of selected documented Pi extension seams, not a Pi runtime. */
-type RecorderApi = {
-  on: ExtensionAPI["on"];
-  registerTool: ExtensionAPI["registerTool"];
-  registerCommand: ExtensionAPI["registerCommand"];
-  registerEntryRenderer: ExtensionAPI["registerEntryRenderer"];
-  appendEntry: ExtensionAPI["appendEntry"];
-  getActiveTools: ExtensionAPI["getActiveTools"];
-  getAllTools: ExtensionAPI["getAllTools"];
-  setActiveTools: ExtensionAPI["setActiveTools"];
-  queueCommand(name: string, args?: string): void;
-  exec: ExtensionAPI["exec"];
-  events: ExtensionAPI["events"];
-} & Record<string, unknown>;
-
-export interface ExtensionRecorder {
+export interface ExtensionRecorder<TApi extends object = RecorderApi> {
   readonly installations: Promise<void>[];
   readonly ready: Promise<void>;
   install(factory: ExtensionFactory): Promise<void>;
@@ -73,8 +105,8 @@ export interface ExtensionRecorder {
   appendEntries: Array<[string, unknown]>;
   emissions: Array<[string, unknown]>;
   activeTools: string[];
-  allTools: Array<{ name: string }>;
-  api: RecorderApi;
+  allTools: ToolInfo[];
+  api: TApi;
   ui: RecordingUI;
   modelRegistry: ModelRegistryFixture;
   makeContext(overrides?: Partial<ExtensionContext>): ExtensionContext;
@@ -136,7 +168,7 @@ function inertUi(): ExtensionUIContext {
       getColorMode: () => "truecolor",
       getThinkingBorderColor: () => plain,
       getBashModeBorderColor: () => plain,
-    } as never,
+    } as unknown as ExtensionUIContext["theme"],
     getAllThemes: () => [],
     getTheme: () => undefined,
     setTheme: () => ({ success: true }),
@@ -170,8 +202,8 @@ export function createRecordingUi(): RecordingUI {
 }
 
 export function createModelRegistryFixture(): ModelRegistryFixture {
-  const models: unknown[] = [],
-    available: unknown[] = [];
+  const models: Model<Api>[] = [];
+  const available: Model<Api>[] = [];
   const fixture: ModelRegistryFixture = {
     models,
     available,
@@ -182,33 +214,31 @@ export function createModelRegistryFixture(): ModelRegistryFixture {
     },
     remove(provider, id) {
       for (const list of [models, available]) {
-        const index = list.findIndex((model) => {
-          const value = model as { provider?: string; id?: string };
-          return value.provider === provider && value.id === id;
-        });
+        const index = list.findIndex((model) => model.provider === provider && model.id === id);
         if (index >= 0) list.splice(index, 1);
       }
     },
     registry: undefined as never,
   };
   fixture.registry = {
-    refresh: async () => ({}),
+    refresh: async () => {
+      throw new Error("Recording model registry cannot refresh providers");
+    },
     getError: () => undefined,
-    getAll: () => [...models] as never,
-    getAvailable: () => [...available] as never,
+    getAll: () => [...models],
+    getAvailable: () => [...available],
     find: (provider: string, id: string) =>
-      models.find((model) => {
-        const value = model as { provider?: string; id?: string };
-        return value.provider === provider && value.id === id;
-      }) as never,
+      models.find((model) => model.provider === provider && model.id === id),
     hasConfiguredAuth: () => fixture.configuredAuth,
     getApiKeyAndHeaders: async () => ({
-      ok: false,
+      ok: false as const,
       error: "Recording model registry has no credentials",
     }),
-    getProviderAuthStatus: () => ({ status: "not_authenticated" }),
+    getProviderAuthStatus: () => ({ status: "not_authenticated" as const }),
     getProvider: () => undefined,
-    complete: async () => ({}),
+    complete: async () => {
+      throw new Error("Recording model registry cannot complete model requests");
+    },
     getProviderDisplayName: (provider: string) => provider,
     getProviderAuth: async () => undefined,
     getApiKeyForProvider: async () => undefined,
@@ -218,28 +248,72 @@ export function createModelRegistryFixture(): ModelRegistryFixture {
     getRegisteredProviderConfig: () => undefined,
     getRegisteredNativeProvider: () => undefined,
     getRegisteredProviderIds: () => [],
-  } as never;
+  };
   return fixture;
 }
 
-export function createExtensionRecorder(options: RecorderOptions = {}): ExtensionRecorder {
+export function createRecordingEventBus(): RecordingEventBus {
+  const registrations = new Map<string, EventRegistration[]>();
+  const emissions: Array<[string, unknown]> = [];
+  return {
+    emissions,
+    on(event, listener) {
+      const registration = { listener };
+      const eventRegistrations = registrations.get(event) ?? [];
+      eventRegistrations.push(registration);
+      registrations.set(event, eventRegistrations);
+      return () => {
+        const index = eventRegistrations.indexOf(registration);
+        if (index >= 0) eventRegistrations.splice(index, 1);
+      };
+    },
+    emit(event, value) {
+      emissions.push([event, value]);
+      for (const registration of registrations.get(event) ?? []) registration.listener(value);
+    },
+  };
+}
+
+export function createExtensionRecorder<
+  TAdditions extends Record<string, unknown> = Record<never, never>,
+  TOmitted extends RecorderApiKey = never,
+>(
+  options: RecorderOptions<TAdditions, TOmitted> = {} as RecorderOptions<TAdditions, TOmitted>,
+): ExtensionRecorder<Omit<RecorderApi, TOmitted> & TAdditions> {
   const handlers = new Map<string, Handler[]>();
   const tools: ToolDefinition[] = [];
-  const commands: ExtensionRecorder["commands"] = [];
+  const commands: Array<{ name: string; command: Command }> = [];
   const entryRenderers = new Map<string, { renderer: unknown; options: unknown }>();
   const queuedCommands: Array<[string, string | undefined]> = [];
   const apiCalls: ApiCall[] = [];
   const appendEntries: Array<[string, unknown]> = [];
-  const emissions: Array<[string, unknown]> = [];
   const activeTools = [...(options.activeTools ?? [])];
-  const allTools: Array<{ name: string }> = [...(options.allTools ?? [])];
-  const listeners = options.eventBus ?? new Map<string, unknown>();
+  const allTools = [...(options.allTools ?? [])];
+  const eventBus = options.eventBus ?? createRecordingEventBus();
   const ui = options.ui ?? createRecordingUi();
   const modelRegistry = options.modelRegistry ?? createModelRegistryFixture();
   const installations: Promise<void>[] = [];
-  let pendingInstallations = 0;
   const record = (name: string, args: unknown[]) => apiCalls.push({ name, args });
-  const api = {
+
+  const supportedKeys = new Set<RecorderApiKey>([
+    "on",
+    "registerTool",
+    "registerCommand",
+    "registerEntryRenderer",
+    "appendEntry",
+    "getActiveTools",
+    "getAllTools",
+    "setActiveTools",
+    "queueCommand",
+    "exec",
+    "events",
+  ]);
+  for (const key of Object.keys(options.additions ?? {})) {
+    if (supportedKeys.has(key as RecorderApiKey))
+      throw new Error(`Addition ${key} replaces a supported recorder method`);
+  }
+
+  const apiObject = {
     on(event: string, handler: Handler) {
       record("on", [event, handler]);
       handlers.set(event, [...(handlers.get(event) ?? []), handler]);
@@ -252,9 +326,9 @@ export function createExtensionRecorder(options: RecorderOptions = {}): Extensio
       record("registerCommand", [name, command]);
       commands.push({ name, command });
     },
-    registerEntryRenderer(type: string, renderer: unknown, options?: unknown) {
-      record("registerEntryRenderer", [type, renderer, options]);
-      entryRenderers.set(type, { renderer, options });
+    registerEntryRenderer(type: string, renderer: unknown, rendererOptions?: unknown) {
+      record("registerEntryRenderer", [type, renderer, rendererOptions]);
+      entryRenderers.set(type, { renderer, options: rendererOptions });
     },
     appendEntry(type: string, data?: unknown) {
       record("appendEntry", [type, data]);
@@ -270,13 +344,21 @@ export function createExtensionRecorder(options: RecorderOptions = {}): Extensio
     },
     setActiveTools(names: string[]) {
       record("setActiveTools", [names]);
+      if (options.setActiveTools) {
+        options.setActiveTools(names);
+        return;
+      }
       activeTools.splice(0, activeTools.length, ...names);
     },
     queueCommand(name: string, args?: string) {
       record("queueCommand", [name, args]);
       queuedCommands.push([name, args]);
     },
-    exec: async (command: string, args: string[], execOptions?: ExecOptions) => {
+    async exec(
+      command: Parameters<ExecBehavior>[0],
+      args: Parameters<ExecBehavior>[1],
+      execOptions?: Parameters<ExecBehavior>[2],
+    ) {
       record("exec", [command, args, execOptions]);
       if (!options.exec) throw new Error("No exec behavior configured for extension recorder");
       return options.exec(command, args, execOptions);
@@ -284,66 +366,65 @@ export function createExtensionRecorder(options: RecorderOptions = {}): Extensio
     events: {
       on(event: string, listener: (value: unknown) => void) {
         record("events.on", [event, listener]);
-        const registrations = listeners.get(event) ?? [];
-        if (Array.isArray(registrations)) registrations.push(listener);
-        else (registrations as Set<(value: unknown) => void>).add(listener);
-        listeners.set(event, registrations);
-        return () => {
-          if (Array.isArray(registrations)) {
-            const index = registrations.indexOf(listener);
-            if (index >= 0) registrations.splice(index, 1);
-          } else (registrations as Set<(value: unknown) => void>).delete(listener);
-        };
+        return eventBus.on(event, listener);
       },
-      emit(event: string, value?: unknown) {
+      emit(event: string, value: unknown) {
         record("events.emit", [event, value]);
-        emissions.push([event, value]);
-        for (const listener of (listeners.get(event) as
-          | Iterable<(value: unknown) => void>
-          | undefined) ?? [])
-          listener(value);
+        eventBus.emit(event, value);
       },
     },
-    ...options.additions,
   };
+  const api = Object.assign(apiObject, options.additions ?? {}) as unknown as RecorderApi &
+    TAdditions;
   for (const key of options.omit ?? []) delete (api as Record<string, unknown>)[key];
-  const waitForPrior = () =>
-    pendingInstallations === 0 ? undefined : Promise.all(installations.slice());
-  const makeContext = (overrides: Partial<ExtensionContext> = {}): ExtensionContext => ({
-    mode: "tui",
-    hasUI: true,
-    cwd: process.cwd(),
-    ui: ui.ui,
-    sessionManager: SessionManager.inMemory(process.cwd()),
-    modelRegistry: modelRegistry.registry,
-    model: undefined,
-    scopedModels: [],
-    isIdle: () => true,
-    isProjectTrusted: () => true,
-    signal: undefined,
-    abort: () => undefined,
-    hasPendingMessages: () => false,
-    shutdown: () => undefined,
-    getContextUsage: () => undefined,
-    compact: () => undefined,
-    getSystemPrompt: () => "",
-    ...overrides,
-  });
+
+  let pendingInstallations = 0;
+  const installationErrors: unknown[] = [];
+  const waitForPrior = (): Promise<void> | undefined => {
+    if (pendingInstallations > 0) return Promise.all(installations.slice()).then(() => undefined);
+    const failureIndex = installationErrors.findIndex((_, index) => index in installationErrors);
+    if (failureIndex >= 0) return Promise.reject(installationErrors[failureIndex]);
+    return undefined;
+  };
+  const makeContext = (overrides: Partial<ExtensionContext> = {}): ExtensionContext => {
+    const cwd = overrides.cwd ?? process.cwd();
+    return {
+      mode: "tui",
+      hasUI: true,
+      cwd,
+      ui: ui.ui,
+      sessionManager: SessionManager.inMemory(cwd),
+      modelRegistry: modelRegistry.registry as unknown as ModelRegistry,
+      model: undefined,
+      scopedModels: [],
+      isIdle: () => true,
+      isProjectTrusted: () => true,
+      signal: undefined,
+      abort: () => undefined,
+      hasPendingMessages: () => false,
+      shutdown: () => undefined,
+      getContextUsage: () => undefined,
+      compact: () => undefined,
+      getSystemPrompt: () => "",
+      ...overrides,
+    };
+  };
   const makeCommandContext = (
     overrides: Partial<ExtensionCommandContext> = {},
   ): ExtensionCommandContext => {
-    const replacement = (sessionManager = SessionManager.inMemory(process.cwd())) =>
+    const cwd = overrides.cwd ?? process.cwd();
+    const replacement = (sessionManager = SessionManager.inMemory(cwd)): ReplacedSessionContext =>
       ({
-        ...makeCommandContext({ sessionManager }),
+        ...makeCommandContext({ ...overrides, sessionManager }),
         sendMessage: async () => undefined,
         sendUserMessage: async () => undefined,
-      }) as never;
+      }) as ReplacedSessionContext;
     return {
-      ...makeContext(),
-      getSystemPromptOptions: () => ({ cwd: process.cwd() }),
+      ...makeContext(overrides),
+      getSystemPromptOptions: () => ({ cwd }),
       waitForIdle: async () => undefined,
       newSession: async (request) => {
-        const sessionManager = SessionManager.inMemory(process.cwd());
+        const sessionManager = SessionManager.inMemory(cwd);
         await request?.setup?.(sessionManager);
         await request?.withSession?.(replacement(sessionManager));
         return { cancelled: false };
@@ -361,26 +442,33 @@ export function createExtensionRecorder(options: RecorderOptions = {}): Extensio
       ...overrides,
     };
   };
-  const recorder: ExtensionRecorder = {
+
+  const recorder: ExtensionRecorder<Omit<RecorderApi, TOmitted> & TAdditions> = {
     installations,
     get ready() {
       return Promise.all(installations.slice()).then(() => undefined);
     },
     install(factory) {
-      let installation: Promise<void>;
+      const installationIndex = installations.length;
+      let factoryResult: Promise<void>;
       pendingInstallations += 1;
       try {
-        installation = Promise.resolve(factory(api as unknown as ExtensionAPI));
+        factoryResult = Promise.resolve(factory(api as unknown as ExtensionAPI));
       } catch (error) {
-        installation = Promise.reject(error);
+        factoryResult = Promise.reject(error);
       }
+      const installation = factoryResult.then(
+        () => {
+          pendingInstallations -= 1;
+        },
+        (error: unknown) => {
+          pendingInstallations -= 1;
+          installationErrors[installationIndex] = error;
+          throw error;
+        },
+      );
       installations.push(installation);
       void installation.catch(() => undefined);
-      void installation
-        .finally(() => {
-          pendingInstallations -= 1;
-        })
-        .catch(() => undefined);
       return installation;
     },
     handlers,
@@ -390,10 +478,10 @@ export function createExtensionRecorder(options: RecorderOptions = {}): Extensio
     queuedCommands,
     apiCalls,
     appendEntries,
-    emissions,
+    emissions: eventBus.emissions,
     activeTools,
     allTools,
-    api: api as unknown as RecorderApi,
+    api: api as Omit<RecorderApi, TOmitted> & TAdditions,
     ui,
     modelRegistry,
     makeContext,
