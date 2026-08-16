@@ -8,7 +8,7 @@ import { createExtensionHarness } from "pi-tools/testing";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import ts from "typescript";
-import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   ExecutionDetailsSchema,
   SUBAGENT_PROFILE_CAPABILITY_EVENT,
@@ -16,6 +16,7 @@ import {
 } from "../extensions/subagents/api.js";
 import { createSubagentToolkit } from "../extensions/subagents/index.js";
 
+const CHILD_MARKER = "PI_TOOLS_SUBAGENT_CHILD";
 const parameters = Type.Object({ task: Type.String() });
 const profileData = Type.Object({ summary: Type.String() });
 
@@ -89,6 +90,18 @@ function integrationHarness() {
 }
 
 describe("subagent profile package contract", () => {
+  let previousChildMarker: string | undefined;
+
+  beforeEach(() => {
+    previousChildMarker = process.env[CHILD_MARKER];
+    delete process.env[CHILD_MARKER];
+  });
+
+  afterEach(() => {
+    if (previousChildMarker === undefined) delete process.env[CHILD_MARKER];
+    else process.env[CHILD_MARKER] = previousChildMarker;
+  });
+
   it("negotiates an independently typed replacement, executes hooks, and restores details", async () => {
     const harness = integrationHarness();
     const batch: ProfileRegistration = {
