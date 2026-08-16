@@ -2,7 +2,7 @@
 format: plan-v2
 date: 2026-08-16
 adrs: [reusable-extension-testing-boundary]
-status: Proposed
+status: Implemented
 ---
 # Plan: Reusable Extension Testing Tooling
 
