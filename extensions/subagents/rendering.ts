@@ -24,12 +24,13 @@ function compactDecimal(value: number, digits: number): string {
 
 function formatElapsed(milliseconds: number): string {
   if (milliseconds < 1) return `${compactDecimal(milliseconds, 2)}ms`;
-  if (milliseconds < 1_000) return `${Math.round(milliseconds)}ms`;
-  if (milliseconds < 60_000) return `${compactDecimal(milliseconds / 1_000, 1)}s`;
-  if (milliseconds < 3_600_000) {
-    const seconds = Math.round(milliseconds / 1_000);
-    return `${Math.floor(seconds / 60)}m${seconds % 60 === 0 ? "" : ` ${seconds % 60}s`}`;
-  }
+  const roundedMilliseconds = Math.round(milliseconds);
+  if (roundedMilliseconds < 1_000) return `${roundedMilliseconds}ms`;
+  const seconds = Math.round(milliseconds / 100) / 10;
+  if (seconds < 60) return `${compactDecimal(seconds, 1)}s`;
+  const roundedSeconds = Math.round(milliseconds / 1_000);
+  if (roundedSeconds < 3_600)
+    return `${Math.floor(roundedSeconds / 60)}m${roundedSeconds % 60 === 0 ? "" : ` ${roundedSeconds % 60}s`}`;
   const minutes = Math.round(milliseconds / 60_000);
   return `${Math.floor(minutes / 60)}h${minutes % 60 === 0 ? "" : ` ${minutes % 60}m`}`;
 }
@@ -150,7 +151,7 @@ class ExecutionView implements Component {
         completeHistory.length - history.length,
         execution.omittedActivity,
       );
-      if (omission) add(this.theme.fg("dim", omission));
+      if (omission) addWrapped(this.theme.fg("dim", omission));
       for (const entry of history) {
         if (entry.kind === "thinking") addWrapped(this.theme.fg("dim", `thinking: ${entry.text}`));
         else {

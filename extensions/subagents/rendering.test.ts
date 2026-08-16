@@ -93,6 +93,9 @@ describe("renderExecution", () => {
       line.startsWith("1 row omitted; 3 rows"),
     );
     expect(compactOmission).toBeGreaterThanOrEqual(0);
+    expect(compactLines.slice(compactOmission, compactOmission + 2).join(" ")).toContain(
+      "3 rows discarded",
+    );
     expect(expandedOmission).toBeGreaterThanOrEqual(0);
     expect(compactOmission).toBeLessThan(
       compactLines.findIndex((line) => line.includes("thought-")),
@@ -130,6 +133,43 @@ describe("renderExecution", () => {
       .render(120)
       .join("\n");
     expect(withoutCacheWrites).not.toMatch(/(?:^|\s)W\d/);
+  });
+
+  it("promotes rounded durations at unit boundaries", () => {
+    const durations = [
+      { milliseconds: 999.6, expected: "1s" },
+      { milliseconds: 59_960, expected: "1m" },
+      { milliseconds: 3_599_600, expected: "1h" },
+    ];
+    for (const { milliseconds, expected } of durations) {
+      const rendered = renderExecution(
+        {
+          ...details,
+          state: "running",
+          execution: {
+            prompt: "timing",
+            activity: [
+              {
+                kind: "tool",
+                toolCallId: expected,
+                summary: "read",
+                state: "success",
+                durationMs: milliseconds,
+              },
+            ],
+            omittedActivity: 0,
+            elapsedMs: milliseconds,
+            turns: 0,
+          },
+        },
+        true,
+        theme,
+      )
+        .render(120)
+        .join("\n");
+      expect(rendered).toContain(`success · read · ${expected}`);
+      expect(rendered).not.toMatch(/(?:1000ms|60s|60m)/);
+    }
   });
 
   it("updates correlated tools in place and switches only compact settled details to the report", () => {

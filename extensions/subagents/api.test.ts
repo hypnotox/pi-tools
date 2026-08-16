@@ -5,9 +5,11 @@ import {
   ConcreteModelSchema,
   ExecutionDetailsSchema,
   ExecutionProjectionSchema,
+  isExecutionDetails,
   JsonValueSchema,
   MAX_EXECUTION_ACTIVITY_CHARACTERS,
   MAX_EXECUTION_FACT_BYTES,
+  MAX_TOOL_RESULT_BYTES,
   PostRunResultSchema,
   PreparedRunSchema,
   type ProfileContext,
@@ -177,20 +179,55 @@ describe("profile API", () => {
     expect(
       Value.Check(ExecutionProjectionSchema, { ...execution, rawArgs: { secret: true } }),
     ).toBe(false);
+    const details = {
+      profileId: "profile",
+      state: "completed",
+      cwd: "/tmp",
+      model: { provider: "p", id: "m", thinkingLevels: ["off"] },
+      thinkingLevel: "off",
+      retryActive: false,
+      retries: 0,
+      activity: [],
+      omittedActivity: 0,
+      usage: execution.activeUsage,
+      execution,
+    };
+    expect(Value.Check(ExecutionDetailsSchema, details)).toBe(true);
     expect(
-      Value.Check(ExecutionDetailsSchema, {
-        profileId: "profile",
-        state: "completed",
-        cwd: "/tmp",
-        model: { provider: "p", id: "m", thinkingLevels: ["off"] },
-        thinkingLevel: "off",
-        retryActive: false,
-        retries: 0,
-        activity: [],
-        omittedActivity: 0,
-        usage: execution.activeUsage,
-        execution,
+      isExecutionDetails({
+        ...details,
+        execution: {
+          ...execution,
+          activity: [
+            {
+              kind: "tool",
+              toolCallId: "call",
+              summary: "read",
+              state: "success",
+              durationMs: 1,
+              result: "x".repeat(MAX_TOOL_RESULT_BYTES),
+            },
+          ],
+        },
       }),
     ).toBe(true);
+    expect(
+      isExecutionDetails({
+        ...details,
+        execution: {
+          ...execution,
+          activity: [
+            {
+              kind: "tool",
+              toolCallId: "call",
+              summary: "read",
+              state: "success",
+              durationMs: 1,
+              result: "😀".repeat(MAX_TOOL_RESULT_BYTES / 2),
+            },
+          ],
+        },
+      }),
+    ).toBe(false);
   });
 });
