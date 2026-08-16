@@ -4,7 +4,7 @@ import type {
   ProfileDefinition,
   ProfileRegistration,
 } from "pi-tools/subagent-profile";
-import { createExtensionHarness } from "pi-tools/testing";
+import { createExtensionRecorder } from "pi-tools/testing";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import ts from "typescript";
@@ -62,7 +62,8 @@ interface RegisteredTool {
 }
 
 function integrationHarness() {
-  const harness = createExtensionHarness(() => undefined);
+  const harness = createExtensionRecorder();
+  void harness.install(() => undefined);
   harness.activeTools.push("read");
   harness.allTools.push({ name: "read" });
   const context = harness.makeContext({

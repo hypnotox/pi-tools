@@ -1,9 +1,10 @@
-import { createExtensionHarness } from "pi-tools/testing";
+import { createExtensionRecorder } from "pi-tools/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import timingExtension, { formatTimingEntry, type TimingEntryData } from "./index.js";
 
 function createHarness() {
-  const shared = createExtensionHarness(timingExtension);
+  const shared = createExtensionRecorder();
+  void shared.install(timingExtension);
   const setWorkingMessage = vi.fn();
   const context = shared.makeContext({ ui: { setWorkingMessage } as never });
   return {

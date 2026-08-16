@@ -1,9 +1,10 @@
-import { createExtensionHarness } from "pi-tools/testing";
+import { createExtensionRecorder } from "pi-tools/testing";
 import { describe, expect, it } from "vitest";
 
 describe("pi-tools/testing", () => {
   it("loads through the package export and records public seams", async () => {
-    const harness = createExtensionHarness((pi) => {
+    const harness = createExtensionRecorder();
+    await harness.install((pi) => {
       pi.on("session_start", () => undefined);
       pi.events.on("ready", () => undefined);
     });

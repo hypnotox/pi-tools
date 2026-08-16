@@ -1,4 +1,4 @@
-import { createExtensionHarness } from "pi-tools/testing";
+import { createExtensionRecorder } from "pi-tools/testing";
 import { Type } from "typebox";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -48,14 +48,11 @@ interface RegisteredTool {
   }>;
 }
 
-function createSubagentHarness(
-  configuredTools = ["read"],
-  eventBus?: Map<string, Set<(data: unknown) => void>>,
-) {
-  const harness = createExtensionHarness(
-    () => undefined,
-    eventBus === undefined ? {} : { eventBus },
+function createSubagentHarness(configuredTools = ["read"], _sharedBus?: unknown) {
+  const harness = createExtensionRecorder(
+    _sharedBus === undefined ? {} : { eventBus: _sharedBus as Map<string, unknown> },
   );
+  void harness.install(() => undefined);
   harness.activeTools.push(...configuredTools);
   harness.allTools.push(...configuredTools.map((name) => ({ name })));
   const start = () => {
