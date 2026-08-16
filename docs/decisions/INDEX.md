@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-- [ADR-composable-extension-testing-recorder: Composable Extension Testing Recorder](composable-extension-testing-recorder.md) (Implementing)
+- [ADR-0010: Composable Extension Testing Recorder](0010-composable-extension-testing-recorder.md) (Implementing)
 
 ## History
 

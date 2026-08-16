@@ -4,7 +4,7 @@ slug: composable-extension-testing-recorder
 status: Implementing
 date: 2026-08-16
 ---
-# ADR-composable-extension-testing-recorder: Composable Extension Testing Recorder
+# ADR-0010: Composable Extension Testing Recorder
 
 ## Context
 
