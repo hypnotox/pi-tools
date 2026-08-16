@@ -246,4 +246,32 @@ describe("renderExecution", () => {
     const expanded = renderExecution(settled, true, theme).render(120);
     expect(expanded.filter((line) => line.startsWith("report-"))).toHaveLength(30);
   });
+
+  it("applies the compact result limit after ANSI-aware terminal wrapping", () => {
+    const settledWith = (report: string): ExecutionDetails => ({
+      ...details,
+      report,
+      execution: {
+        prompt: "inspect",
+        activity: [],
+        omittedActivity: 0,
+        elapsedMs: 1_000,
+        turns: 1,
+      },
+    });
+    const resultLines = (report: string) =>
+      renderExecution(settledWith(`\u001b[31m${report}\u001b[0m`), false, theme)
+        .render(20)
+        .filter((line) => line.includes("界"));
+
+    const exact = resultLines("界".repeat(240));
+    expect(exact).toHaveLength(24);
+    expect(exact.some((line) => line.includes("..."))).toBe(false);
+    expect(exact.every((line) => visibleWidth(line) <= 20)).toBe(true);
+
+    const truncated = resultLines("界".repeat(250));
+    expect(truncated).toHaveLength(24);
+    expect(truncated.at(-1)).toContain("...");
+    expect(truncated.every((line) => visibleWidth(line) <= 20)).toBe(true);
+  });
 });
