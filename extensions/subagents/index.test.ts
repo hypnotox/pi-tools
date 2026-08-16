@@ -240,7 +240,36 @@ describe("subagent toolkit adapter", () => {
     expect(updates).toHaveLength(1);
   });
 
-  it("marks live and persisted details when the prepared CWD differs from the parent", async () => {
+  it("compares normalized prepared and parent CWDs in live and persisted details", async () => {
+    const equivalent = createSubagentHarness();
+    await equivalent.install((api) =>
+      createSubagentToolkit(api, {
+        runner: {
+          run: vi.fn(async () => completedOutcome()),
+          shutdown: vi.fn(async () => undefined),
+        },
+        profiles: [
+          customProfile({
+            prepare: ({ args }) => ({
+              cwd: "/parent/child/..",
+              systemPrompt: "custom system",
+              prompt: (args as { task: string }).task,
+              toolPolicy: { mode: "allowlist", tools: [] },
+            }),
+          }),
+        ],
+      }),
+    );
+    equivalent.start();
+    const equivalentResult = await equivalent.tools[0]?.execute(
+      "call",
+      { task: "focus" },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(equivalentResult?.details.cwdDiffersFromParent).toBe(false);
+
     const harness = createSubagentHarness();
     const run = vi.fn(async (request: { onUpdate?: (value: ExecutionOutcome) => void }) => {
       const outcome = completedOutcome();
@@ -512,6 +541,12 @@ describe("subagent toolkit adapter", () => {
             beforeRun: () => {
               throw new Error("callback failed");
             },
+            prepare: ({ args }) => ({
+              cwd: "/child",
+              systemPrompt: "custom system",
+              prompt: (args as { task: string }).task,
+              toolPolicy: { mode: "allowlist", tools: [] },
+            }),
           }),
         ],
       }),
@@ -526,6 +561,7 @@ describe("subagent toolkit adapter", () => {
     );
     expect(failed?.details).toMatchObject({
       state: "failed",
+      cwdDiffersFromParent: true,
       failure: "callback failed",
       execution: { prompt: "focus", activity: [], elapsedMs: 0 },
     });
@@ -542,7 +578,16 @@ describe("subagent toolkit adapter", () => {
     await harness.install((api) =>
       createSubagentToolkit(api, {
         runner: { run, shutdown: vi.fn(async () => undefined) },
-        profiles: [customProfile()],
+        profiles: [
+          customProfile({
+            prepare: ({ args }) => ({
+              cwd: "/child",
+              systemPrompt: "custom system",
+              prompt: (args as { task: string }).task,
+              toolPolicy: { mode: "allowlist", tools: [] },
+            }),
+          }),
+        ],
       }),
     );
     harness.start();
@@ -567,12 +612,14 @@ describe("subagent toolkit adapter", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(updates.at(-1)?.details).toMatchObject({
       state: "queued",
+      cwdDiffersFromParent: true,
       execution: { prompt: "queued task" },
     });
     controller.abort();
     await expect(second).resolves.toMatchObject({
       details: {
         state: "cancelled",
+        cwdDiffersFromParent: true,
         execution: { prompt: "queued task", activity: [], elapsedMs: 0 },
       },
     });
