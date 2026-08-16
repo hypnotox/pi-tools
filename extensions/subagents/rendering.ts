@@ -38,6 +38,13 @@ function boundedLines(text: string, width: number): string[] {
   return wrapTextWithAnsi(text, Math.max(1, width)).map((line) => truncateToWidth(line, width));
 }
 
+function omittedRowsLine(omitted: number, discarded: number): string | undefined {
+  const parts: string[] = [];
+  if (omitted > 0) parts.push(`${omitted} ${omitted === 1 ? "row" : "rows"} omitted`);
+  if (discarded > 0) parts.push(`${discarded} discarded`);
+  return parts.length > 0 ? parts.join(" and ") : undefined;
+}
+
 function usageLine(details: ExecutionDetails): string | undefined {
   const execution = details.execution;
   if (!execution) return undefined;
@@ -113,12 +120,18 @@ class ExecutionView implements Component {
       );
 
     if (execution && (!settled || this.expanded)) {
-      const history = [
+      const completeHistory = [
         ...execution.activity,
         ...(execution.unfinishedThinking
           ? [{ kind: "thinking" as const, text: execution.unfinishedThinking }]
           : []),
-      ].slice(-(this.expanded ? 50 : 25));
+      ];
+      const history = completeHistory.slice(-(this.expanded ? 50 : 25));
+      const omission = omittedRowsLine(
+        completeHistory.length - history.length,
+        execution.omittedActivity,
+      );
+      if (omission) add(this.theme.fg("dim", omission));
       for (const entry of history) {
         if (entry.kind === "thinking") addWrapped(this.theme.fg("dim", `thinking: ${entry.text}`));
         else {
@@ -132,8 +145,6 @@ class ExecutionView implements Component {
           );
         }
       }
-      if (execution.omittedActivity > 0)
-        add(this.theme.fg("dim", `${execution.omittedActivity} execution rows omitted`));
     }
 
     const footer = usageLine(details);

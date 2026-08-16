@@ -88,6 +88,14 @@ describe("renderExecution", () => {
     expect(
       expandedLines.filter((line) => line.includes("thought-") || line.includes("unfinished")),
     ).toHaveLength(50);
+    expect(compactLines).toContain("26 rows omitted and 3 discarded");
+    expect(expandedLines).toContain("1 row omitted and 3 discarded");
+    expect(compactLines.indexOf("26 rows omitted and 3 discarded")).toBeLessThan(
+      compactLines.findIndex((line) => line.includes("thought-")),
+    );
+    expect(expandedLines.indexOf("1 row omitted and 3 discarded")).toBeLessThan(
+      expandedLines.findIndex((line) => line.includes("thought-")),
+    );
     expect(compactLines.filter((line) => line.includes("very long prompt"))).toHaveLength(1);
     expect(
       expandedLines.filter((line) => line.includes("very long prompt")).length,
