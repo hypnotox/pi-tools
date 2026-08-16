@@ -223,13 +223,14 @@ re-add the key to recover.
 
 ### Pi workflow subagents
 
-The Pi target requires a compatible Pi 0.81.1 or newer build exposing `ExtensionAPI.queueCommand`
-and renders executable project-extension code that Pi loads only after project trust. It registers exactly four tools: `subagent_grounding` takes a
-required `task` for the workflow's premise and altitude check; `subagent_explore` requires
-`{task, breadth, detail}`, where breadth is `targeted`, `bounded`, or `broad` and independently
-selected detail is `paths`, `summary`, or `analysis`; `subagent_review` takes required `kind`
-(`adr`, `plan`, or `code`) and `task`; and `subagent_implement` takes required `task` and
-`allowCommits`, plus optional `verificationCheckout`. Omission verifies the project-root checkout.
+The Pi target requires a compatible Pi 0.84.2 or newer build exposing `ExtensionAPI.queueCommand`
+and renders executable project-extension code that Pi loads only after project trust. It registers exactly six tools in Full and four in Core. Both profiles expose
+`subagent_grounding`, whose required `task` carries the workflow's premise and altitude check;
+`subagent_explore`, which requires `{task, breadth, detail}` with breadth `targeted`, `bounded`, or
+`broad` and independently selected detail `paths`, `summary`, or `analysis`; `subagent_review_code`,
+which takes a required review `task`; and `subagent_implement`, which takes required `task` and
+`allowCommits` plus optional `verificationCheckout`. Full additionally exposes
+`subagent_review_adr` and `subagent_review_plan`, each with a required review `task`. Omission verifies the project-root checkout.
 An explicit value resolves relative to the project root after one leading `@` is removed, must be
 an exact live checkout root for the same Git common directory, and selects only the before-and-after
 commit-policy snapshots. It does not change either Pi process CWD or bind the task's mutation paths.
