@@ -4,6 +4,8 @@ export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhig
 export const MAX_EXECUTION_FACT_BYTES = 16 * 1024;
 export const MAX_EXECUTION_FACT_CHARACTERS = MAX_EXECUTION_FACT_BYTES / 4;
 export const MAX_EXECUTION_ACTIVITY_CHARACTERS = 1024;
+/** Matches Pi's built-in per-tool output ceiling. */
+export const MAX_TOOL_RESULT_BYTES = 50 * 1024;
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 const ThinkingLevelSchema = Type.Union([
@@ -118,6 +120,7 @@ export const ExecutionHistoryEntrySchema = Type.Union([
       summary: Type.String({ maxLength: MAX_EXECUTION_ACTIVITY_CHARACTERS }),
       state: Type.Union([Type.Literal("running"), Type.Literal("success"), Type.Literal("error")]),
       durationMs: Type.Number({ minimum: 0 }),
+      result: Type.Optional(Type.String({ maxLength: MAX_TOOL_RESULT_BYTES })),
     },
     { additionalProperties: false },
   ),

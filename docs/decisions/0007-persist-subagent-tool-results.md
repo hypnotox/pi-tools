@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: persist-subagent-tool-results
-status: Proposed
+status: Implemented
 date: 2026-08-16
 ---
 # ADR-0007: Persist Subagent Tool Results
@@ -41,3 +41,4 @@ Persisted execution details can grow by up to 50 KiB per retained tool row. The 
 ## Status history
 
 - 2026-08-16: Proposed
+- 2026-08-16: Implemented; content-sha256: 7b83945812cdc56d6e231d31e0b8ac38bd18c7b16771bacfd826be871af50dba

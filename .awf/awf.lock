@@ -475,7 +475,7 @@
       "templateId": "",
       "templateHash": "",
       "configHash": "sha256:619a4dec6900da1feb21570a9a316b719f4802bf7686ce13e6cd6114d391b3e6",
-      "outputHash": "sha256:f58262839f74ece1b4480d3bc554a05622e2fcdf57b9a4166a785baf7ed62024",
+      "outputHash": "sha256:1f79bd9849729cc8b5f8823f65dce612fd2e15959460abe8b39147d1654454bc",
       "regenChecked": true
     },
     "docs/decisions/README.md": {
@@ -590,8 +590,8 @@
     "docs/topics/development/subagent-toolkit.md": {
       "templateId": "topics/topic.md.tmpl",
       "templateHash": "sha256:25b4ec23c7a22667f9d78b1e5883af8702d82f67896c3a42ac0ad19032d7c7bb",
-      "configHash": "sha256:e4132a7a899105d24b0d44da1af5df43b60f5e5de821c1a755e398f1012992c8",
-      "outputHash": "sha256:ee485fb945b1191f1cd7750f6dc7101e0d3ff3d8eef06c338187f3a2c5453a83"
+      "configHash": "sha256:e281b3234b85ce3220efff5bb699a7a1192bf009c34e74e1d13f5be77a35af3e",
+      "outputHash": "sha256:f80e7acabbd9f73348a55ca82727bde4957f96ce11b13786b4b19c00b7cf93e1"
     },
     "docs/workflow.md": {
       "templateId": "docs/workflow.md.tmpl",
