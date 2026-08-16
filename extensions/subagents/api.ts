@@ -1,9 +1,13 @@
+import { Buffer } from "node:buffer";
 import { type Static, Type, type TSchema as TypeBoxSchema } from "typebox";
+import { Value } from "typebox/value";
 
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export const MAX_EXECUTION_FACT_BYTES = 16 * 1024;
 export const MAX_EXECUTION_FACT_CHARACTERS = MAX_EXECUTION_FACT_BYTES / 4;
 export const MAX_EXECUTION_ACTIVITY_CHARACTERS = 1024;
+/** Matches Pi's built-in per-tool output ceiling. */
+export const MAX_TOOL_RESULT_BYTES = 50 * 1024;
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 const ThinkingLevelSchema = Type.Union([
@@ -118,6 +122,7 @@ export const ExecutionHistoryEntrySchema = Type.Union([
       summary: Type.String({ maxLength: MAX_EXECUTION_ACTIVITY_CHARACTERS }),
       state: Type.Union([Type.Literal("running"), Type.Literal("success"), Type.Literal("error")]),
       durationMs: Type.Number({ minimum: 0 }),
+      result: Type.Optional(Type.String({ maxLength: MAX_TOOL_RESULT_BYTES })),
     },
     { additionalProperties: false },
   ),
@@ -325,5 +330,19 @@ export const ExecutionDetailsSchema = Type.Object(
   { additionalProperties: false },
 );
 export type ExecutionDetails = Static<typeof ExecutionDetailsSchema>;
+
+/** Validates both the structural schema and its UTF-8 byte-bounded tool results. */
+export function isExecutionDetails(value: unknown): value is ExecutionDetails {
+  if (!Value.Check(ExecutionDetailsSchema, value)) return false;
+  return (
+    value.execution?.activity.every(
+      (entry) =>
+        entry.kind !== "tool" ||
+        entry.result === undefined ||
+        Buffer.byteLength(entry.result, "utf8") <= MAX_TOOL_RESULT_BYTES,
+    ) ?? true
+  );
+}
+
 export const CHILD_MARKER = "PI_TOOLS_SUBAGENT_CHILD";
 export const MAX_PROFILE_DATA_BYTES = 16 * 1024;

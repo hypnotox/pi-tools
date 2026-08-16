@@ -18,8 +18,21 @@ function formatTokens(count: number): string {
   return `${Math.round(count / 1_000_000)}M`;
 }
 
+function compactDecimal(value: number, digits: number): string {
+  return Number(value.toFixed(digits)).toString();
+}
+
 function formatElapsed(milliseconds: number): string {
-  return milliseconds < 1_000 ? `${milliseconds}ms` : `${(milliseconds / 1_000).toFixed(1)}s`;
+  if (milliseconds < 1) return `${compactDecimal(milliseconds, 2)}ms`;
+  const roundedMilliseconds = Math.round(milliseconds);
+  if (roundedMilliseconds < 1_000) return `${roundedMilliseconds}ms`;
+  const seconds = Math.round(milliseconds / 100) / 10;
+  if (seconds < 60) return `${compactDecimal(seconds, 1)}s`;
+  const roundedSeconds = Math.round(milliseconds / 1_000);
+  if (roundedSeconds < 3_600)
+    return `${Math.floor(roundedSeconds / 60)}m${roundedSeconds % 60 === 0 ? "" : ` ${roundedSeconds % 60}s`}`;
+  const minutes = Math.round(milliseconds / 60_000);
+  return `${Math.floor(minutes / 60)}h${minutes % 60 === 0 ? "" : ` ${minutes % 60}m`}`;
 }
 
 function isLive(details: ExecutionDetails): boolean {
@@ -38,11 +51,18 @@ function boundedLines(text: string, width: number): string[] {
   return wrapTextWithAnsi(text, Math.max(1, width)).map((line) => truncateToWidth(line, width));
 }
 
+function firstLogicalLine(value: string): string {
+  const indexes = ["\r", "\n", "\u0085", "\u2028", "\u2029"]
+    .map((separator) => value.indexOf(separator))
+    .filter((index) => index >= 0);
+  return indexes.length > 0 ? value.slice(0, Math.min(...indexes)) : value;
+}
+
 function omittedRowsLine(omitted: number, discarded: number): string | undefined {
   const parts: string[] = [];
   if (omitted > 0) parts.push(`${omitted} ${omitted === 1 ? "row" : "rows"} omitted`);
-  if (discarded > 0) parts.push(`${discarded} discarded`);
-  return parts.length > 0 ? parts.join(" and ") : undefined;
+  if (discarded > 0) parts.push(`${discarded} ${discarded === 1 ? "row" : "rows"} discarded`);
+  return parts.length > 0 ? parts.join("; ") : undefined;
 }
 
 function usageLine(details: ExecutionDetails): string | undefined {
@@ -131,7 +151,7 @@ class ExecutionView implements Component {
         completeHistory.length - history.length,
         execution.omittedActivity,
       );
-      if (omission) add(this.theme.fg("dim", omission));
+      if (omission) addWrapped(this.theme.fg("dim", omission));
       for (const entry of history) {
         if (entry.kind === "thinking") addWrapped(this.theme.fg("dim", `thinking: ${entry.text}`));
         else {
@@ -143,6 +163,11 @@ class ExecutionView implements Component {
               `${entry.state} · ${entry.summary} · ${formatElapsed(entry.durationMs)}`,
             ),
           );
+          if (entry.result !== undefined) {
+            const result = `result: ${this.expanded ? entry.result : firstLogicalLine(entry.result)}`;
+            if (this.expanded) addWrapped(this.theme.fg("dim", result));
+            else add(this.theme.fg("dim", result));
+          }
         }
       }
     }

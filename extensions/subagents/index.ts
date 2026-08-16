@@ -7,9 +7,9 @@ import {
   type ConcreteModel,
   ConcreteModelSchema,
   type ExecutionDetails,
-  ExecutionDetailsSchema,
   type ExecutionOutcome,
   type ExecutionUsage,
+  isExecutionDetails,
   JsonValueSchema,
   MAX_EXECUTION_FACT_BYTES,
   MAX_EXECUTION_FACT_CHARACTERS,
@@ -530,7 +530,7 @@ export function createSubagentToolkit(
           executeProfile(profile, params, signal, onUpdate, toolContext),
         renderResult: (result, options, theme) =>
           renderExecution(
-            Value.Check(ExecutionDetailsSchema, result.details) ? result.details : undefined,
+            isExecutionDetails(result.details) ? result.details : undefined,
             options.expanded,
             theme,
           ),
@@ -562,7 +562,7 @@ export function createSubagentToolkit(
   });
   pi.on("tool_result", (event) => {
     if (!registry.profileTools().has(event.toolName)) return;
-    if (!Value.Check(ExecutionDetailsSchema, event.details)) return;
+    if (!isExecutionDetails(event.details)) return;
     if (event.details.state === "failed" || event.details.state === "cancelled")
       return { isError: true };
   });

@@ -12,3 +12,4 @@
 - [ADR-0004: Subagent Execution Observability](0004-subagent-execution-observability.md) (Implemented)
 - [ADR-0005: Public source distribution](0005-public-source-distribution.md) (Implemented)
 - [ADR-0006: Verified commit provenance](0006-verified-commit-provenance.md) (Implemented)
+- [ADR-0007: Persist Subagent Tool Results](0007-persist-subagent-tool-results.md) (Implemented)

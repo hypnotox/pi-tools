@@ -459,9 +459,20 @@ describe("SubprocessRunner", () => {
     now = 30;
     event({ type: "tool_execution_start", toolCallId: "two", toolName: "bash", args: {} });
     now = 40;
-    event({ type: "tool_execution_end", toolCallId: "one", toolName: "read" });
+    event({
+      type: "tool_execution_end",
+      toolCallId: "one",
+      toolName: "read",
+      result: { content: [{ type: "text", text: "first line\nsecond line" }] },
+    });
     now = 50;
-    event({ type: "tool_execution_end", toolCallId: "two", toolName: "bash", isError: true });
+    event({
+      type: "tool_execution_end",
+      toolCallId: "two",
+      toolName: "bash",
+      isError: true,
+      result: { content: [{ type: "text", text: "command failed" }] },
+    });
     now = 60;
     event({
       type: "message_update",
@@ -488,8 +499,22 @@ describe("SubprocessRunner", () => {
       latestTurnUsage: { cacheRead: 21, input: 4 },
       activity: [
         { kind: "thinking", text: "first" },
-        { kind: "tool", toolCallId: "one", summary: "read", state: "success", durationMs: 20 },
-        { kind: "tool", toolCallId: "two", summary: "bash", state: "error", durationMs: 20 },
+        {
+          kind: "tool",
+          toolCallId: "one",
+          summary: "read",
+          state: "success",
+          durationMs: 20,
+          result: "first line\nsecond line",
+        },
+        {
+          kind: "tool",
+          toolCallId: "two",
+          summary: "bash",
+          state: "error",
+          durationMs: 20,
+          result: "command failed",
+        },
         { kind: "thinking", text: "second line" },
         { kind: "thinking", text: "third" },
       ],
@@ -562,6 +587,28 @@ describe("SubprocessRunner", () => {
     expect((result.execution.activity as Array<Record<string, unknown>>)[0]).toMatchObject({
       text: "line 1",
     });
+  });
+
+  it("bounds persisted tool results to the child tool-output ceiling", async () => {
+    const deps = dependencies();
+    const { promise } = await launch(deps);
+    const event = (value: unknown) =>
+      deps.child.stdout.emit("data", Buffer.from(`${JSON.stringify(value)}\n`));
+    event({ type: "tool_execution_start", toolCallId: "large", toolName: "read", args: {} });
+    event({
+      type: "tool_execution_end",
+      toolCallId: "large",
+      toolName: "read",
+      result: { content: [{ type: "text", text: "😀".repeat(20_000) }] },
+    });
+    deps.child.emit("close", 0);
+
+    const result = await promise;
+    const tool = result.execution?.activity.find((entry) => entry.kind === "tool");
+    expect(tool).toMatchObject({ kind: "tool", result: expect.stringContaining("[truncated]") });
+    if (tool?.kind !== "tool" || tool.result === undefined) throw new Error("missing tool result");
+    expect(Buffer.byteLength(tool.result, "utf8")).toBeLessThanOrEqual(50 * 1024);
+    expect(tool.result).not.toContain("�");
   });
 
   it("truncates UTF-8 without splitting a code point", () => {

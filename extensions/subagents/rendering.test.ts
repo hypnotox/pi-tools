@@ -88,12 +88,19 @@ describe("renderExecution", () => {
     expect(
       expandedLines.filter((line) => line.includes("thought-") || line.includes("unfinished")),
     ).toHaveLength(50);
-    expect(compactLines).toContain("26 rows omitted and 3 discarded");
-    expect(expandedLines).toContain("1 row omitted and 3 discarded");
-    expect(compactLines.indexOf("26 rows omitted and 3 discarded")).toBeLessThan(
+    const compactOmission = compactLines.findIndex((line) => line.startsWith("26 rows omitted;"));
+    const expandedOmission = expandedLines.findIndex((line) =>
+      line.startsWith("1 row omitted; 3 rows"),
+    );
+    expect(compactOmission).toBeGreaterThanOrEqual(0);
+    expect(compactLines.slice(compactOmission, compactOmission + 2).join(" ")).toContain(
+      "3 rows discarded",
+    );
+    expect(expandedOmission).toBeGreaterThanOrEqual(0);
+    expect(compactOmission).toBeLessThan(
       compactLines.findIndex((line) => line.includes("thought-")),
     );
-    expect(expandedLines.indexOf("1 row omitted and 3 discarded")).toBeLessThan(
+    expect(expandedOmission).toBeLessThan(
       expandedLines.findIndex((line) => line.includes("thought-")),
     );
     expect(compactLines.filter((line) => line.includes("very long prompt"))).toHaveLength(1);
@@ -128,6 +135,43 @@ describe("renderExecution", () => {
     expect(withoutCacheWrites).not.toMatch(/(?:^|\s)W\d/);
   });
 
+  it("promotes rounded durations at unit boundaries", () => {
+    const durations = [
+      { milliseconds: 999.6, expected: "1s" },
+      { milliseconds: 59_960, expected: "1m" },
+      { milliseconds: 3_599_600, expected: "1h" },
+    ];
+    for (const { milliseconds, expected } of durations) {
+      const rendered = renderExecution(
+        {
+          ...details,
+          state: "running",
+          execution: {
+            prompt: "timing",
+            activity: [
+              {
+                kind: "tool",
+                toolCallId: expected,
+                summary: "read",
+                state: "success",
+                durationMs: milliseconds,
+              },
+            ],
+            omittedActivity: 0,
+            elapsedMs: milliseconds,
+            turns: 0,
+          },
+        },
+        true,
+        theme,
+      )
+        .render(120)
+        .join("\n");
+      expect(rendered).toContain(`success · read · ${expected}`);
+      expect(rendered).not.toMatch(/(?:1000ms|60s|60m)/);
+    }
+  });
+
   it("updates correlated tools in place and switches only compact settled details to the report", () => {
     const execution = {
       prompt: "inspect the repository",
@@ -138,7 +182,9 @@ describe("renderExecution", () => {
           toolCallId: "call-1",
           summary: "read src",
           state: "running" as const,
-          durationMs: 1_500,
+          durationMs: 0.126,
+          result:
+            "first result line that is much wider than the compact terminal\nsecond result line",
         },
       ],
       omittedActivity: 0,
@@ -160,20 +206,28 @@ describe("renderExecution", () => {
             toolCallId: "call-1",
             summary: "read src",
             state: "success" as const,
-            durationMs: 2_500,
+            durationMs: 3_665_000,
+            result:
+              "first result line that is much wider than the compact terminal\nsecond result line",
           },
         ],
       },
     };
     expect(renderExecution(running, true, theme).render(120).join("\n")).toContain(
-      "running · read src · 1.5s",
+      "running · read src · 0.13ms",
     );
+    const compactRunning = renderExecution(running, false, theme).render(32);
+    expect(compactRunning.some((line) => line.includes("first result line"))).toBe(true);
+    expect(compactRunning.join("\n")).not.toContain("second result line");
+    expect(compactRunning.every((line) => visibleWidth(line) <= 32)).toBe(true);
     const resumed = JSON.parse(JSON.stringify(settled)) as ExecutionDetails;
     const compact = renderExecution(resumed, false, theme).render(120).join("\n");
     const expanded = renderExecution(resumed, true, theme).render(120).join("\n");
     expect(compact).toContain("final report");
     expect(compact).not.toContain("read src");
-    expect(expanded).toContain("success · read src · 2.5s");
+    expect(expanded).toContain("success · read src · 1h 1m");
+    expect(expanded).toContain("first result line that is much wider than the compact terminal");
+    expect(expanded).toContain("second result line");
     expect(expanded).toContain("checking");
   });
 });
