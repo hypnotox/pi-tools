@@ -21,6 +21,33 @@ class FakeClock implements Clock {
 }
 
 describe("TimingState", () => {
+  it("records the full agent run across turns without restarting on retries", () => {
+    const clock = new FakeClock();
+    const state = new TimingState(clock);
+
+    state.startAgent(clock.wall);
+    clock.advance(2_000);
+    state.startTurn(0, clock.wall);
+    clock.advance(3_000);
+    state.endTurn();
+    state.startAgent(clock.wall);
+    state.startTurn(1, clock.wall);
+    clock.advance(4_000);
+
+    expect(state.getLiveTurn()).toEqual({
+      label: "turn 2",
+      durationMs: 4_000,
+      agentDurationMs: 9_000,
+    });
+    expect(state.endAgent()).toEqual({
+      kind: "agent",
+      label: "agent",
+      startedAt: new Date(2026, 7, 14, 14, 32, 6, 411).getTime(),
+      endedAt: clock.wall,
+      durationMs: 9_000,
+    });
+  });
+
   it("records a one-based turn and monotonic duration", () => {
     const clock = new FakeClock();
     const state = new TimingState(clock);
@@ -84,18 +111,24 @@ describe("TimingState", () => {
 
     state.startTurn(0);
     clock.mono -= 50;
-    expect(state.getLiveTurn()).toEqual({ label: "turn 1", durationMs: 0 });
+    expect(state.getLiveTurn()).toEqual({
+      label: "turn 1",
+      durationMs: 0,
+      agentDurationMs: 0,
+    });
   });
 
   it("resets all active state", () => {
     const clock = new FakeClock();
     const state = new TimingState(clock);
+    state.startAgent();
     state.startTurn(0);
     state.startTool("read-id", "read");
 
     state.reset();
 
     expect(state.getLiveTurn()).toBeUndefined();
+    expect(state.endAgent()).toBeUndefined();
     expect(state.endTool("read-id")).toBeUndefined();
     expect(state.startTool("new-id", "write")).toBe(1);
   });
@@ -126,6 +159,7 @@ describe("timing formatting", () => {
 
   it("formats live durations with one decimal second", () => {
     expect(formatLiveDuration(8_249)).toBe("8.2s");
+    expect(formatLiveDuration(72_449)).toBe("1m 12.4s");
     expect(formatLiveDuration(-1)).toBe("0.0s");
   });
 });

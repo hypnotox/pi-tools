@@ -4,7 +4,7 @@ export interface Clock {
 }
 
 export interface TimingCompletion {
-  kind: "tool" | "turn";
+  kind: "agent" | "tool" | "turn";
   label: string;
   startedAt: number;
   endedAt: number;
@@ -30,6 +30,7 @@ const systemClock: Clock = {
 export class TimingState {
   readonly #clock: Clock;
   readonly #tools = new Map<string, ActiveTool>();
+  #agent: ActiveTiming | undefined;
   #turn: ActiveTiming | undefined;
   #nextToolIndex = 1;
 
@@ -37,7 +38,26 @@ export class TimingState {
     this.#clock = clock;
   }
 
+  startAgent(startedAt = this.#clock.wallNow()): void {
+    if (this.#agent) return;
+    this.#agent = {
+      label: "agent",
+      startedAt,
+      startedMono: this.#clock.monotonicNow(),
+    };
+  }
+
+  endAgent(): TimingCompletion | undefined {
+    const agent = this.#agent;
+    if (!agent) return undefined;
+
+    const completion = this.#complete("agent", agent);
+    this.#agent = undefined;
+    return completion;
+  }
+
   startTurn(turnIndex: number, startedAt = this.#clock.wallNow()): void {
+    this.startAgent(startedAt);
     this.#turn = {
       label: `turn ${turnIndex + 1}`,
       startedAt,
@@ -82,15 +102,17 @@ export class TimingState {
     };
   }
 
-  getLiveTurn(): { label: string; durationMs: number } | undefined {
+  getLiveTurn(): { label: string; durationMs: number; agentDurationMs: number } | undefined {
     if (!this.#turn) return undefined;
     return {
       label: this.#turn.label,
       durationMs: this.#elapsed(this.#turn.startedMono),
+      agentDurationMs: this.#agent ? this.#elapsed(this.#agent.startedMono) : 0,
     };
   }
 
   reset(): void {
+    this.#agent = undefined;
     this.#turn = undefined;
     this.#tools.clear();
     this.#nextToolIndex = 1;
@@ -134,5 +156,10 @@ export function formatCompletedDuration(durationMs: number): string {
 }
 
 export function formatLiveDuration(durationMs: number): string {
-  return `${(Math.max(0, durationMs) / 1_000).toFixed(1)}s`;
+  const roundedTenths = Math.round(Math.max(0, durationMs) / 100);
+  if (roundedTenths < 600) return `${(roundedTenths / 10).toFixed(1)}s`;
+
+  const minutes = Math.floor(roundedTenths / 600);
+  const seconds = ((roundedTenths % 600) / 10).toFixed(1).padStart(4, "0");
+  return `${minutes}m ${seconds}s`;
 }

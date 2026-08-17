@@ -6,14 +6,15 @@ Personal tooling for [Pi](https://pi.dev): portable extensions, skills, prompt t
 
 ### Timing
 
-The timing extension adds local `HH:mm:ss.SSS` timestamps and monotonic durations to completed Pi turns and tool calls. Tool lines use a one-based index matching their source order, so parallel completion remains identifiable:
+The timing extension adds local `HH:mm:ss.SSS` timestamps and monotonic durations to completed Pi agent runs, turns, and tool calls. Tool lines use a one-based index matching their source order, so parallel completion remains identifiable:
 
 ```text
   ↳ tool 2 · bash · 14:32:08.210 → 14:32:11.940 · 3.73s
   ↳ turn 4 · 14:32:06.411 → 14:32:14.902 · 8.49s
+  ↳ agent · 14:31:02.202 → 14:32:14.902 · 1m 12.7s
 ```
 
-While a turn runs, its elapsed time appears beside Pi's native working spinner. Tool durations appear directly beneath completed tool output without an extra blank line. Timing history uses custom session entries, which render in the TUI but never enter model context. Run `/reload` after editing or updating the extension.
+While a turn runs, its duration and the total duration since the current prompt started appear beside Pi's native working spinner as `Working... · Turn 4: 8.2s · Total: 1m 12.4s`. The total survives retries and completes only when the agent settles. Tool durations appear directly beneath completed tool output without an extra blank line. Timing history uses custom session entries, which render in the TUI but never enter model context. Run `/reload` after editing or updating the extension.
 
 ### Context usage
 

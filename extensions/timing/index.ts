@@ -55,7 +55,7 @@ export default function timingExtension(pi: ExtensionAPI): void {
     if (!live) return;
     const label = live.label.replace(/^turn/, "Turn");
     workingContext.ui.setWorkingMessage(
-      `Working... · ${label} · ${formatLiveDuration(live.durationMs)}`,
+      `Working... · ${label}: ${formatLiveDuration(live.durationMs)} · Total: ${formatLiveDuration(live.agentDurationMs)}`,
     );
   };
 
@@ -90,6 +90,10 @@ export default function timingExtension(pi: ExtensionAPI): void {
     }
   });
 
+  pi.on("agent_start", () => {
+    state.startAgent();
+  });
+
   pi.on("turn_start", (event, ctx) => {
     state.startTurn(event.turnIndex, event.timestamp);
     beginWorkingMessage(ctx);
@@ -111,6 +115,11 @@ export default function timingExtension(pi: ExtensionAPI): void {
     } finally {
       restoreWorkingMessage(ctx);
     }
+  });
+
+  pi.on("agent_settled", (_event, ctx) => {
+    const completion = state.endAgent();
+    if (completion) appendCompletion(completion, ctx);
   });
 
   pi.on("session_shutdown", (_event, ctx) => {

@@ -43,12 +43,18 @@ describe("timing extension", () => {
       { kind: "tool", label: "read", toolIndex: 1 },
     ]);
   });
-  it("adds turn duration to the native working message and restores the default", async () => {
+  it("shows turn and full agent durations, then records the settled agent run", async () => {
     const harness = createHarness();
+    await harness.emit("agent_start");
+    await vi.advanceTimersByTimeAsync(64_200);
     await harness.emit("turn_start", { turnIndex: 3, timestamp: Date.now() });
-    expect(harness.setWorkingMessage).toHaveBeenLastCalledWith("Working... · Turn 4 · 0.0s");
+    expect(harness.setWorkingMessage).toHaveBeenLastCalledWith(
+      "Working... · Turn 4: 0.0s · Total: 1m 04.2s",
+    );
     await vi.advanceTimersByTimeAsync(8_249);
-    expect(harness.setWorkingMessage).toHaveBeenLastCalledWith("Working... · Turn 4 · 8.2s");
+    expect(harness.setWorkingMessage).toHaveBeenLastCalledWith(
+      "Working... · Turn 4: 8.2s · Total: 1m 12.4s",
+    );
     await harness.emit("turn_end");
     expect(harness.appendEntries.at(-1)?.[1]).toMatchObject({
       kind: "turn",
@@ -56,7 +62,25 @@ describe("timing extension", () => {
       durationMs: 8_249,
     });
     expect(harness.setWorkingMessage).toHaveBeenLastCalledWith();
+    await harness.emit("agent_settled");
+    expect(harness.appendEntries.at(-1)?.[1]).toMatchObject({
+      kind: "agent",
+      label: "agent",
+      durationMs: 72_449,
+    });
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not restart the full duration when an agent run retries", async () => {
+    const harness = createHarness();
+    await harness.emit("agent_start");
+    await vi.advanceTimersByTimeAsync(5_000);
+    await harness.emit("agent_start");
+    await vi.advanceTimersByTimeAsync(2_000);
+    await harness.emit("turn_start", { turnIndex: 1, timestamp: Date.now() });
+    expect(harness.setWorkingMessage).toHaveBeenLastCalledWith(
+      "Working... · Turn 2: 0.0s · Total: 7.0s",
+    );
   });
   it("restores the native message when turn persistence throws", async () => {
     const harness = createHarness();
@@ -95,7 +119,7 @@ describe("timing extension", () => {
 });
 
 describe("formatTimingEntry", () => {
-  it("formats tool and turn lines with stable grammar", () => {
+  it("formats tool, turn, and agent lines with stable grammar", () => {
     const tool: TimingEntryData = {
       kind: "tool",
       label: "bash",
@@ -111,7 +135,15 @@ describe("formatTimingEntry", () => {
       endedAt: new Date(2026, 7, 14, 14, 32, 14, 902).getTime(),
       durationMs: 8_491,
     };
+    const agent: TimingEntryData = {
+      kind: "agent",
+      label: "agent",
+      startedAt: new Date(2026, 7, 14, 14, 31, 2, 202).getTime(),
+      endedAt: new Date(2026, 7, 14, 14, 32, 14, 902).getTime(),
+      durationMs: 72_700,
+    };
     expect(formatTimingEntry(tool)).toBe("  ↳ tool 2 · bash · 14:32:08.210 → 14:32:11.940 · 3.73s");
     expect(formatTimingEntry(turn)).toBe("  ↳ turn 4 · 14:32:06.411 → 14:32:14.902 · 8.49s");
+    expect(formatTimingEntry(agent)).toBe("  ↳ agent · 14:31:02.202 → 14:32:14.902 · 1m 12.7s");
   });
 });
