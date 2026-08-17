@@ -111,10 +111,30 @@ describe("timing extension", () => {
     expect(harness.appendEntries).toHaveLength(0);
     expect(vi.getTimerCount()).toBe(0);
   });
-  it("registers restored timing entries without leading spacing", () => {
+  it("renders restored agent timing entries without leading spacing", () => {
     const harness = createHarness();
-    expect(harness.getRenderer()).toBeTypeOf("function");
+    const renderer = harness.getRenderer() as
+      | ((entry: unknown, options: unknown, theme: unknown) => { render(width: number): string[] })
+      | undefined;
+    expect(renderer).toBeTypeOf("function");
     expect(harness.getRendererOptions()).toEqual({ spacingBefore: 0 });
+
+    const component = renderer?.(
+      {
+        data: {
+          kind: "agent",
+          label: "agent",
+          startedAt: new Date(2026, 7, 14, 14, 31, 2, 202).getTime(),
+          endedAt: new Date(2026, 7, 14, 14, 32, 14, 902).getTime(),
+          durationMs: 72_700,
+        },
+      },
+      {},
+      { fg: (_color: string, text: string) => text },
+    );
+    expect(component?.render(120).map((line) => line.trimEnd())).toEqual([
+      "  ↳ agent · 14:31:02.202 → 14:32:14.902 · 1m 12.7s",
+    ]);
   });
 });
 

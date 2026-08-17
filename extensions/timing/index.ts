@@ -25,7 +25,7 @@ function isTimingEntryData(value: unknown): value is TimingEntryData {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
   return (
-    (record.kind === "tool" || record.kind === "turn") &&
+    (record.kind === "agent" || record.kind === "tool" || record.kind === "turn") &&
     typeof record.label === "string" &&
     typeof record.startedAt === "number" &&
     typeof record.endedAt === "number" &&
