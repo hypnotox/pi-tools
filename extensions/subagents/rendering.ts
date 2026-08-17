@@ -126,7 +126,7 @@ class ExecutionView implements Component {
     add(
       `${status(details)} ${this.theme.bold(details.profileId)} · ${details.state} · ${details.model.provider}/${details.model.id} · ${details.thinkingLevel}${elapsed}`,
     );
-    if (details.cwdDiffersFromParent) add(this.theme.fg("dim", `Path: ${details.cwd}`));
+    if (details.cwdDiffersFromParent) add(this.theme.fg("dim", `path: ${details.cwd}`));
     if (details.queuePosition !== undefined)
       add(this.theme.fg("dim", `queue position ${details.queuePosition}`));
     if (details.retries > 0 || details.retryActive)

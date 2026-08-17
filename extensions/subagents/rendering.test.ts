@@ -72,8 +72,8 @@ describe("renderExecution", () => {
     const cwd = "/a/child/working/directory/that/is/too/long";
     const changed = { ...details, cwd, cwdDiffersFromParent: true } as ExecutionDetails;
     const lines = renderExecution(changed, false, theme).render(24);
-    expect(lines[1]).toContain("Path: /a/child");
-    expect(lines[1]).not.toBe(`Path: ${cwd}`);
+    expect(lines[1]).toContain("path: /a/child");
+    expect(lines[1]).not.toBe(`path: ${cwd}`);
     expect(visibleWidth(lines[1] ?? "")).toBeLessThanOrEqual(24);
   });
 
