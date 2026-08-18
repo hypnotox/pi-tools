@@ -1,3 +1,4 @@
+import { join, parse, resolve, sep } from "node:path";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
 import { type ExecutionDetails, type JsonValue, MAX_PROFILE_DATA_BYTES } from "./api.js";
@@ -215,12 +216,13 @@ describe("renderExecution", () => {
     }
   });
 
-  it("keeps tool rows single-line, makes repository paths relative, and preserves durations", () => {
-    const repositoryRoot = "/home/hypno/Projects/pi-tools";
+  it("keeps tool rows single-line, makes parent-CWD paths relative, and preserves durations", () => {
+    const repositoryRoot = resolve("repository-root-fixture");
+    const normalizedOutside = `${repositoryRoot}${sep}..${sep}outside-the-repository`;
     const running: ExecutionDetails = {
       ...details,
       state: "running",
-      cwd: `${repositoryRoot}/packages/example`,
+      cwd: join(repositoryRoot, "packages", "example"),
       cwdDiffersFromParent: true,
       execution: {
         prompt: "inspect",
@@ -235,7 +237,7 @@ describe("renderExecution", () => {
           {
             kind: "tool",
             toolCallId: "call-2",
-            summary: "read /tmp/outside-the-repository",
+            summary: `read ${normalizedOutside}`,
             state: "success",
             durationMs: 12,
           },
@@ -263,13 +265,61 @@ describe("renderExecution", () => {
     expect(repositoryTool).not.toContain(repositoryRoot);
     expect(repositoryTool).toMatch(/ · 1h 1m$/);
     expect(lines.filter((line) => line.includes("arguments that are"))).toHaveLength(0);
-    const outsideTool = lines.find(
-      (line) => line.startsWith("success ·") && line.endsWith(" · 12ms"),
-    );
-    expect(outsideTool).toContain("/tmp/outside");
-    expect(outsideTool).not.toContain("./tmp/outside");
+    const outsideTool = renderExecution(running, false, theme, repositoryRoot)
+      .render(200)
+      .find((line) => line.startsWith("success ·") && line.endsWith(" · 12ms"));
+    expect(outsideTool).toContain(normalizedOutside);
+    expect(outsideTool).not.toContain("./../outside");
     expect(lines).toContain("success · ls ./ · 13ms");
     expect(lines.every((line) => visibleWidth(line) <= 48)).toBe(true);
+
+    const filesystemRoot = parse(repositoryRoot).root;
+    const rootChild = join(filesystemRoot, "tmp", "root-file");
+    const rootLines = renderExecution(
+      {
+        ...running,
+        cwd: join(filesystemRoot, "tmp"),
+        execution: {
+          prompt: "inspect",
+          activity: [
+            {
+              kind: "tool",
+              toolCallId: "root-call",
+              summary: `read ${rootChild}`,
+              state: "success",
+              durationMs: 14,
+            },
+            {
+              kind: "tool",
+              toolCallId: "url-call",
+              summary: "bash curl https://example.test/resource",
+              state: "success",
+              durationMs: 15,
+            },
+          ],
+          omittedActivity: 0,
+          elapsedMs: 15,
+          turns: 1,
+        },
+      },
+      false,
+      theme,
+      filesystemRoot,
+    ).render(48);
+    expect(rootLines).toContain("path: ./tmp");
+    expect(rootLines).toContain("success · read ./tmp/root-file · 14ms");
+    const urlTool = rootLines.find(
+      (line) => line.startsWith("success ·") && line.endsWith(" · 15ms"),
+    );
+    expect(urlTool).toContain("https://");
+    expect(urlTool).not.toContain("https:./");
+
+    if (process.platform === "win32") {
+      const differentlyCasedRoot = repositoryRoot.toUpperCase();
+      expect(renderExecution(running, false, theme, differentlyCasedRoot).render(80)).toContain(
+        "success · ls ./ · 13ms",
+      );
+    }
   });
 
   it("appends settled results after retained activity in compact and expanded rendering", () => {
@@ -303,6 +353,25 @@ describe("renderExecution", () => {
       expect(activityIndex).toBeGreaterThanOrEqual(0);
       expect(reportIndex).toBeGreaterThan(activityIndex);
     }
+
+    const failure = Array.from({ length: 30 }, (_, index) => `failure-${index}`).join("\n");
+    const failed: ExecutionDetails = {
+      ...settled,
+      state: "failed",
+      failure,
+    };
+    const compactFailure = renderExecution(failed, false, theme).render(120);
+    const expandedFailure = renderExecution(failed, true, theme).render(120);
+    const compactActivityIndex = compactFailure.findIndex((line) => line.includes("read src"));
+    const compactFailureIndex = compactFailure.findIndex((line) => line.startsWith("failure-"));
+    expect(compactActivityIndex).toBeGreaterThanOrEqual(0);
+    expect(compactFailureIndex).toBeGreaterThan(compactActivityIndex);
+    expect(compactFailure.filter((line) => line.startsWith("failure-"))).toHaveLength(24);
+    expect(compactFailure.filter((line) => line.startsWith("failure-")).at(-1)).toMatch(/\.\.\.$/);
+    expect(expandedFailure.findIndex((line) => line.startsWith("failure-"))).toBeGreaterThan(
+      expandedFailure.findIndex((line) => line.includes("read src")),
+    );
+    expect(expandedFailure.filter((line) => line.startsWith("failure-"))).toHaveLength(30);
   });
 
   it("updates correlated tools in place and retains settled activity with the report", () => {

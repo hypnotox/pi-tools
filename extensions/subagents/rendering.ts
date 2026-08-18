@@ -1,4 +1,4 @@
-import { isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, parse, relative, resolve } from "node:path";
 import {
   type Component,
   Text,
@@ -83,14 +83,21 @@ function escapeRegExp(value: string): string {
 
 function relativeSummaryPaths(summary: string, root: string | undefined): string {
   if (!root) return summary;
-  const normalizedRoot = resolve(root).replace(/[\\/]$/, "");
-  if (!normalizedRoot) return summary;
-  const delimiter = String.raw`\s"'\`;,:\)\]\}`;
+  const rootPath = resolve(root);
+  const filesystemRoot = parse(rootPath).root;
+  const candidateRoot =
+    rootPath === filesystemRoot ? filesystemRoot : rootPath.replace(/[\\/]$/, "");
+  const delimiter = String.raw`\s"'\`;,:|&\(\)\[\]\{\}`;
+  const suffix =
+    candidateRoot === filesystemRoot ? `[^${delimiter}]*` : `(?:[/\\\\][^${delimiter}]*)?`;
   const pattern = new RegExp(
-    `(^|[^A-Za-z0-9_./\\\\-])${escapeRegExp(normalizedRoot)}(?:[/\\\\]|(?=$|[${delimiter}]))`,
-    "g",
+    `(^|[^A-Za-z0-9_./\\\\:-])(${escapeRegExp(candidateRoot)}${suffix})(?=$|[${delimiter}])`,
+    process.platform === "win32" ? "gi" : "g",
   );
-  return summary.replace(pattern, (_match, prefix: string) => `${prefix}./`);
+  return summary.replace(pattern, (_match, prefix: string, candidate: string) => {
+    const displayPath = relativeDisplayPath(candidate, rootPath);
+    return `${prefix}${displayPath}`;
+  });
 }
 
 function boundedActivityLine(
