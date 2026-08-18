@@ -70,7 +70,15 @@ describe("TimingState", () => {
       durationMs: 4_000,
       agentDurationMs: 9_000,
     });
+    next.endTurn();
     expect(next.endAgent()).toMatchObject({ durationMs: 4_000 });
+
+    next.startTurn(0, nextClock.wall);
+    expect(next.getLiveTurn()).toEqual({
+      label: "turn 1",
+      durationMs: 0,
+      agentDurationMs: 0,
+    });
   });
 
   it("records a one-based turn and monotonic duration", () => {

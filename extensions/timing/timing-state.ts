@@ -50,7 +50,11 @@ export class TimingState {
 
   startAgent(startedAt = this.#clock.wallNow()): void {
     if (this.#agent) return;
-    if (!this.#handoffPending) this.#handoffAgentDurationMs = 0;
+    if (!this.#handoffPending) {
+      this.#handoffAgentDurationMs = 0;
+      this.#turnOffset = 0;
+      this.#lastTurnNumber = 0;
+    }
     this.#handoffPending = false;
     this.#lastAgentDurationMs = 0;
     this.#agent = {
