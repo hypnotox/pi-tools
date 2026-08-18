@@ -7,6 +7,11 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import {
+  HANDOFF_CONTINUITY_ENTRY,
+  HANDOFF_CONTINUITY_REQUEST,
+  type HandoffContinuity,
+} from "../handoff-continuity.js";
 import { guardRuntime } from "../runtime-guard.js";
 
 const COMMAND = "handoff-session-continue";
@@ -164,8 +169,13 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
           if (pending !== request) throw new Error("No matching pending handoff request");
           const parentSession = context.sessionManager.getSessionFile();
           if (!parentSession) throw new Error("The active session is no longer persisted");
+          const continuity: HandoffContinuity = {};
+          pi.events.emit(HANDOFF_CONTINUITY_REQUEST, continuity);
           const result = await context.newSession({
             parentSession,
+            async setup(sessionManager) {
+              sessionManager.appendCustomEntry(HANDOFF_CONTINUITY_ENTRY, continuity);
+            },
             async withSession(replacement) {
               try {
                 await replacement.sendMessage(

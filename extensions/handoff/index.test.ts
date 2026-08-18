@@ -55,6 +55,7 @@ async function createHarness(
   const editor: string[] = [];
   const replacementEditor: string[] = [];
   const sent: unknown[][] = [];
+  const setupEntries: Array<[string, unknown]> = [];
   const sessions: Array<{ parentSession?: string }> = [];
   let oldContextStale = false;
   let oldUiCalls = 0;
@@ -119,6 +120,12 @@ async function createHarness(
           },
         } as never,
       } as never) as never;
+      await request?.setup?.({
+        appendCustomEntry: (type: string, data: unknown) => {
+          setupEntries.push([type, data]);
+          return "entry";
+        },
+      } as never);
       await request?.withSession?.(replacement);
       return { cancelled: false };
     },
@@ -137,6 +144,7 @@ async function createHarness(
     editor,
     replacementEditor,
     sent,
+    setupEntries,
     sessions,
     execute: (kickoff = "Continue.") =>
       shared.invokeToolDirect("handoff_session", { kickoff }, { id: "call", context }),
@@ -207,6 +215,21 @@ describe("fresh-session handoff extension", () => {
       [{ customType: "session-handoff", content: envelope, display: true }, { triggerTurn: true }],
     ]);
     expect(envelope.endsWith(kickoff)).toBe(true);
+  });
+
+  it("persists handoff continuity provided by another extension in the replacement session", async () => {
+    const h = await createHarness();
+    h.api.events.on("pi-tools:handoff-continuity-request", (value: unknown) => {
+      (value as { timing?: unknown }).timing = { agentDurationMs: 5_000, turnCount: 2 };
+    });
+    await h.execute();
+    const pending = h.continue();
+    h.finish();
+    await pending;
+
+    expect(h.setupEntries).toEqual([
+      ["pi-tools:handoff-continuity", { timing: { agentDurationMs: 5_000, turnCount: 2 } }],
+    ]);
   });
 
   it("cancels the countdown, clears pending state, and does not replace the session", async () => {

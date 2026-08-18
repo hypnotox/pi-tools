@@ -1,12 +1,13 @@
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { createExtensionRecorder } from "pi-tools/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import timingExtension, { formatTimingEntry, type TimingEntryData } from "./index.js";
 
-function createHarness() {
+function createHarness(sessionManager = SessionManager.inMemory()) {
   const shared = createExtensionRecorder();
   void shared.install(timingExtension);
   const setWorkingMessage = vi.fn();
-  const context = shared.makeContext({ ui: { setWorkingMessage } as never });
+  const context = shared.makeContext({ sessionManager, ui: { setWorkingMessage } as never });
   return {
     ...shared,
     context,
@@ -69,6 +70,20 @@ describe("timing extension", () => {
       durationMs: 72_449,
     });
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("restores handoff timing continuity before the replacement turn starts", async () => {
+    const sessionManager = SessionManager.inMemory();
+    sessionManager.appendCustomEntry("pi-tools:handoff-continuity", {
+      timing: { agentDurationMs: 64_200, turnCount: 4 },
+    });
+    const harness = createHarness(sessionManager);
+    await harness.emit("session_start", { reason: "new" });
+    await harness.emit("turn_start", { turnIndex: 0, timestamp: Date.now() });
+
+    expect(harness.setWorkingMessage).toHaveBeenLastCalledWith(
+      "Working... · Turn 5: 0.0s · Total: 1m 04.2s",
+    );
   });
 
   it("does not restart the full duration when an agent run retries", async () => {

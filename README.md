@@ -14,7 +14,7 @@ The timing extension adds local `HH:mm:ss.SSS` timestamps and monotonic duration
   ↳ agent · 14:31:02.202 → 14:32:14.902 · 1m 12.7s
 ```
 
-While a turn runs, its duration and the total duration since the current prompt started appear beside Pi's native working spinner as `Working... · Turn 4: 8.2s · Total: 1m 12.4s`. The total survives retries and completes only when the agent settles. Tool durations appear directly beneath completed tool output without an extra blank line. Timing history uses custom session entries, which render in the TUI but never enter model context. Run `/reload` after editing or updating the extension.
+While a turn runs, its duration and the total duration since the current prompt started appear beside Pi's native working spinner as `Working... · Turn 4: 8.2s · Total: 1m 12.4s`. The total survives retries and completes only when the agent settles. A `handoff_session` carries that accumulated active-agent duration and turn count into its replacement session, so the next turn continues both values; the countdown and session-switch gap are excluded. Tool durations appear directly beneath completed tool output without an extra blank line. Timing history uses custom session entries, which render in the TUI but never enter model context. Run `/reload` after editing or updating the extension.
 
 ### Context usage
 
@@ -22,7 +22,7 @@ The context usage extension adds a fresh, hidden `[session context]` line to eve
 
 ### Fresh-session handoff
 
-The `handoff_session` tool starts a parent-linked fresh interactive session after a five-second cancellable countdown. It accepts required `kickoff` text (up to 1,000 UTF-16 code units), preserves it exactly, and delivers it as visible handoff context that triggers the replacement session. The tool only runs alone in its batch. If automatic delivery fails after replacement, the replacement editor receives the exact prepared text; if another extension cancels replacement before the switch, the original editor receives it for recovery. At session startup, pi-tools yields `handoff_session` ownership when another loaded extension already provides a tool with that name, avoiding conflicts with older awf project extensions.
+The `handoff_session` tool starts a parent-linked fresh interactive session after a five-second cancellable countdown. It accepts required `kickoff` text (up to 1,000 UTF-16 code units), preserves it exactly, delivers it as visible handoff context that triggers the replacement session, and transfers compatible extension continuity data such as timing. The tool only runs alone in its batch. If automatic delivery fails after replacement, the replacement editor receives the exact prepared text; if another extension cancels replacement before the switch, the original editor receives it for recovery. At session startup, pi-tools yields `handoff_session` ownership when another loaded extension already provides a tool with that name, avoiding conflicts with older awf project extensions.
 
 A queued handoff suppresses only one imminent threshold-triggered compaction, allowing Pi to drain the queued continuation first. Manual and overflow compactions remain available, and later threshold compactions are unaffected. Run `/reload` after updating either extension.
 

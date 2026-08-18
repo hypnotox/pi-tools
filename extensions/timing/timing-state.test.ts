@@ -48,6 +48,31 @@ describe("TimingState", () => {
     });
   });
 
+  it("continues live duration and turn labels after a handoff", () => {
+    const firstClock = new FakeClock();
+    const first = new TimingState(firstClock);
+    first.startTurn(0, firstClock.wall);
+    firstClock.advance(2_000);
+    first.endTurn();
+    first.startTurn(1, firstClock.wall);
+    firstClock.advance(3_000);
+    first.endTurn();
+    first.endAgent();
+
+    const nextClock = new FakeClock();
+    const next = new TimingState(nextClock);
+    next.restoreHandoff(first.getHandoffContinuation());
+    next.startTurn(0, nextClock.wall);
+    nextClock.advance(4_000);
+
+    expect(next.getLiveTurn()).toEqual({
+      label: "turn 3",
+      durationMs: 4_000,
+      agentDurationMs: 9_000,
+    });
+    expect(next.endAgent()).toMatchObject({ durationMs: 4_000 });
+  });
+
   it("records a one-based turn and monotonic duration", () => {
     const clock = new FakeClock();
     const state = new TimingState(clock);

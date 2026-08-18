@@ -12,6 +12,11 @@ export interface TimingCompletion {
   toolIndex?: number;
 }
 
+export interface HandoffTimingContinuation {
+  agentDurationMs: number;
+  turnCount: number;
+}
+
 interface ActiveTiming {
   label: string;
   startedAt: number;
@@ -33,6 +38,11 @@ export class TimingState {
   #agent: ActiveTiming | undefined;
   #turn: ActiveTiming | undefined;
   #nextToolIndex = 1;
+  #handoffAgentDurationMs = 0;
+  #lastAgentDurationMs = 0;
+  #turnOffset = 0;
+  #lastTurnNumber = 0;
+  #handoffPending = false;
 
   constructor(clock: Clock = systemClock) {
     this.#clock = clock;
@@ -40,6 +50,9 @@ export class TimingState {
 
   startAgent(startedAt = this.#clock.wallNow()): void {
     if (this.#agent) return;
+    if (!this.#handoffPending) this.#handoffAgentDurationMs = 0;
+    this.#handoffPending = false;
+    this.#lastAgentDurationMs = 0;
     this.#agent = {
       label: "agent",
       startedAt,
@@ -52,14 +65,17 @@ export class TimingState {
     if (!agent) return undefined;
 
     const completion = this.#complete("agent", agent);
+    this.#lastAgentDurationMs = completion.durationMs;
     this.#agent = undefined;
     return completion;
   }
 
   startTurn(turnIndex: number, startedAt = this.#clock.wallNow()): void {
     this.startAgent(startedAt);
+    const turnNumber = this.#turnOffset + turnIndex + 1;
+    this.#lastTurnNumber = Math.max(this.#lastTurnNumber, turnNumber);
     this.#turn = {
-      label: `turn ${turnIndex + 1}`,
+      label: `turn ${turnNumber}`,
       startedAt,
       startedMono: this.#clock.monotonicNow(),
     };
@@ -107,8 +123,25 @@ export class TimingState {
     return {
       label: this.#turn.label,
       durationMs: this.#elapsed(this.#turn.startedMono),
-      agentDurationMs: this.#agent ? this.#elapsed(this.#agent.startedMono) : 0,
+      agentDurationMs: this.#agent
+        ? this.#handoffAgentDurationMs + this.#elapsed(this.#agent.startedMono)
+        : 0,
     };
+  }
+
+  getHandoffContinuation(): HandoffTimingContinuation {
+    const activeDurationMs = this.#agent ? this.#elapsed(this.#agent.startedMono) : 0;
+    return {
+      agentDurationMs: this.#handoffAgentDurationMs + this.#lastAgentDurationMs + activeDurationMs,
+      turnCount: Math.max(this.#turnOffset, this.#lastTurnNumber),
+    };
+  }
+
+  restoreHandoff(continuation: HandoffTimingContinuation): void {
+    this.#handoffAgentDurationMs = Math.max(0, continuation.agentDurationMs);
+    this.#turnOffset = Math.max(0, continuation.turnCount);
+    this.#lastTurnNumber = this.#turnOffset;
+    this.#handoffPending = true;
   }
 
   reset(): void {
@@ -116,6 +149,11 @@ export class TimingState {
     this.#turn = undefined;
     this.#tools.clear();
     this.#nextToolIndex = 1;
+    this.#handoffAgentDurationMs = 0;
+    this.#lastAgentDurationMs = 0;
+    this.#turnOffset = 0;
+    this.#lastTurnNumber = 0;
+    this.#handoffPending = false;
   }
 
   #complete(kind: TimingCompletion["kind"], timing: ActiveTiming): TimingCompletion {

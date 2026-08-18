@@ -1,9 +1,15 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import {
+  HANDOFF_CONTINUITY_ENTRY,
+  HANDOFF_CONTINUITY_REQUEST,
+  type HandoffContinuity,
+} from "../handoff-continuity.js";
+import {
   formatCompletedDuration,
   formatLiveDuration,
   formatTimestamp,
+  type HandoffTimingContinuation,
   type TimingCompletion,
   TimingState,
 } from "./timing-state.js";
@@ -19,6 +25,19 @@ export function formatTimingEntry(data: TimingEntryData): string {
   const identity =
     data.kind === "tool" ? `tool ${data.toolIndex ?? "?"} · ${data.label}` : data.label;
   return `  ↳ ${identity} · ${formatTimestamp(data.startedAt)} → ${formatTimestamp(data.endedAt)} · ${formatCompletedDuration(data.durationMs)}`;
+}
+
+function isHandoffTimingContinuation(value: unknown): value is HandoffTimingContinuation {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.agentDurationMs === "number" &&
+    Number.isFinite(record.agentDurationMs) &&
+    record.agentDurationMs >= 0 &&
+    typeof record.turnCount === "number" &&
+    Number.isSafeInteger(record.turnCount) &&
+    record.turnCount >= 0
+  );
 }
 
 function isTimingEntryData(value: unknown): value is TimingEntryData {
@@ -82,12 +101,27 @@ export default function timingExtension(pi: ExtensionAPI): void {
     { spacingBefore: 0 },
   );
 
-  pi.on("session_start", (_event, ctx) => {
+  pi.events.on(HANDOFF_CONTINUITY_REQUEST, (value: unknown) => {
+    if (!value || typeof value !== "object") return;
+    (value as HandoffContinuity).timing = state.getHandoffContinuation();
+  });
+
+  pi.on("session_start", (event, ctx) => {
     try {
       restoreWorkingMessage(ctx);
     } finally {
       state.reset();
     }
+    if (event.reason !== "new") return;
+    const entry = [...ctx.sessionManager.getEntries()]
+      .reverse()
+      .find(
+        (candidate) =>
+          candidate.type === "custom" && candidate.customType === HANDOFF_CONTINUITY_ENTRY,
+      );
+    const continuity =
+      entry && "data" in entry ? (entry.data as HandoffContinuity | undefined) : undefined;
+    if (isHandoffTimingContinuation(continuity?.timing)) state.restoreHandoff(continuity.timing);
   });
 
   pi.on("agent_start", () => {
