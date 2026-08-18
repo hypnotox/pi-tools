@@ -205,7 +205,7 @@ describe("SubprocessRunner", () => {
         },
       }),
     );
-    const retry = `${JSON.stringify({ type: "auto_retry_start", errorMessage: "retry 😀" })}\n`;
+    const retry = `${JSON.stringify({ type: "auto_retry_start", attempt: 1, maxAttempts: 3, errorMessage: "retry 😀" })}\n`;
     const bytes = Buffer.from(retry);
     const split = bytes.indexOf(Buffer.from("😀")) + 2;
     deps.child.stdout.emit("data", bytes.subarray(0, split));
@@ -213,7 +213,7 @@ describe("SubprocessRunner", () => {
     deps.child.stdout.emit(
       "data",
       Buffer.from(
-        `${JSON.stringify({ type: "tool_execution_start", toolCallId: "read-id", toolName: "read" })}\n${JSON.stringify({ type: "auto_retry_end", success: true })}\n${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "done" }], usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cacheWrite1h: 2, reasoning: 1, totalTokens: 10, cost: { input: 0.1, output: 0.2, cacheRead: 0.05, cacheWrite: 0.15, total: 0.5 } } } })}`,
+        `${JSON.stringify({ type: "tool_execution_start", toolCallId: "read-id", toolName: "read" })}\n${JSON.stringify({ type: "auto_retry_end", success: true, attempt: 1 })}\n${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "done" }], usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cacheWrite1h: 2, reasoning: 1, totalTokens: 10, cost: { input: 0.1, output: 0.2, cacheRead: 0.05, cacheWrite: 0.15, total: 0.5 } } } })}`,
       ),
     );
     deps.child.emit("close", 0);
@@ -238,8 +238,47 @@ describe("SubprocessRunner", () => {
     expect(result.execution?.activity).toContainEqual(
       expect.objectContaining({ kind: "tool", toolCallId: "read-id", state: "error" }),
     );
+    expect(result.execution?.activity).toContainEqual(
+      expect.objectContaining({
+        kind: "retry",
+        attempt: 1,
+        maxAttempts: 3,
+        state: "success",
+      }),
+    );
     expect(result.activity[0]?.text).toContain("😀");
     expect(updates.length).toBeGreaterThan(0);
+  });
+
+  it("updates one retry row across attempts and settles it as failed", async () => {
+    let now = 10;
+    const deps = { ...dependencies(), monotonicNow: () => now };
+    const { promise } = await launch(deps as ReturnType<typeof dependencies>);
+    deps.child.stdout.emit(
+      "data",
+      Buffer.from(`${JSON.stringify({ type: "auto_retry_start", attempt: 1, maxAttempts: 3 })}\n`),
+    );
+    now = 20;
+    deps.child.stdout.emit(
+      "data",
+      Buffer.from(`${JSON.stringify({ type: "auto_retry_start", attempt: 2, maxAttempts: 3 })}\n`),
+    );
+    now = 30;
+    deps.child.stdout.emit(
+      "data",
+      Buffer.from(`${JSON.stringify({ type: "auto_retry_end", success: false, attempt: 2 })}\n`),
+    );
+    deps.child.emit("close", 0);
+    const result = await promise;
+    expect(result.execution?.activity.filter((entry) => entry.kind === "retry")).toEqual([
+      {
+        kind: "retry",
+        attempt: 2,
+        maxAttempts: 3,
+        state: "error",
+        durationMs: 20,
+      },
+    ]);
   });
 
   it("retains only a safe tool summary, never raw tool arguments", async () => {
@@ -302,6 +341,9 @@ describe("SubprocessRunner", () => {
     expect(result).toMatchObject({ state: "cancelled", retries: 1, retryActive: false });
     expect(result.execution?.activity).toContainEqual(
       expect.objectContaining({ kind: "tool", toolCallId: "active", state: "error" }),
+    );
+    expect(result.execution?.activity).toContainEqual(
+      expect.objectContaining({ kind: "retry", state: "error" }),
     );
     expect(result.activity).toContainEqual({ kind: "retry_start", text: "retrying" });
     expect(deps.signalTree).toHaveBeenCalledWith(deps.child, "SIGTERM");

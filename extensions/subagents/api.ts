@@ -122,6 +122,16 @@ export const ExecutionHistoryEntrySchema = Type.Union([
     },
     { additionalProperties: false },
   ),
+  Type.Object(
+    {
+      kind: Type.Literal("retry"),
+      attempt: Type.Integer({ minimum: 1 }),
+      maxAttempts: Type.Integer({ minimum: 1 }),
+      state: Type.Union([Type.Literal("running"), Type.Literal("success"), Type.Literal("error")]),
+      durationMs: Type.Number({ minimum: 0 }),
+    },
+    { additionalProperties: false },
+  ),
 ]);
 export type ExecutionHistoryEntry = Static<typeof ExecutionHistoryEntrySchema>;
 export const ExecutionProjectionSchema = Type.Object(

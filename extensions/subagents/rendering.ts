@@ -129,10 +129,6 @@ class ExecutionView implements Component {
     if (details.cwdDiffersFromParent) add(this.theme.fg("dim", `path: ${details.cwd}`));
     if (details.queuePosition !== undefined)
       add(this.theme.fg("dim", `queue position ${details.queuePosition}`));
-    if (details.retries > 0 || details.retryActive)
-      add(
-        this.theme.fg("dim", `retries ${details.retries}${details.retryActive ? " (active)" : ""}`),
-      );
 
     if (execution) {
       const prompt = `prompt: ${execution.prompt}`;
@@ -172,10 +168,12 @@ class ExecutionView implements Component {
         else {
           const color =
             entry.state === "error" ? "error" : entry.state === "success" ? "success" : "warning";
+          const summary =
+            entry.kind === "retry" ? `retry ${entry.attempt}/${entry.maxAttempts}` : entry.summary;
           addWrapped(
             this.theme.fg(
               color,
-              `${entry.state} · ${entry.summary} · ${formatElapsed(entry.durationMs)}`,
+              `${entry.state} · ${summary} · ${formatElapsed(entry.durationMs)}`,
             ),
           );
         }

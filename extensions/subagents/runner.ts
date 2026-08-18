@@ -256,16 +256,28 @@ export class SubprocessRunner {
         entry: Extract<ExecutionProjection["activity"][number], { kind: "tool" }>;
       }
     >();
+    let activeRetry:
+      | {
+          startedMono: number;
+          entry: Extract<ExecutionProjection["activity"][number], { kind: "retry" }>;
+        }
+      | undefined;
     const updateDurations = (): void => {
       const now = this.#deps.monotonicNow();
       outcome.execution.elapsedMs = Math.max(0, now - invocationStartedMono);
       for (const { startedMono, entry } of activeTools.values())
         if (entry.state === "running") entry.durationMs = Math.max(0, now - startedMono);
+      if (activeRetry?.entry.state === "running")
+        activeRetry.entry.durationMs = Math.max(0, now - activeRetry.startedMono);
     };
-    const finalizeActiveTools = (): void => {
+    const finalizeActiveActivity = (): void => {
       updateDurations();
       for (const { entry } of activeTools.values()) entry.state = "error";
       activeTools.clear();
+      if (activeRetry) {
+        activeRetry.entry.state = "error";
+        activeRetry = undefined;
+      }
     };
     const emit = (): void => {
       updateDurations();
@@ -470,9 +482,41 @@ export class SubprocessRunner {
         } else if (event.type === "auto_retry_start") {
           outcome.retries++;
           outcome.retryActive = true;
+          const attempt =
+            Number.isInteger(event.attempt) && Number(event.attempt) > 0
+              ? Number(event.attempt)
+              : outcome.retries;
+          const maxAttempts =
+            Number.isInteger(event.maxAttempts) && Number(event.maxAttempts) >= attempt
+              ? Number(event.maxAttempts)
+              : attempt;
+          if (activeRetry) {
+            activeRetry.entry.attempt = attempt;
+            activeRetry.entry.maxAttempts = maxAttempts;
+          } else {
+            const entry = {
+              kind: "retry" as const,
+              attempt,
+              maxAttempts,
+              state: "running" as const,
+              durationMs: 0,
+            };
+            history(entry);
+            activeRetry = { startedMono: this.#deps.monotonicNow(), entry };
+          }
           activity("retry_start", String(event.errorMessage ?? "request retry"));
         } else if (event.type === "auto_retry_end") {
           outcome.retryActive = false;
+          if (activeRetry) {
+            if (Number.isInteger(event.attempt) && Number(event.attempt) > 0)
+              activeRetry.entry.attempt = Number(event.attempt);
+            activeRetry.entry.durationMs = Math.max(
+              0,
+              this.#deps.monotonicNow() - activeRetry.startedMono,
+            );
+            activeRetry.entry.state = event.success === true ? "success" : "error";
+            activeRetry = undefined;
+          }
           activity("retry_end", String(event.finalError ?? "request retry complete"));
         } else if (event.type === "message_end") {
           const message = event.message as
@@ -568,7 +612,7 @@ export class SubprocessRunner {
         outcome.failure = outcome.failure ?? truncateUtf8(stderr || "Child process failed");
       } else outcome.state = "completed";
       outcome.retryActive = false;
-      finalizeActiveTools();
+      finalizeActiveActivity();
       emit();
       return outcome;
     } catch (error) {
@@ -576,7 +620,7 @@ export class SubprocessRunner {
       outcome.state = request.signal?.aborted || this.#disposed ? "cancelled" : "failed";
       outcome.retryActive = false;
       outcome.failure = truncateUtf8(error instanceof Error ? error.message : String(error));
-      finalizeActiveTools();
+      finalizeActiveActivity();
       emit();
       return outcome;
     } finally {

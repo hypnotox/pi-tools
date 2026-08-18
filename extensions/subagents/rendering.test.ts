@@ -77,6 +77,32 @@ describe("renderExecution", () => {
     expect(visibleWidth(lines[1] ?? "")).toBeLessThanOrEqual(24);
   });
 
+  it("renders retry progress in the activity log instead of below the header", () => {
+    const retrying = {
+      ...details,
+      state: "running" as const,
+      retryActive: true,
+      execution: {
+        prompt: "retry rendering",
+        activity: [
+          {
+            kind: "retry" as const,
+            attempt: 2,
+            maxAttempts: 3,
+            state: "running" as const,
+            durationMs: 1_500,
+          },
+        ],
+        omittedActivity: 0,
+        elapsedMs: 1_500,
+        turns: 0,
+      },
+    };
+    const rendered = renderExecution(retrying, false, theme).render(120);
+    expect(rendered).toContain("running · retry 2/3 · 1.5s");
+    expect(rendered.filter((line) => line.startsWith("retries "))).toHaveLength(0);
+  });
+
   it("renders bounded compact and expanded live execution trajectories", () => {
     const trajectory = {
       prompt: `\u001b[31m${"very long prompt ".repeat(20)}\u001b[0m`,
