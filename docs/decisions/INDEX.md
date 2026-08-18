@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-- [ADR-0012: Correlated Subagent Retry Activity](0012-correlated-subagent-retry-activity.md) (Proposed)
+_No decisions are in flight._
 
 ## History
 
@@ -17,3 +17,4 @@
 - [ADR-0009: Bound Subagent Terminal Results](0009-bound-subagent-terminal-results.md) (Implemented)
 - [ADR-0010: Composable Extension Testing Recorder](0010-composable-extension-testing-recorder.md) (Implemented)
 - [ADR-0011: Align Node Runtime Baseline with Pi](0011-align-node-runtime-baseline-with-pi.md) (Implemented)
+- [ADR-0012: Correlated Subagent Retry Activity](0012-correlated-subagent-retry-activity.md) (Implemented)

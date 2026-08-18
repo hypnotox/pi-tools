@@ -360,13 +360,13 @@ describe("SubprocessRunner", () => {
     await expect(promise).resolves.toMatchObject({ state: "cancelled" });
   });
 
-  it("finalizes an active tool as failed when the child exits abnormally", async () => {
+  it("finalizes active tool and retry rows as failed when the child exits abnormally", async () => {
     const deps = dependencies();
     const { promise } = await launch(deps);
     deps.child.stdout.emit(
       "data",
       Buffer.from(
-        `${JSON.stringify({ type: "tool_execution_start", toolCallId: "active", toolName: "read", args: {} })}\n`,
+        `${JSON.stringify({ type: "tool_execution_start", toolCallId: "active", toolName: "read", args: {} })}\n${JSON.stringify({ type: "auto_retry_start", attempt: 1, maxAttempts: 3 })}\n`,
       ),
     );
     deps.child.stderr.emit("data", Buffer.from("child failed"));
@@ -375,6 +375,9 @@ describe("SubprocessRunner", () => {
     expect(result).toMatchObject({ state: "failed", failure: "child failed" });
     expect(result.execution?.activity).toContainEqual(
       expect.objectContaining({ kind: "tool", toolCallId: "active", state: "error" }),
+    );
+    expect(result.execution?.activity).toContainEqual(
+      expect.objectContaining({ kind: "retry", state: "error" }),
     );
   });
 

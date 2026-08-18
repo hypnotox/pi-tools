@@ -130,6 +130,23 @@ describe("profile API", () => {
     };
     expect(Value.Check(ExecutionProjectionSchema, execution)).toBe(true);
     expect(Value.Check(ExecutionProjectionSchema, { ...execution, activity: [] })).toBe(true);
+    const retry = {
+      kind: "retry",
+      attempt: 1,
+      maxAttempts: 3,
+      state: "running",
+      durationMs: 0,
+    };
+    expect(Value.Check(ExecutionProjectionSchema, { ...execution, activity: [retry] })).toBe(true);
+    for (const invalidRetry of [
+      { ...retry, attempt: 0 },
+      { ...retry, maxAttempts: 0 },
+      { ...retry, state: "pending" },
+      { ...retry, durationMs: -1 },
+    ])
+      expect(
+        Value.Check(ExecutionProjectionSchema, { ...execution, activity: [invalidRetry] }),
+      ).toBe(false);
     expect(
       Value.Check(ExecutionProjectionSchema, {
         ...execution,

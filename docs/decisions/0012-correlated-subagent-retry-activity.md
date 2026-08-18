@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: correlated-subagent-retry-activity
-status: Proposed
+status: Implemented
 date: 2026-08-18
 ---
 # ADR-0012: Correlated Subagent Retry Activity
@@ -37,3 +37,4 @@ Pi's child event stream identifies each retry attempt, its configured maximum, a
 ## Status history
 
 - 2026-08-18: Proposed
+- 2026-08-18: Implemented; content-sha256: b01bdd36b208e6a788f020c12d2261ccfa7b460840b3628f753beb7809bed1f4
