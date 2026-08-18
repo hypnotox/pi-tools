@@ -541,11 +541,12 @@ export function createSubagentToolkit(
         parameters: profile.parameters,
         execute: async (_id, params, signal, onUpdate, toolContext) =>
           executeProfile(profile, params, signal, onUpdate, toolContext),
-        renderResult: (result, options, theme) =>
+        renderResult: (result, options, theme, renderContext) =>
           renderExecution(
             isExecutionDetails(result.details) ? result.details : undefined,
             options.expanded,
             theme,
+            renderContext?.cwd ?? ctx.cwd,
           ),
       });
     }

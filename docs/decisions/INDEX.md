@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-- [ADR-0013: Subagent Activity Presentation](0013-subagent-activity-presentation.md) (Proposed)
+- [ADR-0013: Subagent Activity Presentation](0013-subagent-activity-presentation.md) (Implementing)
 
 ## History
 

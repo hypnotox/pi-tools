@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: subagent-activity-presentation
-status: Proposed
+status: Implementing
 date: 2026-08-18
 ---
 # ADR-0013: Subagent Activity Presentation
@@ -54,3 +54,5 @@ existing representation.
 ## Status history
 
 - 2026-08-18: Proposed
+- 2026-08-18: Implementing; content-sha256: a5dc5ac97a39886f03e64a63d122a040ea8dcd5e29023bc85660b6791457f62c
+- 2026-08-18: Applied; operations: update `development/subagent-toolkit:profile-runtime`

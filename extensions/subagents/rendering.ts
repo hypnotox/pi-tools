@@ -1,3 +1,4 @@
+import { isAbsolute, relative, resolve } from "node:path";
 import {
   type Component,
   Text,
@@ -62,6 +63,50 @@ function boundedPreviewLines(text: string, width: number, maxLines: number): str
   return preview;
 }
 
+function relativeDisplayPath(value: string, root: string | undefined): string {
+  if (!root) return value;
+  const rootPath = resolve(root);
+  const relativePath = relative(rootPath, resolve(value));
+  if (relativePath === "") return "./";
+  if (
+    relativePath === ".." ||
+    relativePath.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
+    isAbsolute(relativePath)
+  )
+    return value;
+  return `./${relativePath.replaceAll("\\", "/")}`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function relativeSummaryPaths(summary: string, root: string | undefined): string {
+  if (!root) return summary;
+  const normalizedRoot = resolve(root).replace(/[\\/]$/, "");
+  if (!normalizedRoot) return summary;
+  const delimiter = String.raw`\s"'\`;,:\)\]\}`;
+  const pattern = new RegExp(
+    `(^|[^A-Za-z0-9_./\\\\-])${escapeRegExp(normalizedRoot)}(?:[/\\\\]|(?=$|[${delimiter}]))`,
+    "g",
+  );
+  return summary.replace(pattern, (_match, prefix: string) => `${prefix}./`);
+}
+
+function boundedActivityLine(
+  state: string,
+  summary: string,
+  duration: string,
+  width: number,
+): string {
+  const suffix = ` · ${duration}`;
+  const suffixWidth = visibleWidth(suffix);
+  if (suffixWidth >= width) return duration;
+  const prefix = `${state} · ${summary}`;
+  const prefixWidth = width - suffixWidth;
+  return `${truncateToWidth(prefix, prefixWidth, "...")}${suffix}`;
+}
+
 function omittedRowsLine(omitted: number, discarded: number): string | undefined {
   const parts: string[] = [];
   if (omitted > 0) parts.push(`${omitted} ${omitted === 1 ? "row" : "rows"} omitted`);
@@ -103,6 +148,7 @@ class ExecutionView implements Component {
     private readonly details: ExecutionDetails | undefined,
     private readonly expanded: boolean,
     private readonly theme: Theme,
+    private readonly displayRoot: string | undefined,
   ) {}
 
   invalidate(): void {}
@@ -126,7 +172,8 @@ class ExecutionView implements Component {
     add(
       `${status(details)} ${this.theme.bold(details.profileId)} · ${details.state} · ${details.model.provider}/${details.model.id} · ${details.thinkingLevel}${elapsed}`,
     );
-    if (details.cwdDiffersFromParent) add(this.theme.fg("dim", `path: ${details.cwd}`));
+    if (details.cwdDiffersFromParent)
+      add(this.theme.fg("dim", `path: ${relativeDisplayPath(details.cwd, this.displayRoot)}`));
     if (details.queuePosition !== undefined)
       add(this.theme.fg("dim", `queue position ${details.queuePosition}`));
 
@@ -149,19 +196,7 @@ class ExecutionView implements Component {
     const omission = execution
       ? omittedRowsLine(completeHistory.length - history.length, execution.omittedActivity)
       : undefined;
-    if (settled && (details.failure || details.report)) {
-      const result = this.theme.fg(
-        details.failure ? "error" : "text",
-        details.failure ?? details.report ?? "",
-      );
-      if (this.expanded) addWrapped(result);
-      else {
-        if (omission) addWrapped(this.theme.fg("dim", omission));
-        addPreview(result);
-      }
-    }
-
-    if (execution && (!settled || this.expanded)) {
+    if (execution) {
       if (omission) addWrapped(this.theme.fg("dim", omission));
       for (const entry of history) {
         if (entry.kind === "thinking") addWrapped(this.theme.fg("dim", `thinking: ${entry.text}`));
@@ -169,15 +204,26 @@ class ExecutionView implements Component {
           const color =
             entry.state === "error" ? "error" : entry.state === "success" ? "success" : "warning";
           const summary =
-            entry.kind === "retry" ? `retry ${entry.attempt}/${entry.maxAttempts}` : entry.summary;
-          addWrapped(
+            entry.kind === "retry"
+              ? `retry ${entry.attempt}/${entry.maxAttempts}`
+              : relativeSummaryPaths(entry.summary, this.displayRoot);
+          add(
             this.theme.fg(
               color,
-              `${entry.state} · ${summary} · ${formatElapsed(entry.durationMs)}`,
+              boundedActivityLine(entry.state, summary, formatElapsed(entry.durationMs), width),
             ),
           );
         }
       }
+    }
+
+    if (settled && (details.failure || details.report)) {
+      const result = this.theme.fg(
+        details.failure ? "error" : "text",
+        details.failure ?? details.report ?? "",
+      );
+      if (this.expanded) addWrapped(result);
+      else addPreview(result);
     }
 
     const footer = usageLine(details);
@@ -212,7 +258,8 @@ export function renderExecution(
   details: ExecutionDetails | undefined,
   expanded: boolean,
   theme: Theme,
+  displayRoot?: string,
 ): Component {
   if (!details) return new Text(theme.fg("warning", "Invalid subagent result"), 0, 0);
-  return new ExecutionView(details, expanded, theme);
+  return new ExecutionView(details, expanded, theme, displayRoot);
 }

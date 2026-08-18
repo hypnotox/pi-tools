@@ -215,7 +215,97 @@ describe("renderExecution", () => {
     }
   });
 
-  it("updates correlated tools in place and switches only compact settled details to the report", () => {
+  it("keeps tool rows single-line, makes repository paths relative, and preserves durations", () => {
+    const repositoryRoot = "/home/hypno/Projects/pi-tools";
+    const running: ExecutionDetails = {
+      ...details,
+      state: "running",
+      cwd: `${repositoryRoot}/packages/example`,
+      cwdDiffersFromParent: true,
+      execution: {
+        prompt: "inspect",
+        activity: [
+          {
+            kind: "tool",
+            toolCallId: "call-1",
+            summary: `read ${repositoryRoot}/.gitignore with arguments that are much too long`,
+            state: "success",
+            durationMs: 3_665_000,
+          },
+          {
+            kind: "tool",
+            toolCallId: "call-2",
+            summary: "read /tmp/outside-the-repository",
+            state: "success",
+            durationMs: 12,
+          },
+          {
+            kind: "tool",
+            toolCallId: "call-3",
+            summary: `ls ${repositoryRoot}`,
+            state: "success",
+            durationMs: 13,
+          },
+        ],
+        omittedActivity: 0,
+        elapsedMs: 3_665_000,
+        turns: 1,
+      },
+    };
+
+    const lines = renderExecution(running, false, theme, repositoryRoot).render(48);
+    expect(lines).toContain("path: ./packages/example");
+    const repositoryTool = lines.find(
+      (line) => line.startsWith("success ·") && line.includes("1h 1m"),
+    );
+    expect(repositoryTool).toBeDefined();
+    expect(repositoryTool).toContain("./.gitignore");
+    expect(repositoryTool).not.toContain(repositoryRoot);
+    expect(repositoryTool).toMatch(/ · 1h 1m$/);
+    expect(lines.filter((line) => line.includes("arguments that are"))).toHaveLength(0);
+    const outsideTool = lines.find(
+      (line) => line.startsWith("success ·") && line.endsWith(" · 12ms"),
+    );
+    expect(outsideTool).toContain("/tmp/outside");
+    expect(outsideTool).not.toContain("./tmp/outside");
+    expect(lines).toContain("success · ls ./ · 13ms");
+    expect(lines.every((line) => visibleWidth(line) <= 48)).toBe(true);
+  });
+
+  it("appends settled results after retained activity in compact and expanded rendering", () => {
+    const settled: ExecutionDetails = {
+      ...details,
+      execution: {
+        prompt: "inspect",
+        activity: [
+          { kind: "thinking", text: "checking" },
+          {
+            kind: "tool",
+            toolCallId: "call-1",
+            summary: "read src",
+            state: "success",
+            durationMs: 25,
+          },
+        ],
+        omittedActivity: 0,
+        elapsedMs: 25,
+        turns: 1,
+      },
+      report: "final report",
+    };
+
+    for (const expanded of [false, true]) {
+      const rendered = renderExecution(settled, expanded, theme).render(120);
+      const activityIndex = rendered.findIndex((line) =>
+        line.includes("success · read src · 25ms"),
+      );
+      const reportIndex = rendered.indexOf("final report");
+      expect(activityIndex).toBeGreaterThanOrEqual(0);
+      expect(reportIndex).toBeGreaterThan(activityIndex);
+    }
+  });
+
+  it("updates correlated tools in place and retains settled activity with the report", () => {
     const execution = {
       prompt: "inspect the repository",
       activity: [
@@ -261,7 +351,7 @@ describe("renderExecution", () => {
     const compact = renderExecution(resumed, false, theme).render(120).join("\n");
     const expanded = renderExecution(resumed, true, theme).render(120).join("\n");
     expect(compact).toContain("final report");
-    expect(compact).not.toContain("read src");
+    expect(compact).toContain("success · read src · 1h 1m");
     expect(expanded).toContain("success · read src · 1h 1m");
     expect(expanded).toContain("checking");
   });
