@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-_No decisions are in flight._
+- [ADR-0013: Subagent Activity Presentation](0013-subagent-activity-presentation.md) (Proposed)
 
 ## History
 
