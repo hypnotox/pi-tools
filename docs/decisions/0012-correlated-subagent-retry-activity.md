@@ -14,7 +14,7 @@ Pi's child event stream identifies each retry attempt, its configured maximum, a
 
 ## Decision
 
-1. `decision: correlated-retry-row` Present each child request-retry episode as one correlated execution activity row. Update that row in place with the current retry attempt and configured maximum, then settle it as successful or failed with its elapsed duration. Do not render a separate aggregate retry row beneath the execution header, and do not retry the child subprocess.
+1. `decision: correlated-retry-row` Present each child request-retry episode as one correlated execution activity row. Update that row in place with the current retry attempt and configured maximum. Measure its elapsed duration from the first retry start through the episode's terminal result, then settle it as `success` or `error`. Settle an active retry as `error` when the child is cancelled or exits unexpectedly. Retain the existing retry counters in execution details for compatibility, but do not render them separately beneath the execution header.
 
 ## State changes
 
@@ -24,8 +24,8 @@ Pi's child event stream identifies each retry attempt, its configured maximum, a
 
 - Retry progress appears in execution order and uses the same running-to-terminal presentation as tool activity.
 - Multiple failed requests in one retry episode replace the attempt shown by one row instead of adding a row per attempt.
-- Persisted execution history gains a retry-row variant while the existing aggregate retry facts remain available for compatibility.
-- Retry errors remain bounded diagnostic facts; the activity row exposes status, attempt progress, and duration rather than provider error text.
+- Persisted execution history gains a retry-row variant.
+- Each retry episode consumes one slot in the bounded execution history and can displace an older thinking or tool row.
 
 ## Alternatives Considered
 
