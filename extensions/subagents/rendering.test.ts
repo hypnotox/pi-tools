@@ -218,7 +218,7 @@ describe("renderExecution", () => {
 
   it("keeps tool rows single-line, makes parent-CWD paths relative, and preserves durations", () => {
     const repositoryRoot = resolve("repository-root-fixture");
-    const normalizedOutside = `${repositoryRoot}${sep}..${sep}outside-the-repository`;
+    const normalizedOutside = `${repositoryRoot}${sep}directory with spaces${sep}..${sep}..${sep}outside-the-repository`;
     const running: ExecutionDetails = {
       ...details,
       state: "running",
@@ -269,7 +269,7 @@ describe("renderExecution", () => {
       .render(200)
       .find((line) => line.startsWith("success ·") && line.endsWith(" · 12ms"));
     expect(outsideTool).toContain(normalizedOutside);
-    expect(outsideTool).not.toContain("./../outside");
+    expect(outsideTool).not.toMatch(/^success · read \.\//);
     expect(lines).toContain("success · ls ./ · 13ms");
     expect(lines.every((line) => visibleWidth(line) <= 48)).toBe(true);
 

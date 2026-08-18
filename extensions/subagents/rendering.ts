@@ -87,16 +87,17 @@ function relativeSummaryPaths(summary: string, root: string | undefined): string
   const filesystemRoot = parse(rootPath).root;
   const candidateRoot =
     rootPath === filesystemRoot ? filesystemRoot : rootPath.replace(/[\\/]$/, "");
-  const delimiter = String.raw`\s"'\`;,:|&\(\)\[\]\{\}`;
+  const hardDelimiter = String.raw`"'\`;,:|&\(\)\[\]\{\}`;
   const suffix =
-    candidateRoot === filesystemRoot ? `[^${delimiter}]*` : `(?:[/\\\\][^${delimiter}]*)?`;
+    candidateRoot === filesystemRoot ? `[^${hardDelimiter}]*` : `(?:[/\\\\][^${hardDelimiter}]*)?`;
   const pattern = new RegExp(
-    `(^|[^A-Za-z0-9_./\\\\:-])(${escapeRegExp(candidateRoot)}${suffix})(?=$|[${delimiter}])`,
+    `(^|[^A-Za-z0-9_./\\\\:-])(${escapeRegExp(candidateRoot)}${suffix})(?=$|[\\s${hardDelimiter}])`,
     process.platform === "win32" ? "gi" : "g",
   );
   return summary.replace(pattern, (_match, prefix: string, candidate: string) => {
-    const displayPath = relativeDisplayPath(candidate, rootPath);
-    return `${prefix}${displayPath}`;
+    if (relativeDisplayPath(candidate, rootPath) === candidate) return `${prefix}${candidate}`;
+    const suffix = candidate.slice(candidateRoot.length);
+    return `${prefix}./${suffix.replace(/^[/\\]/, "")}`;
   });
 }
 
