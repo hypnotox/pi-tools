@@ -524,14 +524,20 @@
     "docs/pitfalls.md": {
       "templateId": "docs/pitfalls.md.tmpl",
       "templateHash": "sha256:d6475aaeadbbed6f56bfc85c4716b8636fea0d5922661201890334a6429b4f85",
-      "configHash": "sha256:ce3d20855f62dc85ac3ff91c670221b90700db0eaa3e8ee23ef712040a4c5d7b",
-      "outputHash": "sha256:6eb933f15fa728eeba2588e737bc37be075832de9734ea744798e1d33b65736a"
+      "configHash": "sha256:d479c78aca0e9bd66af72e89b8f15529ed07095b0945702d0dac97b19fb8caae",
+      "outputHash": "sha256:4579dbe0d093137a1564e34fff93e995d61872a6a7580a64eda4d0fb8f48f5bb"
     },
     "docs/pitfalls/managed-worktree-biome-exclusion.md": {
       "templateId": "pitfalls/entry.md.tmpl",
       "templateHash": "sha256:23ea7baa4f2cd0e3a7319448093f2612ca5a7beab8cb0bfc631015eef99be786",
       "configHash": "sha256:846acdb232a0fa574f8b44079a3885ba7699047973214088f3731949e30c7e54",
       "outputHash": "sha256:bd61093326d33e6909a8168da16b9b3d13e3e861989378d660918cedbd87b11d"
+    },
+    "docs/pitfalls/zero-width-control-characters-in-rendered-rows.md": {
+      "templateId": "pitfalls/entry.md.tmpl",
+      "templateHash": "sha256:23ea7baa4f2cd0e3a7319448093f2612ca5a7beab8cb0bfc631015eef99be786",
+      "configHash": "sha256:dba1332c47fa4e33103dea7ba01f9be9b7a099c42e977dffb56a1f8e370798b3",
+      "outputHash": "sha256:35c9d784cde11e03fb07415545eac50c21e71d4b6697443b3787f66c30e7231d"
     },
     "docs/plans/README.md": {
       "templateId": "plans-readme/README.md.tmpl",

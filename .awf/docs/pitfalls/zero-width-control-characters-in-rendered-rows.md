@@ -1,0 +1,6 @@
+---
+title: Zero Width Control Characters In Rendered Rows
+---
+`pi-tui` measures `\r`, `\n`, `\v`, `\f`, and NEL as zero visible width, so `visibleWidth` and `truncateToWidth` cannot see them. A row whose printable prefix fits the terminal therefore survives truncation with its breaks intact, and a width guard such as `visibleWidth(line) <= width` passes on text that occupies several physical lines. A `Component` returning that string breaks the renderer's one-array-entry-per-line accounting: the surplus lines escape the enclosing frame and are never overwritten, leaving a persistent artifact below the component.
+
+Strip the control characters rather than trusting a width check. Single-line rows drop the whole class, including `\r` and `\n`. Rows built by `wrapTextWithAnsi` keep `\r` and `\n`, which that function needs to split on, and drop only the remaining zero-width controls; it deletes NEL and normalises LS (`U+2028`) itself, but passes `\v` and `\f` straight through. Sanitize before computing a truncation budget too, or a zero-width character silently buys the row extra apparent capacity and misplaces the ellipsis.

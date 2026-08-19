@@ -10,12 +10,14 @@ Pitfalls are durable hazards, not backlog items. Author sources under `.awf/docs
 | Pitfall | Domains | Tags | Related ADRs |
 | --- | --- | --- | --- |
 | [Managed Worktree Biome Exclusion](pitfalls/managed-worktree-biome-exclusion.md) | Unassigned |  |  |
+| [Zero Width Control Characters In Rendered Rows](pitfalls/zero-width-control-characters-in-rendered-rows.md) | Unassigned |  |  |
 
 ## By domain
 
 ### Unassigned
 
 - [Managed Worktree Biome Exclusion](pitfalls/managed-worktree-biome-exclusion.md)
+- [Zero Width Control Characters In Rendered Rows](pitfalls/zero-width-control-characters-in-rendered-rows.md)
 
 
 <!-- awf:edit append: default; create .awf/docs/parts/pitfalls/append.md to override -->
