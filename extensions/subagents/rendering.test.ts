@@ -190,7 +190,7 @@ describe("renderExecution", () => {
           {
             kind: "tool" as const,
             toolCallId: "c1",
-            summary: "bash cd /repo/worktree\nrm -rf /",
+            summary: "bash cd /repo/worktree\nrm\u0085-rf\u2028/\u2029",
             state: "success" as const,
             durationMs: 12,
           },
@@ -205,6 +205,25 @@ describe("renderExecution", () => {
     expect(lines.filter((line) => line.startsWith("prompt: "))).toHaveLength(1);
     expect(lines.find((line) => line.startsWith("prompt: "))).toContain("TARGET");
     expect(lines.every((line) => visibleWidth(line) <= 80)).toBe(true);
+
+    // A zero-width control must not buy a row extra truncation budget: the truncated
+    // tool row has to match the row rendered from the already-sanitised summary.
+    const overflowing = {
+      kind: "tool" as const,
+      toolCallId: "c2",
+      summary: "bash run\u000bthe long command tail that overflows",
+      state: "success" as const,
+      durationMs: 12,
+    };
+    const rowFor = (entry: (typeof spilling)["execution"]["activity"][number]): string[] =>
+      renderExecution(
+        { ...spilling, execution: { ...spilling.execution, activity: [entry] } },
+        false,
+        theme,
+      ).render(40);
+    expect(rowFor(overflowing)).toEqual(
+      rowFor({ ...overflowing, summary: "bash run the long command tail that overflows" }),
+    );
   });
 
   it("keeps vertical control characters out of wrapped rows", () => {
