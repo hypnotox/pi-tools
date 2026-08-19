@@ -2,7 +2,7 @@
 <!-- awf:source derived:authored-adr-corpus -->
 ## In flight
 
-_No decisions are in flight._
+- [ADR-0014: Usage Limit Resume Driven by Observed Telemetry](0014-usage-limit-resume-driven-by-observed-telemetry.md) (Proposed)
 
 ## History
 

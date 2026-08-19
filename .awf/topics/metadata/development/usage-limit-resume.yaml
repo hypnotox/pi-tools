@@ -1,0 +1,4 @@
+title: Usage Limit Resume
+summary: Detection, waiting, and automatic resume contracts for provider usage-limit interruptions.
+paths:
+    - extensions/limit-resume/**

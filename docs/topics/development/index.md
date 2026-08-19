@@ -6,3 +6,4 @@
 - [Distribution Policy](distribution-policy.md): Source distribution, licensing, and publication boundaries.
 - [Extension Toolchain](extension-toolchain.md): Shared language, quality, and verification contracts for executable Pi extensions.
 - [Subagent Toolkit](subagent-toolkit.md): Runtime and public profile integration contracts for general-purpose subagent delegation.
+- [Usage Limit Resume](usage-limit-resume.md): Detection, waiting, and automatic resume contracts for provider usage-limit interruptions.
