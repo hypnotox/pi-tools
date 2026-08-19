@@ -5,6 +5,7 @@ import { type ExecutionDetails, type JsonValue, MAX_PROFILE_DATA_BYTES } from ".
 import { renderExecution } from "./rendering.js";
 
 const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+const LINE_BREAKS = /[\r\n\v\f\u0085\u2028\u2029]/;
 const details: ExecutionDetails = {
   profileId: "p",
   state: "completed",
@@ -177,6 +178,33 @@ describe("renderExecution", () => {
       .render(120)
       .join("\n");
     expect(withoutCacheWrites).not.toMatch(/(?:^|\s)W\d/);
+  });
+
+  it("keeps line breaks out of single-line compact rows", () => {
+    const spilling = {
+      ...details,
+      state: "running" as const,
+      execution: {
+        prompt: "Review the settlement.\n\nTARGET\n- `cd /repo/worktree` before every command.",
+        activity: [
+          {
+            kind: "tool" as const,
+            toolCallId: "c1",
+            summary: "bash cd /repo/worktree\nrm -rf /",
+            state: "success" as const,
+            durationMs: 12,
+          },
+        ],
+        omittedActivity: 0,
+        elapsedMs: 1_000,
+        turns: 1,
+      },
+    };
+    const lines = renderExecution(spilling, false, theme).render(80);
+    expect(lines.some((line) => LINE_BREAKS.test(line))).toBe(false);
+    expect(lines.filter((line) => line.startsWith("prompt: "))).toHaveLength(1);
+    expect(lines.find((line) => line.startsWith("prompt: "))).toContain("TARGET");
+    expect(lines.every((line) => visibleWidth(line) <= 80)).toBe(true);
   });
 
   it("promotes rounded durations at unit boundaries", () => {

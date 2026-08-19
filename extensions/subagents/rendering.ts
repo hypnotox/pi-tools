@@ -19,6 +19,15 @@ function formatTokens(count: number): string {
   return `${Math.round(count / 1_000_000)}M`;
 }
 
+/** Line breaks carry zero visible width, so they survive width truncation unnoticed. */
+function withoutLineBreaks(text: string): string {
+  return text.replace(/[\r\n\v\f\u0085\u2028\u2029]/g, " ");
+}
+
+function compactWhitespace(text: string): string {
+  return withoutLineBreaks(text).replace(/\s+/g, " ").trim();
+}
+
 function compactDecimal(value: number, digits: number): string {
   return Number(value.toFixed(digits)).toString();
 }
@@ -167,7 +176,9 @@ class ExecutionView implements Component {
     const details = this.details;
     const lines: string[] = [];
     const add = (line: string): void => {
-      lines.push(truncateToWidth(line, width));
+      // Every single-line row must stay one physical line: an embedded break escapes the
+      // tool-call frame and desynchronises the renderer's line accounting.
+      lines.push(truncateToWidth(withoutLineBreaks(line), width));
     };
     const addWrapped = (line: string): void => {
       lines.push(...boundedLines(line, width));
@@ -188,7 +199,7 @@ class ExecutionView implements Component {
     if (execution) {
       const prompt = `prompt: ${execution.prompt}`;
       if (this.expanded) addWrapped(prompt);
-      else add(truncateToWidth(prompt, width));
+      else add(compactWhitespace(prompt));
     }
 
     const settled = !isLive(details);
