@@ -13,7 +13,8 @@ returns, notices the failure, and retypes the request. The waiting is unattended
 extension can perform, but only from facts the extension can actually observe.
 
 Pi exposes two relevant surfaces. `after_provider_response` reports the HTTP status and the complete
-normalized response headers of each provider response. `message_end` reports the settled assistant
+normalized response headers of each provider response that reaches it; Pi documents header
+availability as provider- and transport-dependent. `message_end` reports the settled assistant
 message, whose `stopReason` is `error` and whose `errorMessage` carries the provider's failure text.
 Neither surface reports a structured reset time, and Pi's own limit handling collapses the Codex
 `resets_at` field into prose before any extension sees it.
@@ -30,16 +31,20 @@ which case applies is an operator configuration outcome rather than something th
 
 ## Decision
 
-1. `decision: observed-reset-only` The resume time is derived only from limit facts observed on a
+1. `decision: unattended-limit-resume` A session extension detects a provider usage-limit stop and
+   re-triggers the interrupted turn without operator presence.
+2. `decision: observed-reset-only` The resume time is derived only from limit facts observed on a
    provider response or carried by the settled assistant error. The extension never infers a reset
    time from plan, window, or elapsed-time assumptions.
-2. `decision: degraded-blind-retry` When no reset time is observable, the extension retries on a
-   fixed recurring interval instead of waiting on an inferred time, and discloses the degraded mode
-   to the operator.
-3. `decision: visible-cancellable-wait` A pending resume is visible to the operator, reporting its
-   target time when one is known and its attempt count, and remains cancellable.
-4. `decision: no-synthetic-user-input` Automatic resume never fabricates user input in session
+3. `decision: degraded-blind-retry` When no reset time is observable, the extension retries on a
+   fixed recurring interval instead of waiting on an inferred time.
+4. `decision: visible-cancellable-wait` A pending resume is visible to the operator, reporting its
+   target time when one is known, that no reset time is known when one is not, and its attempt
+   count, and remains cancellable.
+5. `decision: no-synthetic-user-input` Automatic resume never fabricates user input in session
    history.
+6. `decision: operator-owned-transport` The extension never changes the operator's transport
+   configuration to improve its own limit observability.
 
 ## State changes
 
@@ -48,13 +53,22 @@ which case applies is an operator configuration outcome rather than something th
 ## Consequences
 
 Unattended sessions continue on their own after a usage limit clears, and an operator who returns
-finds either completed work or an honest account of what the extension is waiting for.
+finds either completed work or an account of what the extension is waiting for.
+
+That continuation is unsupervised by construction. The resumed turn is a full agent turn that may
+call tools and write to the repository hours after the operator left, against an intent that may have
+gone stale in the interval, and `decision: visible-cancellable-wait` bounds it only once the operator
+is back to see it. What bounds it in the meantime is that no new instruction is invented:
+`decision: no-synthetic-user-input` keeps the resume from introducing work the operator never asked
+for, so the unsupervised turn continues the interrupted request rather than starting a different one.
 
 The extension's precision is bound to operator configuration it does not own. On a transport that
 exposes provider headers the wait is exact; on one that does not, the same code retries blind and
 says so. `decision: observed-reset-only` accepts a worse experience in the degraded case in exchange
 for never displaying a confident time that is wrong, because an operator who trusts a fabricated
-resume time stops watching a session that will not resume.
+resume time stops watching a session that will not resume. `decision: operator-owned-transport` keeps
+the extension from resolving that tension by reaching into configuration the operator owns, so
+improving observability stays an informed operator choice.
 
 Blind retry spends a request per attempt against a limit that may still be exhausted, bounding how
 short the interval can reasonably be. Because `decision: no-synthetic-user-input` keeps the resume
@@ -73,6 +87,7 @@ not otherwise connected to limit handling in any visible way.
 | Prompt the operator for a resume time | Requires presence at the moment of failure, which is the situation the extension exists to cover. |
 | Resume by replaying a synthetic user message | Fabricates operator input in the session record and misattributes the resumed turn. |
 | Read limit state by issuing the extension's own probe request | Duplicates provider authentication and spends quota to learn what a response already reports. |
+| Pause pre-emptively before the limit is reached | Deferred, not rejected: the observed used-percent and window length would support it, but throttling the operator's own turns is a separate decision from resuming after a stop. |
 
 ## Status history
 
