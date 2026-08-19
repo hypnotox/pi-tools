@@ -44,7 +44,7 @@ which case applies is an operator configuration outcome rather than something th
 5. `decision: no-synthetic-user-input` Automatic resume never fabricates user input in session
    history.
 6. `decision: operator-owned-transport` The extension never changes the operator's transport
-   configuration to improve its own limit observability.
+   configuration.
 
 ## State changes
 
@@ -57,10 +57,9 @@ finds either completed work or an account of what the extension is waiting for.
 
 That continuation is unsupervised by construction. The resumed turn is a full agent turn that may
 call tools and write to the repository hours after the operator left, against an intent that may have
-gone stale in the interval, and `decision: visible-cancellable-wait` bounds it only once the operator
-is back to see it. What bounds it in the meantime is that no new instruction is invented:
-`decision: no-synthetic-user-input` keeps the resume from introducing work the operator never asked
-for, so the unsupervised turn continues the interrupted request rather than starting a different one.
+gone stale in the interval. Nothing bounds that turn until the operator returns, at which point
+`decision: visible-cancellable-wait` lets them stop it. `decision: no-synthetic-user-input` does not
+bound it either; it guarantees only that the turn carries no instruction the operator never gave.
 
 The extension's precision is bound to operator configuration it does not own. On a transport that
 exposes provider headers the wait is exact; on one that does not, the same code retries blind and
