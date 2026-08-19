@@ -101,7 +101,7 @@ describe("renderExecution", () => {
       },
     };
     const rendered = renderExecution(retrying, false, theme).render(120);
-    expect(rendered).toContain("running · retry 2/3 · 1.5s");
+    expect(rendered).toContain("running: retry 2/3 · 1.5s");
     expect(rendered.filter((line) => line.startsWith("retries "))).toHaveLength(0);
   });
 
@@ -178,6 +178,63 @@ describe("renderExecution", () => {
       .render(120)
       .join("\n");
     expect(withoutCacheWrites).not.toMatch(/(?:^|\s)W\d/);
+  });
+
+  it("uses aligned colon labels and styles complete activity rows", () => {
+    const styled: Array<{ color: string; text: string }> = [];
+    const activityTheme = {
+      fg: (color: string, text: string) => {
+        styled.push({ color, text });
+        return text;
+      },
+      bold: (text: string) => text,
+    };
+    const running = {
+      ...details,
+      state: "running" as const,
+      execution: {
+        prompt: "inspect",
+        activity: [
+          { kind: "thinking" as const, text: "considering options" },
+          {
+            kind: "tool" as const,
+            toolCallId: "success-call",
+            summary: "read a summary that is deliberately long enough to truncate",
+            state: "success" as const,
+            durationMs: 1_500,
+          },
+          {
+            kind: "tool" as const,
+            toolCallId: "error-call",
+            summary: "bash failed",
+            state: "error" as const,
+            durationMs: 25,
+          },
+        ],
+        omittedActivity: 0,
+        elapsedMs: 1_500,
+        turns: 1,
+      },
+    };
+
+    const rendered = renderExecution(running, false, activityTheme).render(40);
+    expect(rendered).toContain("thought: considering options");
+    expect(rendered).toContain("error:   bash failed · 25ms");
+    expect(rendered.find((line) => line.startsWith("success:"))).toMatch(
+      /^success: read .+\.\.\. · 1\.5s$/,
+    );
+    expect(rendered.find((line) => line.startsWith("success:"))?.indexOf("read")).toBe(
+      rendered.find((line) => line.startsWith("thought:"))?.indexOf("considering"),
+    );
+    expect(rendered.find((line) => line.startsWith("error:"))?.indexOf("bash")).toBe(
+      rendered.find((line) => line.startsWith("thought:"))?.indexOf("considering"),
+    );
+    expect(styled).toContainEqual({
+      color: "success",
+      text: expect.stringMatching(/^success: read .+\.\.\. · 1\.5s$/),
+    });
+    expect(styled).toContainEqual({ color: "error", text: "error:   bash failed · 25ms" });
+    expect(styled).toContainEqual({ color: "dim", text: "thought: considering options" });
   });
 
   it("keeps line breaks out of single-line compact rows", () => {
@@ -279,7 +336,7 @@ describe("renderExecution", () => {
       )
         .render(120)
         .join("\n");
-      expect(rendered).toContain(`success · read · ${expected}`);
+      expect(rendered).toContain(`success: read · ${expected}`);
       expect(rendered).not.toMatch(/(?:1000ms|60s|60m)/);
     }
   });
@@ -326,7 +383,7 @@ describe("renderExecution", () => {
     const lines = renderExecution(running, false, theme, repositoryRoot).render(48);
     expect(lines).toContain("path: ./packages/example");
     const repositoryTool = lines.find(
-      (line) => line.startsWith("success ·") && line.includes("1h 1m"),
+      (line) => line.startsWith("success:") && line.includes("1h 1m"),
     );
     expect(repositoryTool).toBeDefined();
     expect(repositoryTool).toContain("./.gitignore");
@@ -335,10 +392,10 @@ describe("renderExecution", () => {
     expect(lines.filter((line) => line.includes("arguments that are"))).toHaveLength(0);
     const outsideTool = renderExecution(running, false, theme, repositoryRoot)
       .render(200)
-      .find((line) => line.startsWith("success ·") && line.endsWith(" · 12ms"));
+      .find((line) => line.startsWith("success:") && line.endsWith(" · 12ms"));
     expect(outsideTool).toContain(normalizedOutside);
-    expect(outsideTool).not.toMatch(/^success · read \.\//);
-    expect(lines).toContain("success · ls ./ · 13ms");
+    expect(outsideTool).not.toMatch(/^success: read \.\//);
+    expect(lines).toContain("success: ls ./ · 13ms");
     expect(lines.every((line) => visibleWidth(line) <= 48)).toBe(true);
 
     const filesystemRoot = parse(repositoryRoot).root;
@@ -375,9 +432,9 @@ describe("renderExecution", () => {
       filesystemRoot,
     ).render(48);
     expect(rootLines).toContain("path: ./tmp");
-    expect(rootLines).toContain("success · read ./tmp/root-file · 14ms");
+    expect(rootLines).toContain("success: read ./tmp/root-file · 14ms");
     const urlTool = rootLines.find(
-      (line) => line.startsWith("success ·") && line.endsWith(" · 15ms"),
+      (line) => line.startsWith("success:") && line.endsWith(" · 15ms"),
     );
     expect(urlTool).toContain("https://");
     expect(urlTool).not.toContain("https:./");
@@ -385,7 +442,7 @@ describe("renderExecution", () => {
     if (process.platform === "win32") {
       const differentlyCasedRoot = repositoryRoot.toUpperCase();
       expect(renderExecution(running, false, theme, differentlyCasedRoot).render(80)).toContain(
-        "success · ls ./ · 13ms",
+        "success: ls ./ · 13ms",
       );
     }
   });
@@ -414,9 +471,7 @@ describe("renderExecution", () => {
 
     for (const expanded of [false, true]) {
       const rendered = renderExecution(settled, expanded, theme).render(120);
-      const activityIndex = rendered.findIndex((line) =>
-        line.includes("success · read src · 25ms"),
-      );
+      const activityIndex = rendered.findIndex((line) => line.includes("success: read src · 25ms"));
       const reportIndex = rendered.indexOf("final report");
       expect(activityIndex).toBeGreaterThanOrEqual(0);
       expect(reportIndex).toBeGreaterThan(activityIndex);
@@ -480,7 +535,7 @@ describe("renderExecution", () => {
       },
     };
     expect(renderExecution(running, true, theme).render(120).join("\n")).toContain(
-      "running · read src · 0.13ms",
+      "running: read src · 0.13ms",
     );
     const compactRunning = renderExecution(running, false, theme).render(32);
     expect(compactRunning.every((line) => visibleWidth(line) <= 32)).toBe(true);
@@ -488,8 +543,8 @@ describe("renderExecution", () => {
     const compact = renderExecution(resumed, false, theme).render(120).join("\n");
     const expanded = renderExecution(resumed, true, theme).render(120).join("\n");
     expect(compact).toContain("final report");
-    expect(compact).toContain("success · read src · 1h 1m");
-    expect(expanded).toContain("success · read src · 1h 1m");
+    expect(compact).toContain("success: read src · 1h 1m");
+    expect(expanded).toContain("success: read src · 1h 1m");
     expect(expanded).toContain("checking");
   });
 

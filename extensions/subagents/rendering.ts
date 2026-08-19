@@ -1,6 +1,7 @@
 import { isAbsolute, parse, relative, resolve } from "node:path";
 import {
   type Component,
+  stripTerminalSequences,
   Text,
   truncateToWidth,
   visibleWidth,
@@ -117,6 +118,12 @@ function relativeSummaryPaths(summary: string, root: string | undefined): string
   });
 }
 
+const ACTIVITY_LABEL_WIDTH = "success:".length;
+
+function activityLabel(label: string): string {
+  return `${`${label}:`.padEnd(ACTIVITY_LABEL_WIDTH)} `;
+}
+
 function boundedActivityLine(
   state: string,
   summary: string,
@@ -126,9 +133,9 @@ function boundedActivityLine(
   const suffix = ` · ${duration}`;
   const suffixWidth = visibleWidth(suffix);
   if (suffixWidth >= width) return duration;
-  const prefix = `${state} · ${withoutLineBreaks(summary)}`;
+  const prefix = `${activityLabel(state)}${withoutLineBreaks(summary)}`;
   const prefixWidth = width - suffixWidth;
-  return `${truncateToWidth(prefix, prefixWidth, "...")}${suffix}`;
+  return `${stripTerminalSequences(truncateToWidth(prefix, prefixWidth, "..."))}${suffix}`;
 }
 
 function omittedRowsLine(omitted: number, discarded: number): string | undefined {
@@ -225,7 +232,8 @@ class ExecutionView implements Component {
     if (execution) {
       if (omission) addWrapped(this.theme.fg("dim", omission));
       for (const entry of history) {
-        if (entry.kind === "thinking") addWrapped(this.theme.fg("dim", `thinking: ${entry.text}`));
+        if (entry.kind === "thinking")
+          addWrapped(this.theme.fg("dim", `${activityLabel("thought")}${entry.text}`));
         else {
           const color =
             entry.state === "error" ? "error" : entry.state === "success" ? "success" : "warning";
