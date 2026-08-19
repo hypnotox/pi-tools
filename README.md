@@ -20,6 +20,21 @@ While a turn runs, its duration and the total duration since the current prompt 
 
 The context usage extension adds a fresh, hidden `[session context]` line to every model request. It reports current token usage, the active model's context window, percentage, and active-branch compaction count. The line is transient: it guides the current request without being saved in the session transcript.
 
+### Usage limit resume
+
+The limit resume extension waits out a provider usage limit and continues the interrupted work on its own. When an agent turn settles with a usage-limit error, it schedules a resume and shows the wait in the status bar:
+
+```text
+limit reached · resuming at 03:34 · attempt 1
+limit reached · reset time unknown · retrying at 03:49 · attempt 2
+```
+
+The resume time comes only from limit facts the provider actually reports: an exhausted window's reset in the response headers, or a reset the failure text states outright. Nothing is inferred from plan or window assumptions. With no reset observable the extension retries every 15 minutes instead, says so in the status line, and warns once per session that it is running blind. Credit and billing exhaustion is left alone, since waiting never clears it.
+
+Resuming sends an extension-owned message rather than a synthetic user message, so the session transcript never gains input you did not type. A pending resume is cancelled by sending any message, or by `/limit-resume`; its timer is cleared at session shutdown. Attempts are not capped, so a session left alone keeps retrying until it succeeds or you cancel it.
+
+Reset times are only observable on the `sse` transport. Pi's default `auto` transport serves `openai-codex` over a WebSocket, where no response headers reach extensions at all and the failure text carries no time, so every wait there is blind. Set `"transport": "sse"` in `~/.pi/agent/settings.json`, or per project in `.pi/settings.json`, to get exact resume times. That transport re-uploads the full conversation per turn instead of sending deltas over a cached socket, which is the cost of the exchange. The extension never changes this setting for you.
+
 ### Fresh-session handoff
 
 The `handoff_session` tool starts a parent-linked fresh interactive session after a five-second cancellable countdown. It accepts required `kickoff` text (up to 1,000 UTF-16 code units), preserves it exactly, delivers it as visible handoff context that triggers the replacement session, and transfers compatible extension continuity data such as timing. The tool only runs alone in its batch. If automatic delivery fails after replacement, the replacement editor receives the exact prepared text; if another extension cancels replacement before the switch, the original editor receives it for recovery. At session startup, pi-tools yields `handoff_session` ownership when another loaded extension already provides a tool with that name, avoiding conflicts with older awf project extensions.
