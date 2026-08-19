@@ -207,6 +207,27 @@ describe("renderExecution", () => {
     expect(lines.every((line) => visibleWidth(line) <= 80)).toBe(true);
   });
 
+  it("keeps vertical control characters out of wrapped rows", () => {
+    const spilling = {
+      ...details,
+      state: "completed" as const,
+      report: "settled\u000cresult",
+      execution: {
+        prompt: "Review\u000bthe settlement across every phase.",
+        activity: [{ kind: "thinking" as const, text: "weighing\u000bthe options" }],
+        omittedActivity: 0,
+        elapsedMs: 1_000,
+        turns: 1,
+      },
+    };
+    const expanded = renderExecution(spilling, true, theme).render(80);
+    const compact = renderExecution(spilling, false, theme).render(80);
+    expect(expanded.some((line) => LINE_BREAKS.test(line))).toBe(false);
+    expect(compact.some((line) => LINE_BREAKS.test(line))).toBe(false);
+    expect(expanded.join("\n")).toContain("the settlement");
+    expect(expanded.join("\n")).toContain("result");
+  });
+
   it("promotes rounded durations at unit boundaries", () => {
     const durations = [
       { milliseconds: 999.6, expected: "1s" },

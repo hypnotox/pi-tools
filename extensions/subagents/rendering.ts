@@ -19,9 +19,14 @@ function formatTokens(count: number): string {
   return `${Math.round(count / 1_000_000)}M`;
 }
 
-/** Line breaks carry zero visible width, so they survive width truncation unnoticed. */
+/** Vertical controls carry zero visible width, so they survive width measurement unnoticed. */
+function withoutVerticalControls(text: string): string {
+  return text.replace(/[\v\f\u0085\u2028\u2029]/g, " ");
+}
+
+/** Wrapping splits on newlines, so only single-line rows strip them alongside the rest. */
 function withoutLineBreaks(text: string): string {
-  return text.replace(/[\r\n\v\f\u0085\u2028\u2029]/g, " ");
+  return withoutVerticalControls(text).replace(/[\r\n]/g, " ");
 }
 
 function compactWhitespace(text: string): string {
@@ -58,7 +63,9 @@ function status(details: ExecutionDetails): string {
 }
 
 function boundedLines(text: string, width: number): string[] {
-  return wrapTextWithAnsi(text, Math.max(1, width)).map((line) => truncateToWidth(line, width));
+  return wrapTextWithAnsi(withoutVerticalControls(text), Math.max(1, width)).map((line) =>
+    truncateToWidth(line, width),
+  );
 }
 
 function boundedPreviewLines(text: string, width: number, maxLines: number): string[] {
@@ -119,7 +126,7 @@ function boundedActivityLine(
   const suffix = ` · ${duration}`;
   const suffixWidth = visibleWidth(suffix);
   if (suffixWidth >= width) return duration;
-  const prefix = `${state} · ${summary}`;
+  const prefix = `${state} · ${withoutLineBreaks(summary)}`;
   const prefixWidth = width - suffixWidth;
   return `${truncateToWidth(prefix, prefixWidth, "...")}${suffix}`;
 }
