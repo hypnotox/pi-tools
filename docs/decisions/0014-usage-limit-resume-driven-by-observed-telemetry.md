@@ -1,7 +1,7 @@
 ---
 format: current-state-v4
 slug: usage-limit-resume-driven-by-observed-telemetry
-status: Proposed
+status: Implemented
 date: 2026-08-20
 ---
 # ADR-0014: Usage Limit Resume Driven by Observed Telemetry
@@ -91,3 +91,4 @@ not otherwise connected to limit handling in any visible way.
 ## Status history
 
 - 2026-08-20: Proposed
+- 2026-08-20: Implemented; content-sha256: 3091b41d56611b45226f66588d0c73477c8b0d0d44e64ec600ebd655fddcc90d
