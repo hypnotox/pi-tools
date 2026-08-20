@@ -524,14 +524,20 @@
     "docs/pitfalls.md": {
       "templateId": "docs/pitfalls.md.tmpl",
       "templateHash": "sha256:d6475aaeadbbed6f56bfc85c4716b8636fea0d5922661201890334a6429b4f85",
-      "configHash": "sha256:d479c78aca0e9bd66af72e89b8f15529ed07095b0945702d0dac97b19fb8caae",
-      "outputHash": "sha256:4579dbe0d093137a1564e34fff93e995d61872a6a7580a64eda4d0fb8f48f5bb"
+      "configHash": "sha256:b6b5e4e9b15d980d3b14518e09bb4ad8ff78fc1e5ae3219d44f7271edab76160",
+      "outputHash": "sha256:481fb2dcfda94645068eb15b9cd8973cd11d9a5e76ef52654a0fbc2491316568"
     },
     "docs/pitfalls/managed-worktree-biome-exclusion.md": {
       "templateId": "pitfalls/entry.md.tmpl",
       "templateHash": "sha256:23ea7baa4f2cd0e3a7319448093f2612ca5a7beab8cb0bfc631015eef99be786",
       "configHash": "sha256:846acdb232a0fa574f8b44079a3885ba7699047973214088f3731949e30c7e54",
       "outputHash": "sha256:bd61093326d33e6909a8168da16b9b3d13e3e861989378d660918cedbd87b11d"
+    },
+    "docs/pitfalls/provider-response-headers-are-transport-dependent.md": {
+      "templateId": "pitfalls/entry.md.tmpl",
+      "templateHash": "sha256:23ea7baa4f2cd0e3a7319448093f2612ca5a7beab8cb0bfc631015eef99be786",
+      "configHash": "sha256:a108ce15e3de3215b90c5dd9ae48186d25976caae6b01da8fcf197bb60cf3d82",
+      "outputHash": "sha256:6cb87bd02cb747cc117e8cac05d8dc6f6ddd6704c7a6aa4fa2cfef053fc6c2de"
     },
     "docs/pitfalls/zero-width-control-characters-in-rendered-rows.md": {
       "templateId": "pitfalls/entry.md.tmpl",

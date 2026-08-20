@@ -10,6 +10,7 @@ Pitfalls are durable hazards, not backlog items. Author sources under `.awf/docs
 | Pitfall | Domains | Tags | Related ADRs |
 | --- | --- | --- | --- |
 | [Managed Worktree Biome Exclusion](pitfalls/managed-worktree-biome-exclusion.md) | Unassigned |  |  |
+| [Provider Response Headers Are Transport Dependent](pitfalls/provider-response-headers-are-transport-dependent.md) | Unassigned |  |  |
 | [Zero Width Control Characters In Rendered Rows](pitfalls/zero-width-control-characters-in-rendered-rows.md) | Unassigned |  |  |
 
 ## By domain
@@ -17,6 +18,7 @@ Pitfalls are durable hazards, not backlog items. Author sources under `.awf/docs
 ### Unassigned
 
 - [Managed Worktree Biome Exclusion](pitfalls/managed-worktree-biome-exclusion.md)
+- [Provider Response Headers Are Transport Dependent](pitfalls/provider-response-headers-are-transport-dependent.md)
 - [Zero Width Control Characters In Rendered Rows](pitfalls/zero-width-control-characters-in-rendered-rows.md)
 
 
