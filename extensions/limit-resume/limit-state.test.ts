@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+
+const NOW = 1_787_182_000_000;
+
 import {
   BLIND_RETRY_INTERVAL_MS,
   classifyLimitError,
@@ -34,8 +37,8 @@ const OBSERVED_429_HEADERS: Record<string, string> = {
 
 describe("exhaustedWindowFromHeaders", () => {
   it("selects the exhausted window and ignores unexhausted and empty ones", () => {
-    expect(exhaustedWindowFromHeaders(OBSERVED_429_HEADERS)).toEqual({
-      resetAt: 1_787_196_849_000,
+    expect(exhaustedWindowFromHeaders(OBSERVED_429_HEADERS, NOW)).toEqual({
+      resetAt: NOW + 14_890 * 1_000,
       usedPercent: 100,
       windowMinutes: 10_080,
     });
@@ -43,8 +46,8 @@ describe("exhaustedWindowFromHeaders", () => {
 
   it("reports no window when nothing is exhausted", () => {
     const headers = { ...OBSERVED_429_HEADERS, "x-codex-primary-used-percent": "62" };
-    expect(exhaustedWindowFromHeaders(headers)).toBeUndefined();
-    expect(exhaustedWindowFromHeaders({})).toBeUndefined();
+    expect(exhaustedWindowFromHeaders(headers, NOW)).toBeUndefined();
+    expect(exhaustedWindowFromHeaders({}, NOW)).toBeUndefined();
   });
 
   it("waits for the latest reset when several windows are exhausted", () => {
@@ -52,22 +55,46 @@ describe("exhaustedWindowFromHeaders", () => {
       ...OBSERVED_429_HEADERS,
       "x-codex-bengalfox-secondary-used-percent": "100",
     };
-    expect(exhaustedWindowFromHeaders(headers)?.resetAt).toBe(1_787_786_760_000);
+    expect(exhaustedWindowFromHeaders(headers, NOW)?.resetAt).toBe(1_787_786_760_000);
   });
 
   it("matches header names case-insensitively and skips unusable values", () => {
     expect(
-      exhaustedWindowFromHeaders({
-        "X-Codex-Primary-Reset-At": "1787196849",
-        "X-Codex-Primary-Used-Percent": "100",
-      }),
+      exhaustedWindowFromHeaders(
+        {
+          "X-Codex-Primary-Reset-At": "1787196849",
+          "X-Codex-Primary-Used-Percent": "100",
+        },
+        NOW,
+      ),
     ).toMatchObject({ resetAt: 1_787_196_849_000, windowMinutes: undefined });
     expect(
-      exhaustedWindowFromHeaders({
-        "x-codex-primary-reset-at": "not-a-number",
-        "x-codex-primary-used-percent": "100",
-      }),
+      exhaustedWindowFromHeaders(
+        {
+          "x-codex-primary-reset-at": "not-a-number",
+          "x-codex-primary-used-percent": "100",
+        },
+        NOW,
+      ),
     ).toBeUndefined();
+  });
+
+  it("prefers the remaining-seconds header so a skewed local clock cannot distort the wait", () => {
+    const headers = {
+      "x-codex-primary-reset-at": "1000000000",
+      "x-codex-primary-reset-after-seconds": "600",
+      "x-codex-primary-used-percent": "100",
+    };
+    expect(exhaustedWindowFromHeaders(headers, NOW)?.resetAt).toBe(NOW + 600_000);
+  });
+
+  it("falls back to the absolute reset when no usable remaining-seconds value is present", () => {
+    const headers = {
+      "x-codex-primary-reset-at": "1787196849",
+      "x-codex-primary-reset-after-seconds": "0",
+      "x-codex-primary-used-percent": "100",
+    };
+    expect(exhaustedWindowFromHeaders(headers, NOW)?.resetAt).toBe(1_787_196_849_000);
   });
 });
 

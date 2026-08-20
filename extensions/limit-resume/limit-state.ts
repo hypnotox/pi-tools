@@ -29,9 +29,14 @@ function readNumber(headers: Record<string, string>, key: string): number | unde
 /**
  * The reset an exhausted limit window reports, or `undefined` when no window reports exhaustion.
  * With several windows exhausted the latest reset wins: work cannot resume until every one clears.
+ *
+ * A window's remaining-seconds header is preferred over its absolute epoch, because the relative
+ * value stays correct when the local clock disagrees with the provider's. A skewed clock would
+ * otherwise inflate every wait, or read an available reset as already past and retry blind instead.
  */
 export function exhaustedWindowFromHeaders(
   headers: Record<string, string>,
+  now: number,
 ): ExhaustedWindow | undefined {
   const normalized: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers)) normalized[key.toLowerCase()] = value;
@@ -40,12 +45,19 @@ export function exhaustedWindowFromHeaders(
   for (const key of Object.keys(normalized)) {
     if (!RESET_AT_PATTERN.test(key)) continue;
     const prefix = key.slice(0, -"-reset-at".length);
-    const resetAtSeconds = readNumber(normalized, key);
     const usedPercent = readNumber(normalized, `${prefix}-used-percent`);
-    if (resetAtSeconds === undefined || resetAtSeconds <= 0) continue;
     if (usedPercent === undefined || usedPercent < EXHAUSTED_PERCENT) continue;
+
+    const remainingSeconds = readNumber(normalized, `${prefix}-reset-after-seconds`);
+    const resetAtSeconds = readNumber(normalized, key);
+    let resetAt: number | undefined;
+    if (remainingSeconds !== undefined && remainingSeconds > 0)
+      resetAt = now + remainingSeconds * 1_000;
+    else if (resetAtSeconds !== undefined && resetAtSeconds > 0) resetAt = resetAtSeconds * 1_000;
+    if (resetAt === undefined) continue;
+
     const window: ExhaustedWindow = {
-      resetAt: resetAtSeconds * 1_000,
+      resetAt,
       usedPercent,
       windowMinutes: readNumber(normalized, `${prefix}-window-minutes`),
     };

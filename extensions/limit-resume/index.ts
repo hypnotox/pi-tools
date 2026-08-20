@@ -60,6 +60,8 @@ export function registerLimitResume(
   let attempts = 0;
   let disclosedDegraded = false;
   let latestContext: ExtensionContext | undefined;
+  /** Set at shutdown so a late settlement cannot arm a timer that outlives the session. */
+  let stopped = false;
 
   const clearTimer = (): void => {
     if (timer === undefined) return;
@@ -71,6 +73,7 @@ export function registerLimitResume(
     clearTimer();
     armedError = undefined;
     attempts = 0;
+    observedResetAt = undefined;
     latestContext?.ui.setStatus(STATUS_KEY, undefined);
   };
 
@@ -78,7 +81,13 @@ export function registerLimitResume(
     timer = undefined;
     attempts += 1;
     latestContext?.ui.setStatus(STATUS_KEY, undefined);
-    if (typeof pi.sendMessage !== "function") return;
+    if (typeof pi.sendMessage !== "function") {
+      latestContext?.ui.notify(
+        "This Pi build cannot send extension messages, so the automatic resume was abandoned. Send a message to continue the interrupted work.",
+        "error",
+      );
+      return;
+    }
     void Promise.resolve(
       pi.sendMessage(
         { customType: CUSTOM_TYPE, content: RESUME_CONTENT, display: true },
@@ -90,9 +99,14 @@ export function registerLimitResume(
   const scheduleResume = (errorMessage: string, context: ExtensionContext): void => {
     clearTimer();
     const now = deps.now();
+    // Consumed on use: each schedule rests on evidence observed for the failure it is scheduling,
+    // never on a reset left over from an earlier limit stop about a window that may since have
+    // cleared. Without this the leftover value also outranks the current failure's own stated time.
+    const observed = observedResetAt;
+    observedResetAt = undefined;
     const schedule = nextAttempt({
       now,
-      observedResetAt: observedResetAt ?? resetFromErrorMessage(errorMessage, now),
+      observedResetAt: observed ?? resetFromErrorMessage(errorMessage, now),
     });
     context.ui.setStatus(STATUS_KEY, waitingStatus(schedule, attempts + 1));
     if (!schedule.known && !disclosedDegraded) {
@@ -107,8 +121,9 @@ export function registerLimitResume(
 
   pi.on("after_provider_response", (event, context) => {
     latestContext = context;
+    if (stopped) return;
     const { headers } = event as unknown as ProviderResponseEvent;
-    const window = exhaustedWindowFromHeaders(headers ?? {});
+    const window = exhaustedWindowFromHeaders(headers ?? {}, deps.now());
     if (window) observedResetAt = window.resetAt;
   });
 
@@ -120,6 +135,7 @@ export function registerLimitResume(
 
   pi.on("message_end", (event: MessageEndEvent, context) => {
     latestContext = context;
+    if (stopped) return;
     const errorMessage = isAssistantLimitStop(event);
     if (errorMessage !== undefined) {
       armedError = errorMessage;
@@ -130,14 +146,16 @@ export function registerLimitResume(
 
   pi.on("agent_settled", (_event, context) => {
     latestContext = context;
-    if (armedError === undefined) return;
+    if (stopped || armedError === undefined) return;
     const errorMessage = armedError;
     armedError = undefined;
     scheduleResume(errorMessage, context);
   });
 
   pi.on("session_shutdown", () => {
+    stopped = true;
     clearTimer();
+    armedError = undefined;
   });
 
   pi.registerCommand(COMMAND, {

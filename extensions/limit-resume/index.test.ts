@@ -55,11 +55,16 @@ function createClock(start: number): Clock {
 
 function createHarness(clock: Clock) {
   const sent: Array<[unknown, unknown]> = [];
+  const sentAsUser: unknown[] = [];
   const statuses: Array<[string, string | undefined]> = [];
   const recorder = createExtensionRecorder({
     additions: {
       sendMessage: async (message: unknown, options: unknown) => {
         sent.push([message, options]);
+      },
+      // Present so a regression that resumed as the operator would be caught rather than silent.
+      sendUserMessage: async (content: unknown) => {
+        sentAsUser.push(content);
       },
     },
   });
@@ -77,13 +82,13 @@ function createHarness(clock: Clock) {
   const assistantError = (errorMessage: string) => ({
     message: { role: "assistant", stopReason: "error", errorMessage },
   });
-  return { recorder, context, sent, statuses, assistantError };
+  return { recorder, context, sent, sentAsUser, statuses, assistantError };
 }
 
 describe("limit-resume extension", () => {
   it("waits for an observed reset, then resumes without fabricating user input", async () => {
     const clock = createClock(NOW);
-    const { recorder, context, sent, statuses, assistantError } = createHarness(clock);
+    const { recorder, context, sent, sentAsUser, statuses, assistantError } = createHarness(clock);
 
     await recorder.invokeRaw(
       "after_provider_response",
@@ -105,7 +110,29 @@ describe("limit-resume extension", () => {
     expect(message.customType).toBe("limit-resume");
     expect(message.role).toBeUndefined();
     expect(options).toMatchObject({ triggerTurn: true });
+    expect(sentAsUser).toHaveLength(0);
     expect(statuses.at(-1)?.[1]).toBeUndefined();
+  });
+
+  it("does not reuse an earlier limit's reset for a later stop", async () => {
+    const clock = createClock(NOW);
+    const { recorder, context, statuses, assistantError } = createHarness(clock);
+
+    await recorder.invokeRaw(
+      "after_provider_response",
+      { status: 429, headers: EXHAUSTED_HEADERS },
+      context,
+    );
+    await recorder.invokeRaw("message_end", assistantError(SSE_ERROR), context);
+    await recorder.invokeRaw("agent_settled", {}, context);
+    expect(statuses.at(-1)?.[1]).toMatch(/resuming at/);
+
+    // A later stop observing no exhausted window must not inherit the consumed reset.
+    clock.runDue(RESET_AT_SECONDS * 1_000 + RESET_MARGIN_MS);
+    await recorder.invokeRaw("message_end", assistantError(WEBSOCKET_ERROR), context);
+    await recorder.invokeRaw("agent_settled", {}, context);
+
+    expect(statuses.at(-1)?.[1]).toMatch(/^limit reached · reset time unknown/);
   });
 
   it("retries blind and discloses the degraded mode once when no reset is observable", async () => {
@@ -168,6 +195,11 @@ describe("limit-resume extension", () => {
     await recorder.invokeRaw("agent_settled", {}, context);
     expect(clock.pending).toBe(1);
     await recorder.invokeRaw("session_shutdown", {}, context);
+    expect(clock.pending).toBe(0);
+
+    // A settlement arriving after shutdown must not arm a timer that outlives the session.
+    await recorder.invokeRaw("message_end", assistantError(WEBSOCKET_ERROR), context);
+    await recorder.invokeRaw("agent_settled", {}, context);
     expect(clock.pending).toBe(0);
   });
 });
