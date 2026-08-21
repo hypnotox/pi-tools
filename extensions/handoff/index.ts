@@ -16,7 +16,7 @@ import { guardRuntime } from "../runtime-guard.js";
 
 const COMMAND = "handoff-session-continue";
 const TOOL = "handoff_session";
-const MAX_KICKOFF_LENGTH = 1_000;
+const MAX_KICKOFF_BYTES = 16 * 1_024;
 type QueueingAPI = ExtensionAPI & { queueCommand(name: string, args?: string): void };
 
 export interface HandoffDependencies {
@@ -222,16 +222,25 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
       name: TOOL,
       label: "Fresh Session Handoff",
       description: "Continue in a parent-linked fresh Pi TUI session.",
+      promptSnippet: "Continue work in a fresh session with a self-contained kickoff",
+      promptGuidelines: [
+        "When context pressure is low, handoff_session is optional and normal work can continue.",
+        "When context pressure is medium, handoff_session users should preserve important session-only knowledge.",
+        "When context pressure is high, handoff_session users should identify a safe handoff point and prepare continuity.",
+        "When context pressure is critical, use handoff_session as soon as safely possible.",
+        "When using handoff_session, assume the replacement starts without knowledge of the previous conversation; put every necessary fact in durable files or the kickoff and cite relevant files explicitly.",
+        "When using handoff_session, include the objective, current state, next action, relevant references, decisions, constraints, completed work, verification, blockers, and unresolved questions only when relevant.",
+      ],
       parameters: Type.Object(
-        { kickoff: Type.String({ maxLength: MAX_KICKOFF_LENGTH }) },
+        { kickoff: Type.String({ maxLength: MAX_KICKOFF_BYTES }) },
         { additionalProperties: false },
       ),
       async execute(_id, params, _signal, _update, context) {
         if (context.mode !== "tui" || !context.sessionManager.getSessionFile())
           throw new Error("handoff_session requires a persisted interactive Pi TUI session");
         if (!params.kickoff.trim()) throw new Error("kickoff must contain non-whitespace content");
-        if (params.kickoff.length > MAX_KICKOFF_LENGTH)
-          throw new Error("kickoff must not exceed 1000 UTF-16 code units");
+        if (new TextEncoder().encode(params.kickoff).byteLength > MAX_KICKOFF_BYTES)
+          throw new Error("kickoff must not exceed the 16 KiB UTF-8 limit");
         if (pending) throw new Error("A handoff request is already pending");
 
         const request: PendingHandoff = { id: deps.randomUUID(), kickoff: params.kickoff };

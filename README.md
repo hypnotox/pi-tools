@@ -18,7 +18,9 @@ While a turn runs, its duration and the total duration since the current prompt 
 
 ### Context usage
 
-The context usage extension adds a fresh, hidden `[session context]` line to every model request. It reports current token usage, the active model's context window, percentage, and active-branch compaction count. The line is transient: it guides the current request without being saved in the session transcript.
+The context usage extension adds a fresh, hidden `[session context]` line to every model request. It reports current token usage, the active model's context window, percentage, context pressure, and active-branch compaction count. The line is transient: it guides the current request without being saved in the session transcript.
+
+Context pressure is the highest level reached by either relative or absolute usage: `medium` at 50% or 100k tokens, `high` at 70% or 150k, and `critical` at 85% or 200k. Lower usage is `low`; unavailable usage is `unknown`.
 
 ### Usage limit resume
 
@@ -37,7 +39,9 @@ Reset times are only observable on the `sse` transport. Pi's default `auto` tran
 
 ### Fresh-session handoff
 
-The `handoff_session` tool starts a parent-linked fresh interactive session after a five-second cancellable countdown. It accepts required `kickoff` text (up to 1,000 UTF-16 code units), preserves it exactly, delivers it as visible handoff context that triggers the replacement session, and transfers compatible extension continuity data such as timing. The tool only runs alone in its batch. If automatic delivery fails after replacement, the replacement editor receives the exact prepared text; if another extension cancels replacement before the switch, the original editor receives it for recovery. At session startup, pi-tools yields `handoff_session` ownership when another loaded extension already provides a tool with that name, avoiding conflicts with older awf project extensions.
+The `handoff_session` tool starts a parent-linked fresh interactive session after a five-second cancellable countdown. It accepts required `kickoff` text up to 16 KiB of UTF-8, preserves it exactly, delivers it as visible handoff context that triggers the replacement session, and transfers compatible extension continuity data such as timing. The tool only runs alone in its batch. If automatic delivery fails after replacement, the replacement editor receives the exact prepared text; if another extension cancels replacement before the switch, the original editor receives it for recovery. At session startup, pi-tools yields `handoff_session` ownership when another loaded extension already provides a tool with that name, avoiding conflicts with older awf project extensions.
+
+The replacement starts without knowledge of the preceding conversation. Put every fact needed to continue in durable files or in the kickoff, and cite relevant files explicitly. Depending on the work, useful kickoff content includes the objective, current state, next action, decisions, constraints, completed work, verification, blockers, and unresolved questions. At medium pressure preserve important session-only knowledge, at high pressure identify a safe handoff point and prepare continuity, and at critical pressure hand off as soon as safely possible.
 
 A queued handoff suppresses only one imminent threshold-triggered compaction, allowing Pi to drain the queued continuation first. Manual and overflow compactions remain available, and later threshold compactions are unaffected. Run `/reload` after updating either extension.
 

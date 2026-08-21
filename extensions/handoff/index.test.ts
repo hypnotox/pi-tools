@@ -201,6 +201,21 @@ describe("fresh-session handoff extension", () => {
     expect(h.sessions).toHaveLength(1);
   });
 
+  it("registers static pressure and self-contained kickoff guidance", async () => {
+    const h = await createHarness();
+    const tool = h.tools[0];
+
+    expect(tool?.promptGuidelines).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("pressure is medium"),
+        expect.stringContaining("pressure is high"),
+        expect.stringContaining("pressure is critical"),
+        expect.stringContaining("starts without knowledge of the previous conversation"),
+        expect.stringContaining("when relevant"),
+      ]),
+    );
+  });
+
   it("preserves exact kickoff text and parent linkage in the replacement session", async () => {
     const h = await createHarness();
     const kickoff = "  keep this exact prose  ";
@@ -329,12 +344,16 @@ describe("fresh-session handoff extension", () => {
     expect(h.clearTimeout).toHaveBeenCalledWith("timeout");
   });
 
-  it("enforces the 1,000 UTF-16 code-unit kickoff boundary", async () => {
-    await expect((await createHarness()).execute("x".repeat(1_000))).resolves.toMatchObject({
+  it("enforces the 16 KiB UTF-8 kickoff boundary", async () => {
+    await expect((await createHarness()).execute("x".repeat(16 * 1_024))).resolves.toMatchObject({
       terminate: true,
     });
-    await expect((await createHarness()).execute("x".repeat(1_001))).rejects.toThrow("1000");
-    await expect((await createHarness()).execute("😀".repeat(501))).rejects.toThrow("1000");
+    await expect((await createHarness()).execute(`x${"😀".repeat(4_096)}`)).rejects.toThrow(
+      "16 KiB UTF-8",
+    );
+    await expect((await createHarness()).execute("😀".repeat(4_096))).resolves.toMatchObject({
+      terminate: true,
+    });
   });
 
   it("clears pending state when shutdown or command completion occurs", async () => {
