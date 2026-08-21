@@ -205,6 +205,9 @@ describe("fresh-session handoff extension", () => {
     const h = await createHarness();
     const tool = h.tools[0];
 
+    expect(tool?.promptSnippet).toBe(
+      "Continue work in a fresh session with a self-contained kickoff",
+    );
     expect(tool?.promptGuidelines).toEqual(
       expect.arrayContaining([
         expect.stringContaining("pressure is medium"),
@@ -345,6 +348,11 @@ describe("fresh-session handoff extension", () => {
   });
 
   it("enforces the 16 KiB UTF-8 kickoff boundary", async () => {
+    const schemaHarness = await createHarness();
+    expect(schemaHarness.tools[0]?.parameters).toMatchObject({
+      properties: { kickoff: { maxLength: 16 * 1_024 } },
+    });
+
     await expect((await createHarness()).execute("x".repeat(16 * 1_024))).resolves.toMatchObject({
       terminate: true,
     });

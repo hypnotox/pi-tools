@@ -24,12 +24,17 @@ describe("context usage extension", () => {
         sessionManager: { getBranch: () => [] },
       });
 
-    expect(line(49_000, 100_000)).toContain("pressure=low");
+    expect(line(49_999, 100_000)).toContain("pressure=low");
     expect(line(50_000, 100_000)).toContain("pressure=medium");
+    expect(line(99_999, 1_000_000)).toContain("pressure=low");
     expect(line(100_000, 1_000_000)).toContain("pressure=medium");
+    expect(line(69_999, 100_000)).toContain("pressure=medium");
     expect(line(70_000, 100_000)).toContain("pressure=high");
+    expect(line(149_999, 1_000_000)).toContain("pressure=medium");
     expect(line(150_000, 1_000_000)).toContain("pressure=high");
+    expect(line(84_999, 100_000)).toContain("pressure=high");
     expect(line(85_000, 100_000)).toContain("pressure=critical");
+    expect(line(199_999, 1_000_000)).toContain("pressure=high");
     expect(line(200_000, 1_000_000)).toContain("pressure=critical");
     expect(line(200_000, 272_000)).toContain("pressure=critical");
   });
