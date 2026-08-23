@@ -71,7 +71,11 @@ async function createHarness(
     },
   };
   const context = shared.makeCommandContext({
-    sessionManager: { getSessionFile: () => sessionFile, getLeafEntry: () => leaf } as never,
+    sessionManager: {
+      getSessionId: () => "parent-session-id",
+      getSessionFile: () => sessionFile,
+      getLeafEntry: () => leaf,
+    } as never,
     ui: {
       notify: (...args: unknown[]) => {
         oldUiCalls += 1;
@@ -180,6 +184,22 @@ describe("fresh-session handoff extension", () => {
 
     expect(h.tools).toHaveLength(0);
     expect(h.commands).toHaveLength(0);
+  });
+
+  it("suppresses the current run's remote completion push when handoff is queued", async () => {
+    const h = await createHarness();
+
+    await h.execute();
+
+    expect(h.emissions).toContainEqual([
+      "remote-pi:notification-disposition.v1",
+      {
+        version: 1,
+        sessionId: "parent-session-id",
+        disposition: "suppress_next_agent_end_push",
+        id: "handoff-committed",
+      },
+    ]);
   });
 
   it("suppresses only the imminent threshold compaction while handoff is pending", async () => {
@@ -313,6 +333,10 @@ describe("fresh-session handoff extension", () => {
     const h = await createHarness({ queueFails: true });
     await expect(h.execute(" ")).rejects.toThrow("kickoff");
     await expect(h.execute()).rejects.toThrow("queue failed");
+    expect(h.emissions).not.toContainEqual([
+      "remote-pi:notification-disposition.v1",
+      expect.anything(),
+    ]);
     h.setQueueFails(false);
     await expect(h.execute()).resolves.toMatchObject({ terminate: true });
     h.setLeaf({

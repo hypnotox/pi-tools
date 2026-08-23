@@ -247,6 +247,12 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
         pending = request;
         try {
           (pi as QueueingAPI).queueCommand(COMMAND, request.id);
+          pi.events.emit("remote-pi:notification-disposition.v1", {
+            version: 1,
+            sessionId: context.sessionManager.getSessionId(),
+            disposition: "suppress_next_agent_end_push",
+            id: "handoff-committed",
+          });
           suppressThresholdCompaction = true;
         } catch (error) {
           if (pending === request) pending = undefined;

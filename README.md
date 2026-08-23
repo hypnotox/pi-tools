@@ -43,7 +43,7 @@ The `handoff_session` tool starts a parent-linked fresh interactive session afte
 
 The replacement starts without knowledge of the preceding conversation. Put every fact needed to continue in durable files or in the kickoff, and cite relevant files explicitly. Depending on the work, useful kickoff content includes the objective, current state, next action, decisions, constraints, completed work, verification, blockers, and unresolved questions. At medium pressure preserve important session-only knowledge, at high pressure identify a safe handoff point and prepare continuity, and at critical pressure hand off as soon as safely possible.
 
-A queued handoff suppresses only one imminent threshold-triggered compaction, allowing Pi to drain the queued continuation first. Manual and overflow compactions remain available, and later threshold compactions are unaffected. Run `/reload` after updating either extension.
+A queued handoff suppresses only one imminent threshold-triggered compaction, allowing Pi to drain the queued continuation first. It also asks compatible remote-control extensions to suppress the current run's completion push, since work continues in the replacement session. Manual and overflow compactions remain available, and later threshold compactions are unaffected. Run `/reload` after updating either extension.
 
 ### Subagent
 
