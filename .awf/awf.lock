@@ -1,12 +1,12 @@
 {
-  "awfVersion": "0.39.1",
+  "awfVersion": "0.39.2",
   "schemaVersion": 46,
   "files": {
     ".awf/bootstrap.sh": {
       "templateId": "bootstrap/awf-bootstrap.sh.tmpl",
       "templateHash": "sha256:4fc6e03481f7b5d72843e3927e99c2dced933d60b2796d8e32acd5b9d44b65d2",
       "configHash": "sha256:17e593b7be2adb8a69661f091926ccf1537c5b15bccd1addb5a7738a78db5603",
-      "outputHash": "sha256:8d763f9f96003766bae20a6902c77875b9ad16e289bb5af8eedca96c2eec07aa"
+      "outputHash": "sha256:ceff94350e49bd11ca9e8a461cc5be7763c94874808bcd3f0f84d20b72d0b8cd"
     },
     ".awf/effort-archive/.gitignore": {
       "templateId": "effort-archive/gitignore.tmpl",
