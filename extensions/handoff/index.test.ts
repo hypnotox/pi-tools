@@ -230,7 +230,7 @@ describe("fresh-session handoff extension", () => {
     );
     expect(tool?.promptGuidelines).toEqual(
       expect.arrayContaining([
-        expect.stringContaining("pressure is medium"),
+        "When context pressure is medium, do not use handoff_session solely because of the pressure level. Continue in the current session when retained context benefits the work; preserve important session-only knowledge for a possible later handoff.",
         expect.stringContaining("pressure is high"),
         expect.stringContaining("pressure is critical"),
         expect.stringContaining("starts without knowledge of the previous conversation"),

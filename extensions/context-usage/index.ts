@@ -13,9 +13,9 @@ export function contextPressure(tokens: number, contextWindow: number): ContextP
   if (!Number.isFinite(tokens) || !Number.isFinite(contextWindow) || contextWindow <= 0)
     return "unknown";
   const ratio = tokens / contextWindow;
-  if (ratio >= 0.85 || tokens >= 200_000) return "critical";
-  if (ratio >= 0.7 || tokens >= 150_000) return "high";
-  if (ratio >= 0.5 || tokens >= 100_000) return "medium";
+  if (ratio >= 0.9 || tokens >= 250_000) return "critical";
+  if (ratio >= 0.8 || tokens >= 200_000) return "high";
+  if (ratio >= 0.7 || tokens >= 150_000) return "medium";
   return "low";
 }
 

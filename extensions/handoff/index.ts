@@ -225,7 +225,7 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
       promptSnippet: "Continue work in a fresh session with a self-contained kickoff",
       promptGuidelines: [
         "When context pressure is low, handoff_session is optional and normal work can continue.",
-        "When context pressure is medium, handoff_session users should preserve important session-only knowledge.",
+        "When context pressure is medium, do not use handoff_session solely because of the pressure level. Continue in the current session when retained context benefits the work; preserve important session-only knowledge for a possible later handoff.",
         "When context pressure is high, handoff_session users should identify a safe handoff point and prepare continuity.",
         "When context pressure is critical, use handoff_session as soon as safely possible.",
         "When using handoff_session, assume the replacement starts without knowledge of the previous conversation; put every necessary fact in durable files or the kickoff and cite relevant files explicitly.",

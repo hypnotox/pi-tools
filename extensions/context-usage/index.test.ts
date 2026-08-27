@@ -13,7 +13,7 @@ describe("context usage extension", () => {
 
     expect(formatCount(118_200)).toBe("118.2k");
     expect(contextUsageLine(context)).toBe(
-      "[session context] 118.2k/272k (43%); pressure=medium; compactions=2",
+      "[session context] 118.2k/272k (43%); pressure=low; compactions=2",
     );
   });
 
@@ -24,19 +24,20 @@ describe("context usage extension", () => {
         sessionManager: { getBranch: () => [] },
       });
 
-    expect(line(49_999, 100_000)).toContain("pressure=low");
-    expect(line(50_000, 100_000)).toContain("pressure=medium");
-    expect(line(99_999, 1_000_000)).toContain("pressure=low");
-    expect(line(100_000, 1_000_000)).toContain("pressure=medium");
-    expect(line(69_999, 100_000)).toContain("pressure=medium");
-    expect(line(70_000, 100_000)).toContain("pressure=high");
-    expect(line(149_999, 1_000_000)).toContain("pressure=medium");
-    expect(line(150_000, 1_000_000)).toContain("pressure=high");
-    expect(line(84_999, 100_000)).toContain("pressure=high");
-    expect(line(85_000, 100_000)).toContain("pressure=critical");
-    expect(line(199_999, 1_000_000)).toContain("pressure=high");
-    expect(line(200_000, 1_000_000)).toContain("pressure=critical");
-    expect(line(200_000, 272_000)).toContain("pressure=critical");
+    expect(line(69_999, 100_000)).toContain("pressure=low");
+    expect(line(70_000, 100_000)).toContain("pressure=medium");
+    expect(line(149_999, 1_000_000)).toContain("pressure=low");
+    expect(line(150_000, 1_000_000)).toContain("pressure=medium");
+    expect(line(79_999, 100_000)).toContain("pressure=medium");
+    expect(line(80_000, 100_000)).toContain("pressure=high");
+    expect(line(199_999, 1_000_000)).toContain("pressure=medium");
+    expect(line(200_000, 1_000_000)).toContain("pressure=high");
+    expect(line(89_999, 100_000)).toContain("pressure=high");
+    expect(line(90_000, 100_000)).toContain("pressure=critical");
+    expect(line(249_999, 1_000_000)).toContain("pressure=high");
+    expect(line(250_000, 1_000_000)).toContain("pressure=critical");
+    expect(line(244_799, 272_000)).toContain("pressure=high");
+    expect(line(244_800, 272_000)).toContain("pressure=critical");
   });
 
   it("reports deterministic unknown and unavailable values without mutating session state", () => {
@@ -73,7 +74,7 @@ describe("context usage extension", () => {
         {
           role: "custom",
           customType: "context-usage",
-          content: "[session context] 2k/4k (50%); pressure=medium; compactions=1",
+          content: "[session context] 2k/4k (50%); pressure=low; compactions=1",
           display: false,
         },
       ],
