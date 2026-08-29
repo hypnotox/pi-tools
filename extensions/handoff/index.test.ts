@@ -192,7 +192,7 @@ describe("fresh-session handoff extension", () => {
     await h.execute();
 
     expect(h.emissions).toContainEqual([
-      "remote-pi:notification-disposition.v1",
+      "pi-cockpit:notification-disposition.v1",
       {
         version: 1,
         sessionId: "parent-session-id",
@@ -334,7 +334,7 @@ describe("fresh-session handoff extension", () => {
     await expect(h.execute(" ")).rejects.toThrow("kickoff");
     await expect(h.execute()).rejects.toThrow("queue failed");
     expect(h.emissions).not.toContainEqual([
-      "remote-pi:notification-disposition.v1",
+      "pi-cockpit:notification-disposition.v1",
       expect.anything(),
     ]);
     h.setQueueFails(false);

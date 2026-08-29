@@ -4,7 +4,7 @@
 
 Author, committer, and signature requirements for repository history.
 
-**Applicability:** Global topic: applies repository-wide. It declares no bounded ownership selectors. Run `awf topic development/commit-provenance --coverage` for current applicable and owned paths and marker sites.
+**Applicability:** Global topic: applies repository-wide. It declares no bounded ownership selectors. Run `awf read topic development/commit-provenance --coverage` for current applicable and owned paths and marker sites.
 
 This topic records the accepted provenance contract for repository commits.
 

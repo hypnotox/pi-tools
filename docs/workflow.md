@@ -4,22 +4,61 @@
 <!-- awf:edit principles: default; create .awf/parts/workflow/principles.md to override -->
 ## Principles
 
-You own the project's long-term health, not just the task in front of you: bugs you notice in passing are yours, coverage gaps are yours, and documentation drift is yours to fix in the same commit that caused it. Three rules bind every change: reality and its docs move together, the deterministic gate is green before every commit, and each commit carries exactly one concern.
+<!-- Shared gate cadence. -->
+Use the narrowest relevant test, build, or lint command while editing, then run available affected-package feedback. The fast commit tier runs at the commit boundary; terminal exhaustive verification runs at implementation completion. Rely on a wired pre-commit or pre-push hook when present rather than manually duplicating its matching gate.
+
+You own the project's long-term health, not just the task in front of you: defects caused by the transaction or blocking its safe completion are repaired in the same commit; unrelated concrete defects are recorded and routed separately without expanding scope. Three rules bind every change: reality and its docs move together, the deterministic gate is green before every commit, and each commit carries exactly one concern.
+
+**The protected contract.**
+
+The workflow governs a change's protected contract, not its execution route. Protected: the requested outcome, the explicitly settled durable choices, the material scope, the externally observable behaviour, the compatibility and safety constraints, the required verification strength, the prohibited shortcuts, and every constraint an active project rule places on one of these, which includes generated-source ownership, drift detection, and path and worktree confinement, and current-state authority.
+
+Everything else about how the change is carried out is the route: phase and task boundaries, their order, local names, file and symbol inventories, helper allocation, execution mode, exact command sequence, commit decomposition, and non-load-bearing mechanism choice. An implementation owner chooses and revises the route while the protected contract holds.
+
+Precedence is decided per constraint, not per rule. A clause that bears only on how a change is carried out is subordinate to the protected contract, so one rule may be protected in its protected clauses and subordinate in its route clauses. A route detail binds only when a settled decision states that it is load-bearing.
+
+Core and Full select available governance artifacts. They do not select different standards of correctness, autonomy, maintainability, or review quality. Core includes the operational workflow. Full adds ADR, plan, current-state, and audit capabilities.
+
+### Model selection
+
+Every governed subagent dispatch chooses the smallest model expected to complete reliably: `small` is for narrow, mechanical, low-ambiguity work; `standard` is for substantive but bounded work; and `large` is for broad, intricate, cross-cutting, or high-consequence work. Uncertainty, failed reasoning, or widened scope requires reconsideration and possible escalation. A runtime with model selection chooses explicitly; an unsupported runtime uses its harness default and notes that explicit selection is unavailable.
+
+**Plan flexibility.**
+
+The protected-contract rule in the workflow document governs what a plan may not change. The plan records the best known route at authoring time, not a binding implementation choreography. The parent may merge, split, reorder, add, remove, or replace recorded route detail while the protected contract holds, and may batch independent cheap operations only when they safely share context. Batching never transfers transaction authority or weakens path confinement. An implementation child remains commit-disabled and confined to its assigned paths. A path omitted from the plan is not alone a reason to stop, and a stale listed path need not be touched. Reapproval is required only when the protected contract would change or an unresolved material decision appears.
+
+Reconcile a Proposed plan only when another phase or reviewer could rely on stale material instructions. Inconsequential and independently local edits require no deviation record. A delegated owner reports material cross-owner revisions for parent reconciliation. A helper remains confined to its assigned paths and gains no scope, commit, review, checkpoint, handoff, or outcome authority from route flexibility.
+
+**Semantic-owner assurance.**
+
+Before assigning or reviewing a broad implementation unit, the parent identifies its semantic owners. It separates independently verifiable owners into distinct implementation, settlement, and assurance units. Work stays together only when its cross-owner composition is itself one coherent transaction or protected contract.
+
+Repeated findings of the same underlying semantic concern or violated contract across separable owners show that the assurance boundary is oversized. Finding class here means that shared concern or contract, not severity, reviewer lens, or remediation classification. Before further assurance, the parent partitions the finite remaining scope into separable owner units. Each genuinely fresh implementation transaction receives ordinary bounded review. Residual findings from the originating transaction's sole verify pass receive parent-owned settlement and deterministic verification without another reviewer dispatch.
+
+Decomposition preserves parent-owned focused evidence for each fresh unit, and terminal assurance covers composed integration effects and the complete range under its own single verify-pass bound and terminal verification obligations. Unrelated blockers stay under implementation-autonomy routing and never widen the active outcome. No file, line, commit, task, finding-count, or elapsed-time threshold defines an oversized unit; semantic ownership, dependency and representation boundaries, independent verifiability, and the concrete finding pattern do.
 
 <!-- awf:edit chain: default; create .awf/parts/workflow/chain.md to override -->
 ## The chain
 
-Workflow escalation uses independent judgment-based triggers, not one bundled chain. At intake evaluate brainstorming, continuity/effort, grounding, ADR, plan, and implementation-review need independently. No line count, artifact type, or another mechanism firing selects a trigger. Re-evaluate only affected triggers when material facts change and activate newly warranted support before further mutation; prior valid work remains valid. Repository authority, documentation currency, verification, and commit obligations apply to every change regardless of triggers.
+**Rule.** Evaluate brainstorming, continuity/effort, grounding, ADR, plan, and implementation-review triggers independently at intake. Re-evaluate only affected triggers when material facts change and activate newly warranted support before further mutation; prior valid work remains valid. No line count, artifact type, or another mechanism firing selects a trigger.
 
-Before hand-authored production-code mutation, including a mechanical production refactor or a test preparing that change, brainstorming alone presents a proportionate outline and obtains explicit approval. Retained conversation, user-provenance effort Decision-log evidence, or an explicit request to execute a named plan whose Architecture summary supplies the outline each establish that boundary; delegated owners consume the parent-supplied boundary without another approval interaction. Documentation-only work, test-only maintenance that does not prepare production work, generated-output-only work, and non-code mechanical work remain autonomous unless an independent trigger fires. The approval boundary precedes ADR and plan authoring; ADR authoring and review, plan authoring and review, implementation, and implementation review then continue autonomously inside it. A new material decision or changed approved boundary returns through brainstorming, while an unresolved blocker or safety or correctness concern reports through the active workflow after diagnosis. Effort, grounding, ADR, plan, and review triggers remain independent.
+**Required evidence.** Repository authority, documentation currency, verification, and commit obligations apply to every change regardless of which triggers fire.
+
+**Approval rule.** Brainstorming stops only for an unresolved material decision, not for the act of mutating production code. It presents the proportionate outline and obtains explicit approval. Retained conversation, user-provenance effort Decision-log evidence, or an explicit request to execute a named plan whose Architecture summary supplies the outline each establish the approved boundary. A delegated owner consumes that boundary without another approval interaction.
+
+**Flexible details.** A routine change proceeds autonomously while its protected contract holds, whatever kind of file it touches. The approval boundary precedes ADR and plan authoring; later artifact and implementation work continues inside it. Effort, grounding, ADR, plan, and review triggers remain independent.
+
+**Stop when.** Return through brainstorming when a new material decision appears or the approved boundary must change. Report an unresolved blocker or safety or correctness concern through the active workflow only after diagnosis.
 
 A plan phase is one independently green coherent implementation transaction and declares `inline`
 or `subagent-driven` ownership independently of every other phase. Heading-identified tasks are ordered steps,
-not commit, dispatch, review, or checkpoint boundaries. One commit-capable owner takes a complete
-subagent-driven phase from a known clean green baseline through staged check, gate, and closing
-commit; the parent owns inline integration and all report-only review settlement. Sequential
-commit-disabled helpers may execute only explicit path-disjoint batch subsets, never shared files or
-the closing commit. If a phase owner stops dirty, the parent inventories the checkout and explicitly
+not commit, dispatch, review, or checkpoint boundaries. The parent takes every complete phase from a known clean green baseline through integration,
+explicit staging, staged check, every commit, fast gates, and terminal exhaustive verification. A
+subagent-driven phase uses one sequential commit-disabled implementation child for its complete
+assigned scope; the child runs only bounded focused checks and never stages, commits, or runs a gate.
+The parent owns every report-only review settlement. Additional commit-disabled helpers may execute
+only explicit path-disjoint batch subsets, never shared files or the closing commit. If a phase owner
+stops dirty, the parent inventories the checkout and explicitly
 completes inline, restores and restarts the complete phase, or transfers the complete revised phase
 with recovery context; it never issues a blind task-level continuation. Runtime phase enforcement
 is not promised. A plan-v2 task projection may include a generated scope notice, Phase close, and
@@ -50,13 +89,12 @@ review, checkpoint, handoff, helper, or outcome authority.
 
 - `effort-workflow` owns every effort from autonomous continuity-triggered creation through integration, divergence, removal, retrospective, and finish; reviewing implementation supplies assurance only.
 
-- Discovery creates no effort until continuity materially helps.
+- Discovery creates no effort until continuity materially helps. Evaluate continuity when brainstorming begins and whenever continuity-relevant facts change; brainstorming may begin effort-free, but continuing after its first settled material decision creates or resumes ownership before proceeding further. A single-decision brainstorm may remain effort-free.
 
-- Existing efforts resume under their fixed identity only for work inside their outcome; a newly discovered outcome cannot silently reuse, rename, replace, or create beside the active effort.
+- Existing efforts resume under their fixed identity only for work inside their outcome. Refinements remain in that effort; material outcome drift deliberately creates a fixed-identity successor, transfers necessary still-valid context, verifies successor resumability, then closes the obsolete effort through existing topology safety and finish/archive lifecycle. Never silently reuse, rename, replace, or create beside the active effort.
 
-- Independent fresh-context children may run concurrently where supported, but they are report-only with respect to that shared memory; refinement stays sequential, a lower-cost child model is selected deliberately when supported, and shared-checkout implementation stays alone. awf ships this as one workflow, with no workflow profiles, depth controls, routers, classifiers, or runtime policy knobs.
+- Independent fresh-context children may run concurrently where supported, but they are report-only with respect to that shared memory; refinement stays sequential, a lower-cost child model is selected deliberately when supported, and shared-checkout implementation stays alone. Governance footprints add no depth controls, rigor modes, routers, classifiers, or runtime policy knobs.
 
-On Pi, direct `awf effort` commands create and manage the slugged resident. Native skill discovery loads fixed workflow guidance without lifecycle mutation.
 
 For the detailed criteria of when a decision is load-bearing enough to warrant an ADR (and the ADR format itself), see [`docs/decisions/README.md`](decisions/README.md).
 
@@ -71,13 +109,17 @@ For the detailed criteria of when a decision is load-bearing enough to warrant a
 
 - Discovery creates no effort.
 
-- Analysis, exploration, prioritization, option comparison, and selection remain effort-free discovery.
+- Analysis, exploration, prioritization, option comparison, and selection remain effort-free discovery until continuity becomes materially useful.
+
+- Evaluate continuity when brainstorming begins and whenever continuity-relevant facts change. Brainstorming may begin effort-free, but if it continues after its first settled material decision, `effort-workflow` creates or resumes ownership before proceeding further. A single-decision brainstorm may remain effort-free.
 
 - When continuity materially helps, `effort-workflow` alone chooses a faithful outcome, title, and canonical short slug, runs `./awf effort new --slug <slug> "<title>"`, reports the allocated immutable identity, and continues in the managed worktree without an approval stop.
 
 - Work without that continuity need uses neither an effort nor memory.
 
-- An existing effort resumes under its fixed identity and existing validation rules only while work remains inside its outcome; a newly discovered outcome cannot silently reuse, rename, replace, or create beside that active effort.
+- An existing effort resumes under its fixed identity and existing validation rules only while work remains inside its outcome. Its title and slug are never retitled, its schema and history are not changed for drift, refinements remain inside its outcome, and material outcome drift deliberately creates a fixed-identity successor that transfers necessary still-valid context, verifies resumability, then closes the obsolete effort through existing topology safety and finish/archive lifecycle.
+
+- If relevant discussion predates creation, initialize owned memory from retained evidence before any handoff: record the current outcome in Brief, every already-settled decision with required user-provenance and `Record:` evidence, relevant observations, and current phase and next action. Missing exact required user evidence must be reconfirmed, not reconstructed.
 
 - A failed creation follows ordinary diagnosis and authority-preserving retry.
 
@@ -89,7 +131,7 @@ For the detailed criteria of when a decision is load-bearing enough to warrant a
 
 - The owned memory stays under the primary checkout: the literal `.awf/efforts/<slug>/memory.md` spelling is primary-root-relative, and effort commands print a resolvable absolute path from anywhere else.
 
-- New memories use closed YAML frontmatter with `effort`, `phase`, `next`, and `updated`; an exact legacy four-line header migrates on its first structured update.
+- Memories use closed YAML frontmatter with `effort`, `phase`, `next`, and `updated`.
 
 - Resume from `phase` and `next` only after revalidating them against the repository sources and current-state documentation, which remain authoritative over checkpoint prose; the rendered orienting skill's resume-revalidation section is the procedural home of that check.
 
@@ -97,14 +139,14 @@ For the detailed criteria of when a decision is load-bearing enough to warrant a
 
 - Standalone memory is forbidden.
 
-### Checkpoints and handoff
+### Checkpoints and continuation
 
 
 - Checkpoints are durable; check-ins are deliberate.
 
 - A checkpoint never creates an effort.
 
-- For effort-backed work it validates existing ownership, accepts deprecated legacy `Effort: <slug>` or canonical frontmatter `effort: <slug>`, and updates the owned file in one writer-owned tool batch with `./awf effort memory update <slug> --phase "..." --next "..."`; effort-free work omits persistence rather than fabricating memory.
+- For effort-backed work it validates existing ownership, accepts canonical YAML frontmatter `effort: <slug>`, and updates the owned file in one writer-owned tool batch with `./awf effort memory update <slug> --phase "..." --next "..."`; effort-free work omits persistence rather than fabricating memory.
 
 - It then routes a new material decision or changed approved boundary through the active workflow to brainstorming, while separately reporting a correctness or safety concern, blocker, or failed required verification through the active workflow only when it remains unresolved after required diagnosis and authority-guided remediation; either condition stops progression, while its absence permits a continuity notice and continuation.
 
@@ -114,13 +156,11 @@ For the detailed criteria of when a decision is load-bearing enough to warrant a
 
 - Settled ADR review continues autonomously to linked-plan handling or the independently selected implementation path.
 
-- After a persisted formal phase or approval checkpoint, or another safe resumable point whose immediate successor can start independently, Pi judges retained-context relevance and successor work from currently available context and compaction evidence.
+- At a persisted formal phase or approval checkpoint, or another safe resumable point whose immediate successor can start independently, judge retained-context relevance and successor work. Continue autonomously or through a target-native successor when one is available. Handoff is prohibited while required late-creation memory initialization remains incomplete.
 
-- No fixed threshold controls the choice: it either continues autonomously in-session or requests replacement.
+- Reorient from repository authority before substantive successor work. Append a log only for an actual fresh boundary; continuation, cancellation, or failure that leaves the current session active appends none. Target-specific skill guidance owns any executable replacement protocol.
 
-- For effort-backed work the bounded kickoff is exactly `Continue with effort <slug>.`; it identifies only the effort and leaves association, reorientation, boundary logging, and autonomous continuation to skill and effort authority.
-
-- The replacement session appends the actual boundary to `## Handoff log` before substantive work; continuation, cancellation, or failure that leaves the old session active appends none. A routine implementation checkpoint occurs only after a phase's closing commit has received report-only review and all findings are settled; heading-identified tasks, executable projections, and helper returns are not checkpoint boundaries.
+A routine implementation checkpoint occurs only after a phase's closing commit has received report-only review and all findings are settled; heading-identified tasks, executable projections, and helper returns are not checkpoint boundaries.
 
 ### Memory format and logs
 
@@ -129,7 +169,7 @@ For the detailed criteria of when a decision is load-bearing enough to warrant a
 
 - `effort` never changes.
 
-- Checkpoints use structured memory update rather than direct replacement; it updates selected `phase`/`next` values and UTC time, publishes the literal legacy `Not yet updated.` sentinel until its first update, migrates an exact legacy four-line header on that update, and safely repairs mutable metadata only when identity and its recognized boundary are safe.
+- Checkpoints use structured memory update rather than direct replacement; it updates selected `phase`/`next` values and UTC time, and safely repairs mutable metadata only when canonical identity and its recognized boundary are safe.
 
 - The Brief states the outcome and links the effort's durable artifacts as they come to exist.
 
@@ -152,7 +192,7 @@ For the detailed criteria of when a decision is load-bearing enough to warrant a
 
 - Optional `activity.json` is advisory and may make older binaries unable to read the effort, but never gates unrelated show, list, or finish commands.
 
-- After implementation assurance settles or is explicitly skipped, `effort-workflow` integrates a managed-worktree effort, activates review after any divergent merge, completes deferred artifact transitions, removes path, registration, and branch, invokes retrospective, and runs `./awf effort finish <slug>` last. Handoff validates only dual-format identity; it does not validate mutable metadata, parse state or activity, select an effort, or mutate memory.
+- After implementation assurance settles or is explicitly skipped, `effort-workflow` integrates a managed-worktree effort, activates review after any divergent merge, completes deferred artifact transitions, removes path, registration, and branch, invokes retrospective, and runs `./awf effort finish <slug>` last.
 
 
 <!-- awf:edit commit-discipline: default; create .awf/parts/workflow/commit-discipline.md to override -->
@@ -194,4 +234,3 @@ A tracked stub should locate the invoking worktree, not assume the primary check
 ## Continuous integration
 No continuous-integration pipeline is configured. The repository currently relies on the local staged check, gate, and rendered hook payloads described above. Add CI before treating remote pushes as independently verified; use the pinned bootstrap command from [Working with awf](working-with-awf.md) rather than installing an unrelated awf version.
 
-Pi session-context facts are a transient model-facing observation of the active model window and active-branch compactions. Use them with retained-context relevance and upcoming work at eligible boundaries; no threshold, warning, or automatic action follows.

@@ -166,6 +166,32 @@ operations authorize current or removed results immediately; Remaining operation
 Canceled operations provide no authority. Multiple ADR batches may share a pair only for distinct
 claim IDs.
 
+### Current-state topic inputs and queries
+
+A topic is one strict sidecar at `.awf/topics/metadata/<domain>/<topic>.yaml` paired with one
+authored part at `.awf/topics/parts/<domain>/<topic>/current-state.md`. Lowercase kebab-case path
+components define identity. Metadata contains a nonempty `title`, a one-line `summary`, and exactly
+one applicability form: duplicate-free anchored `paths`, or `applies: global`. The authored part
+ends in one final `## Claims`; each claim starts with exactly `` ### `rule: <slug>` `` or
+`` ### `invariant: <slug>` ``, contains prose, and ends with ordered `Origin`, optional
+`Revised-by`, optional direct `References`, and invariant-only `Backing` plus conditional `Verify`
+lines. Provenance operations must be Applied; their ADR may be Implementing, Implemented, or
+partially Abandoned.
+
+Run `./awf new topic <domain> "<title>"` to create the metadata and part pair without rendering. It
+derives a collision-free slug and writes an empty claim shell with an anchored path placeholder.
+Replace that placeholder, revise the summary and prose, add reviewed claims, then render. A
+zero-claim shell renders but does not satisfy scoped coverage. Rendering writes the topic document
+and sorted domain topic index through the ordinary lock, drift, collision, and prune lifecycle.
+
+Query a topic with `awf read topic <domain>/<topic>` or one claim with
+`awf read topic <domain>/<topic>:<claim>`. Defaults return active state without provenance or reference
+edges; `--history`, `--references`, and `--coverage` independently add direct detail. Queries are
+read-only and never traverse references transitively. A removed identity resolves only with
+`--history`, which reports ordered provenance and no active claim. A valid legacy-baseline removal
+without a retained origin is labeled explicitly; JSON emits `legacyBaseline: true` without
+inventing `origin`. Former prose remains in Git, and no active tombstone is fabricated.
+
 <!-- awf:edit index: default; create .awf/parts/adr-readme/index.md to override -->
 ## INDEX.md
 

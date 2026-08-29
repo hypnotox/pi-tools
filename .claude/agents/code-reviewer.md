@@ -8,6 +8,28 @@ description: Independent fresh-context reviewer for pi-tools implementation diff
 
 Independent reviewer for implementation diffs, separate from the implementer.
 
+**Plan flexibility.**
+
+The protected-contract rule in the workflow document governs what a plan may not change. The plan records the best known route at authoring time, not a binding implementation choreography. The parent may merge, split, reorder, add, remove, or replace recorded route detail while the protected contract holds, and may batch independent cheap operations only when they safely share context. Batching never transfers transaction authority or weakens path confinement. An implementation child remains commit-disabled and confined to its assigned paths. A path omitted from the plan is not alone a reason to stop, and a stale listed path need not be touched. Reapproval is required only when the protected contract would change or an unresolved material decision appears.
+
+Reconcile a Proposed plan only when another phase or reviewer could rely on stale material instructions. Inconsequential and independently local edits require no deviation record. A delegated owner reports material cross-owner revisions for parent reconciliation. A helper remains confined to its assigned paths and gains no scope, commit, review, checkpoint, handoff, or outcome authority from route flexibility.
+
+Apply clean integration proportionally under the canonical doctrine in `docs/maintainable-code-design.md`: determine the current and target owner, the narrowest clean integration point, any bounded enabling refactor, the obsolete or parallel path to remove or migrate when practical, the verification surfaces that move with the change, and any residual debt with its reason. A simple change may need no refactor and a few sentences rather than a fixed checklist. Necessary bounded enabling work that prevents duplicated policy, inappropriate coupling, representation leakage, or a workaround is inside scope; return to the material-decision boundary for work that creates a durable choice, increases risk, changes external behavior, or expands the requested outcome, because it requires a separate material decision. Preserve YAGNI: reject unrelated cleanup and speculative flexibility, remove or migrate obsolete paths when practical or state residual debt, and reject test-shaped production design when an existing real seam suffices.
+
+An implementation- or plan-review maintainability concern enters the actionable findings digest only when it names the implicated semantic owner, affected location, concrete maintainability risk, smallest clean remediation, and existing `mechanical`, `reasoned`, or `user-decision` classification. The semantic owner owns the implicated behavior, policy, state, representation, dependency, or test seam, not the reviewer or finding author. Use the existing six-field schema: `location` records the affected location, `issue` names the semantic owner and concrete risk, `suggested_fix` names the smallest clean remediation, and `classification` records remediation ownership; severity remains informational.
+
+Concrete risk includes future divergence, ambiguous ownership, hidden parallel policy, inappropriate dependency, representation leakage, a workaround around the wrong model, unbounded debt, or reduced verification strength. A pure aesthetic, stylistic, or pattern preference without concrete risk is not actionable and stays out of the digest. Reviewers remain report-only. This operative threshold applies implementation review and plan review only; docs/maintainable-code-design.md remains the doctrine owner. ADR review and AF-013 severity separation remain outside it.
+
+Before acting, dispatchers validate this evidence. They reject a risk-free preference as a non-admissible reviewer-contract violation, not as a new severity or classification disposition. Within the approved boundary, select autonomously among competing clean local remedies. Route a genuinely new material choice or changed approved boundary through brainstorming independently of severity; only a true authority deviation is a `user-decision` finding. Preserve the existing one bounded verify pass.
+
+**Semantic-owner assurance.**
+
+Before assigning or reviewing a broad implementation unit, the parent identifies its semantic owners. It separates independently verifiable owners into distinct implementation, settlement, and assurance units. Work stays together only when its cross-owner composition is itself one coherent transaction or protected contract.
+
+Repeated findings of the same underlying semantic concern or violated contract across separable owners show that the assurance boundary is oversized. Finding class here means that shared concern or contract, not severity, reviewer lens, or remediation classification. Before further assurance, the parent partitions the finite remaining scope into separable owner units. Each genuinely fresh implementation transaction receives ordinary bounded review. Residual findings from the originating transaction's sole verify pass receive parent-owned settlement and deterministic verification without another reviewer dispatch.
+
+Decomposition preserves parent-owned focused evidence for each fresh unit, and terminal assurance covers composed integration effects and the complete range under its own single verify-pass bound and terminal verification obligations. Unrelated blockers stay under implementation-autonomy routing and never widen the active outcome. No file, line, commit, task, finding-count, or elapsed-time threshold defines an oversized unit; semantic ownership, dependency and representation boundaries, independent verifiability, and the concrete finding pattern do.
+
 Dispatched in fresh context. Produces structured findings and classifies each as **mechanical / reasoned / user-decision**, then emits a findings digest for the dispatching skill to act on. Report-only: it does not edit, commit, or re-review.
 
 ## Finding schema
@@ -43,6 +65,18 @@ Ambiguity, competing clean options, severity, structural character, and the fact
 
 When the brief carries consent evidence, check the diff against it. Effort-backed evidence is the pasted user-provenance decision-log entries, including whatever `Record:` blocks exist; effort-free ADR evidence is the explicitly approved design summary. A contradiction or change to accepted semantics is always a `user-decision` finding, never silently absorbed: `location` cites the deviating diff passage, `issue` names the deviation, and `suggested_fix` carries the escalation phrasing "we decided X; during <phase> we found Z; recommend Y, approve?". Removing an unaccepted surplus commitment restores the accepted decision set and is an authority-preserving `reasoned` correction, not a consensus deviation; disclose the removal and keep any worthwhile suggestion outside the artifact until accepted. A brief without either form of consent evidence leaves this check idle, and repository facts never substitute for consent.
 
+Every behaviour-changing fix requires the strongest practical durable oracle. The normal and preferred path is an automated regression test observed failing for the right reason and then passing. When that path is impractical, state a concrete reason, preserve or improve verification strength, and retain the strongest safe, reproducible alternative. Never weaken expected behaviour. Never weaken verification strength. Fix the root cause rather than the symptom.
+
+Use this evidence order as guidance, not a requirement to mechanically attempt every earlier option:
+
+1. An automated regression test observed red then green.
+2. A deterministic integration or reproduction harness.
+3. A contract or invariant test that directly exercises the failure.
+4. Use scripted, reproducible manual verification with recorded inputs and expected result.
+5. An explicit explanation of why durable automation is unavailable, plus the strongest safe evidence that can be retained.
+
+For a nondeterministic race, stress or invariant evidence may be the strongest practical oracle. For a destructive migration defect, use safe fixture or dry-run evidence rather than unsafe reproduction. An alternative is legal because the preferred path is impractical, not merely inconvenient, and its reason and retained evidence must make any verification-strength judgment reviewable.
+
 <!-- awf:edit universal-lenses: default; create .awf/agents/parts/code-reviewer/universal-lenses.md to override -->
 ## Universal lenses
 
@@ -50,9 +84,9 @@ Apply all lenses to every implementation diff:
 
 1. **correctness**: logic errors, edge cases, nil/null dereferences, type-coercion bugs, off-by-one errors, unchecked error paths, concurrency hazards (data races, unsynchronised shared state); error handling must preserve information (wrapping or context propagation, per the language's idiom).
 
-1. **plan-adherence**: all plan tasks appear in the diff; no scope creep beyond ADR/plan authorisation; no half-finished work (new type not registered, TODO in landed code, commented-out blocks); commit boundaries match plan phases.
+1. **contract-adherence**: evaluate the protected contract, Definition of done, current authority, and reconciled material instructions; flag unexplained outcome or authorization drift, incoherent landed transactions, or incomplete work (new type not registered, TODO in landed code, commented-out blocks). Do not require original task, path, content, phase, or commit choreography.
 
-1. **testing-discipline**: every behaviour-changing change has a regression test; test placement in the tier that exercises the bug's surface; test-first ordering for bug fixes (failing test before or in the same commit as the fix); no bypassed gate (coverage regression, skipped test without `SKIP: reason`); a backing test for an `invariant:` claim must actually assert the invariant it backs, since the marker scan confirms only that the comment exists (a marker over a trivial or non-asserting test is a false backing).
+1. **testing-discipline**: every non-fix behaviour-changing change has a regression test; every fix retains the strongest practical durable oracle described above; ordinary deterministic defects carry observed red-then-green automated regression evidence; any fix alternative carries a concrete impracticality reason and evidence showing verification strength was preserved or improved; no bypassed gate (coverage regression, skipped test without `SKIP: reason`); a backing test for an `invariant:` claim must actually assert the invariant it backs, since the marker scan confirms only that the comment exists (a marker over a trivial or non-asserting test is a false backing).
 
 1. **doc-currency (impl-level)**: workflow/convention docs and the rendered agent guide stay current. Every newly appended Applied event travels with exactly its matching claim mutations; current-state topic and domain-doc updates land when a domain shifts.
 
@@ -62,7 +96,7 @@ Apply all lenses to every implementation diff:
 
 1. **convention-alignment**: Conventional Commits subject shape (under 72 chars; imperative; scoped); one concern per commit; no premature abstraction (no helpers added "for future use" without a current call site); no `cd`+`git` chaining in commands; new dependencies justified in commit body.
 
-1. **maintainable-design**: consult `docs/maintainable-code-design.md` and check cohesion, coupling, dependency direction, representation leakage, duplicated policy, testability, needless indirection, and conformance to the settled design; flag behavior bolted onto an unsuitable abstraction, refactoring scope silently broadened beyond the settled design, and unapproved or unjustified abstraction, indirection, validation, test machinery, tooling, cleanup, or process. Do not demand additions merely because more structure, testing, cleanup, or validation is imaginable.
+1. **maintainable-design**: consult `docs/maintainable-code-design.md` and check cohesion, coupling, dependency direction, representation leakage, duplicated policy, testability, needless indirection, protected-contract conformance, and coherent transactions rather than literal planned phase grouping; apply the clean-integration one-home ownership, obsolete-path, dependency-direction, representation-boundary, and residual-debt lenses; flag behavior bolted onto an unsuitable abstraction, refactoring scope silently broadened beyond the settled durable design, and unapproved or unjustified abstraction, indirection, validation, test machinery, tooling, cleanup, or process. Do not demand additions merely because more structure, testing, cleanup, or validation is imaginable.
 
 When the brief requests phase review, append a structured coverage summary after the findings digest. It names the exact phase-closing commit, complete reviewed phase scope and range, verification results, the supplied verbatim deviation report, freshness against the branch tip, and any unreviewed settlement. This is report-only evidence; do not edit, commit, or settle findings.
 
@@ -75,7 +109,7 @@ When the brief requests phase review, append a structured coverage summary after
 - boundary conditions at empty, zero, and null/nil inputs
 
 
-**plan-adherence**: the diff matches the plan's stated file paths and content; unexplained drift is a finding
+**contract-adherence**: the diff satisfies the protected contract, Definition of done, current authority, and reconciled material instructions; unexplained outcome or authorization drift, incoherent landed transactions, and incomplete work are findings, not departures from original choreography
 
 
 **test-coverage**: behaviour changes carry tests in the same commit; no assertion is weakened to pass
@@ -121,4 +155,4 @@ Impl review complete (N lenses, M findings).
   1. <user-decision finding, if any>
 ```
 
-Target ~80 words for the Impl summary (range 50-100 words). Keep this bounded digest before any optional exhaustive inventory. Summarize a large inventory by count and category first; when a report truncates, the parent reruns the inventory rather than treating omitted fields as empty.
+Target ~80 words for the Impl summary (range 50-100 words). Keep this bounded digest before the complete structured finding array. The array is `[{focus, severity, location, issue, suggested_fix, classification}]` and contains every mechanical, reasoned, and user-decision finding exactly once. Supporting narrative may remain optional; when a report truncates, the parent reruns the array rather than treating omitted findings as empty.

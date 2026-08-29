@@ -31,10 +31,9 @@ Check convention fit: does the design contradict a current-state claim, an Accep
 
 Ground guide-first before verifying:
 
-Ground guide-first, in order: the agent guide, then the document-map docs relevant to the touched area, then its domain docs under `docs/domains`. Current-state documentation is what binds. Consult the recent history of the touched paths (`git log --oneline -20 <path>`) only when current state leaves what you are seeing unexplained.
+Ground guide-first: read the agent guide and document-map material relevant to the work, then source and tests. Consult recent history of touched paths (`git log --oneline -20 <path>`) only when current documentation leaves the fact unexplained.
 
-For managed context calls, provide one or more explicit paths (or a staged/range file selection) and omit `--show` and `--full` detail flags on the initial query: directories provide tier-0 orientation, while exact, staged, and range-selected files also carry tier-1 direct relationships. Request only the named facets the active lens requires, and never prescribe `--full`.
-On an exact two-line `AWF_CONTEXT_SPILL_V1` notice, consume the packet per the working-with-awf doc's Context spill notices contract; treat any other output as the context packet itself.
+When discovery or a structural question exists, use CodeGraph for source discovery, architecture, callers, dependencies, and impact analysis. Keep an exact-known-file read or genuinely trivial lookup inline. After candidate paths are known, run `./awf resolve topic <paths>` and read each applicable authority with `./awf read topic <domain>/<topic>[:<claim>]`; use `./awf read adr <identity>` when ADR lifecycle, progress, rationale, or linked plans matter.
 
 <!-- awf:edit return-schema: default; create .awf/agents/parts/grounding-checker/return-schema.md to override -->
 ## What to return

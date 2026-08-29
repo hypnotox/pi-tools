@@ -18,7 +18,7 @@ Record only warranted durable lessons; a mechanical change may have none. Artifa
 <!-- awf:edit procedure: default; create .awf/skills/parts/retrospective/procedure.md to override -->
 ## Procedure
 
-1. **Validate closure context.** `pi-tools-effort-workflow` invokes this skill only for an existing effort after managed topology is absent. Validate its fixed identity and exact `.awf/efforts/<slug>/memory.md`, confirm canonical `effort: <slug>` or deprecated legacy `Effort: <slug>`, and remain the one user-managed writer. Repository sources and current-state documentation outrank checkpoint prose; standalone memory is forbidden.
+1. **Validate closure context.** `pi-tools-effort-workflow` invokes this skill only for an existing effort after managed topology is absent. Validate its fixed identity and exact `.awf/efforts/<slug>/memory.md`, confirm canonical YAML `effort: <slug>`, and remain the one user-managed writer. Repository sources and current-state documentation outrank checkpoint prose; standalone memory is forbidden.
 
 2. **Reflect and record worthy observations.** Read the effort memory's `## Observations` and `## Decision log` as primary input alongside implementation and assurance findings and friction, and confirm every user-provenance decision either landed in a durable artifact or was explicitly re-decided. Record a first occurrence at the appropriate durable rung; a lesson must land durably before effort-workflow finishes the effort.
 

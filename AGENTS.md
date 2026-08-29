@@ -3,6 +3,9 @@
 
 This document is the authoritative reference for AI agents working in the `pi-tools` repository. Read it before acting.
 
+<!-- Shared gate cadence. -->
+Use the narrowest relevant test, build, or lint command while editing, then run available affected-package feedback. The fast commit tier runs at the commit boundary; terminal exhaustive verification runs at implementation completion. Rely on a wired pre-commit or pre-push hook when present rather than manually duplicating its matching gate.
+
 <!-- awf:edit awf-setup: default; create .awf/parts/agents-doc/awf-setup.md to override -->
 ## Working with awf
 
@@ -39,7 +42,7 @@ Hard rules every change must respect:
 <!-- awf:edit workflow: default; create .awf/parts/agents-doc/workflow.md to override -->
 ## Workflow
 
-Treat exposed native-skill descriptions as routing metadata. Before loading a skill, identify the next concrete action. Load only a skill that governs that action; a possible later edit, render, documentation update, review, or commit does not justify loading its skill now. Load multiple bodies only when each independently governs that same next action before another routing decision can occur. Before any mutation, load the native skill that governs that action. Change size, including a minimal change, never excuses this routing step. Before hand-authored production-code mutation, obtain an explicitly approved proportionate outline through brainstorming; documentation-only, autonomous test maintenance, generated-output-only, and non-code mechanical work remain independent. Preserve the approved design boundary; see `docs/maintainable-code-design.md`. Route settled content by authority lifetime: durable choices belong in ADRs, active rules in current-state topics, directives in plans, and transient context in effort memory. Conventional Commits; one concern per commit. See [docs/workflow.md](docs/workflow.md) for workflow procedure.
+Treat exposed native-skill descriptions as routing metadata. Before loading a skill, identify the next concrete action. Load only a skill that governs that action; a possible later edit, render, documentation update, review, or commit does not justify loading its skill now. Load multiple bodies only when each independently governs that same next action before another routing decision can occur. Before any mutation, load the native skill that governs that action. Change size, including a minimal change, never excuses this routing step. The workflow governs a change's protected contract, not its execution route. Obtain an explicitly approved proportionate outline through brainstorming when a material decision is unresolved, not because a change touches production code. Apply the clean-integration operative rule proportionally; `docs/maintainable-code-design.md` remains its canonical doctrine owner. Preserve the approved design boundary; see `docs/maintainable-code-design.md`. Route settled content by authority lifetime: durable choices belong in ADRs, active rules in current-state topics, directives in plans, and transient context in effort memory. Conventional Commits; one concern per commit. See [docs/workflow.md](docs/workflow.md) for workflow procedure.
 
 <!-- awf:edit working-memory: default; create .awf/parts/agents-doc/working-memory.md to override -->
 ## Working memory
@@ -63,6 +66,7 @@ Evaluate continuity independently; when durable continuity materially helps, use
 - **Configuration Reference:** [docs/config-reference.md](docs/config-reference.md), every .awf config key, var, sidecar field, and data key: descriptions, defaults, availability, and this project's live state
 - **Documentation Standard:** [docs/doc-standard.md](docs/doc-standard.md), how-to-write rules for all awf-managed prose
 - **Maintainable Code Design:** [docs/maintainable-code-design.md](docs/maintainable-code-design.md), decision framework for cohesive models, explicit boundaries, dependencies, refactoring, and testable design
+- **Pi Runtime Reference:** [docs/pi-runtime-reference.md](docs/pi-runtime-reference.md), Pi-only runtime, subagent, model-routing, and handoff protocol
 - **Workflow:** [docs/workflow.md](docs/workflow.md), principles, the brainstorm/ADR/plan chain, commit discipline
 - **Working with awf:** [docs/working-with-awf.md](docs/working-with-awf.md), day-to-day usage: commands, overrides, placeholders, and the sync/check loop
 - **Architecture:** [docs/architecture.md](docs/architecture.md), system shape, packages, key components, dependencies
@@ -73,4 +77,3 @@ Evaluate continuity independently; when durable continuity materially helps, use
 - **Releasing:** [docs/releasing.md](docs/releasing.md), how to cut a release: versioning, artifacts, and the publish process
 - **Roadmap:** [docs/roadmap.md](docs/roadmap.md), uncommitted ideas and future phases
 - **Testing:** [docs/testing.md](docs/testing.md), gate tiers, test layout, what each tier covers
-Pi provides transient `[session context]` facts before each model call; a discretionary eligible session-replacement choice informs continuation judgment only.

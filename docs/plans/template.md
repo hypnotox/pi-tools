@@ -14,7 +14,14 @@ State the outcome and, in one line, its non-goals.
 
 ## Architecture summary
 
-State the execution structure and dependency direction without repeating ADR rationale. For hand-authored production-code work, preserve the user-approved proportionate outline here so an explicit request to execute this named plan can supply approval evidence.
+State the execution structure and dependency direction without repeating ADR rationale. When a material decision was resolved by an approved outline, preserve that outline here so an explicit request to execute this named plan can supply the approval evidence.
+
+**Plan flexibility.**
+
+The protected-contract rule in the workflow document governs what a plan may not change. The plan records the best known route at authoring time, not a binding implementation choreography. The parent may merge, split, reorder, add, remove, or replace recorded route detail while the protected contract holds, and may batch independent cheap operations only when they safely share context. Batching never transfers transaction authority or weakens path confinement. An implementation child remains commit-disabled and confined to its assigned paths. A path omitted from the plan is not alone a reason to stop, and a stale listed path need not be touched. Reapproval is required only when the protected contract would change or an unresolved material decision appears.
+
+Reconcile a Proposed plan only when another phase or reviewer could rely on stale material instructions. Inconsequential and independently local edits require no deviation record. A delegated owner reports material cross-owner revisions for parent reconciliation. A helper remains confined to its assigned paths and gains no scope, commit, review, checkpoint, handoff, or outcome authority from route flexibility.
+
 
 <!-- awf:edit phases: default; create .awf/parts/plans-template/phases.md to override -->
 ## Phase 1: <name>
@@ -25,7 +32,7 @@ Completes: ["plan-outcome"]
 
 ### Task 1.1: <what>
 
-State the change-specific observable outcome, relevant authority links, material boundary, ordering dependency, focused evidence, and any necessary confinement. Add nonempty JSON `Applying` or `Context` arrays only when an ADR applies; each reference has inert form `<adr-number-or-retained-slug>:<decision-slug-or-#N>`. Immediately below a task heading, the recognized fields are `Kind`, `Latitude`, `Question`, `Applying`, `Context`, `Paths`, `Representative`, `Edge`, and `Post-check`. `Applying` and `Context` require nonempty JSON string arrays and are omitted rather than written as `[]`. `Latitude`, `Kind: batch`, `Representative`, and `Edge` are optional aids; `Kind: spike` requires `Question`, no body, and an answer in Notes; ambiguous scope requires `Paths`; and any batch, glob, or pathspec scope requires deterministic `Post-check`. A commit-capable owner may resolve authority-determined local symbols, helper structure, tests, and necessary omitted paths within approved boundaries; helpers remain confined. Omit fields whose contracts do not apply.
+State the change-specific observable outcome, relevant authority links, material boundary, any ordering dependency that protects a named authority, outcome, scope, safety, compatibility, lifecycle, or verification property, focused evidence, and any necessary confinement. Add nonempty JSON `Applying` or `Context` arrays only when an ADR applies; each reference has inert form `<adr-number-or-retained-slug>:<decision-slug>`. Immediately below a task heading, the recognized fields are `Kind`, `Latitude`, `Question`, `Applying`, `Context`, `Paths`, `Representative`, `Edge`, and `Post-check`. `Applying` and `Context` require nonempty JSON string arrays and are omitted rather than written as `[]`. `Latitude`, `Kind: batch`, `Representative`, and `Edge` are optional aids; `Kind: spike` requires `Question`, no body, and an answer in Notes; ambiguous scope requires `Paths`; and any batch, glob, or pathspec scope requires deterministic `Post-check`. The parent may resolve authority-determined local symbols, child structure, tests, and necessary omitted paths within approved boundaries; implementation children remain commit-disabled and confined. Omit fields whose contracts do not apply.
 
 ### Phase close
 
@@ -43,4 +50,4 @@ feat(scope): describe phase outcome
 <!-- awf:edit notes: default; create .awf/parts/plans-template/notes.md to override -->
 ## Notes
 
-Inline owners immediately correct stale instructions and record reasoned deviations here. Delegated owners may report rather than edit; the parent supplies the report to phase review and reconciles it with findings in one focused post-review settlement commit before checkpointing or later execution. Record deviations, spike answers, follow-ups, and findings surfaced during implementation.
+Apply the plan-flexibility rule above when recording deviations. Delegated owners report material cross-owner revisions rather than editing the plan; the parent supplies the report to phase review and reconciles required plan changes with findings in one focused post-review settlement commit before checkpointing or later execution. Record spike answers, follow-ups, and findings surfaced during implementation.

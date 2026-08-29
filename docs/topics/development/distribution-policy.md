@@ -4,7 +4,7 @@
 
 Source distribution, licensing, and publication boundaries.
 
-**Applicability:** Global topic: applies repository-wide. It declares no bounded ownership selectors. Run `awf topic development/distribution-policy --coverage` for current applicable and owned paths and marker sites.
+**Applicability:** Global topic: applies repository-wide. It declares no bounded ownership selectors. Run `awf read topic development/distribution-policy --coverage` for current applicable and owned paths and marker sites.
 
 This topic records how the project makes its source and package resources available.
 

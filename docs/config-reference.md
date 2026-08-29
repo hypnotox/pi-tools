@@ -3,6 +3,9 @@
 <!-- awf:edit intro: default; create .awf/parts/config-reference/intro.md to override -->
 # Configuration Reference
 
+<!-- Shared gate cadence. -->
+Use the narrowest relevant test, build, or lint command while editing, then run available affected-package feedback. The fast commit tier runs at the commit boundary; terminal exhaustive verification runs at implementation completion. Rely on a wired pre-commit or pre-push hook when present rather than manually duplicating its matching gate.
+
 Every key an adopter can set in `.awf/config.yaml`, artifact sidecars, and `vars:`: its
 meaning, default, availability, and this project's current state. This file is
 generated per-project by `./awf render`: edit `.awf/` and re-render; never edit this file.
@@ -10,6 +13,38 @@ For how to apply overrides, see the working-with-awf guide; for ad-hoc queries, 
 `./awf config [<key-or-var>]`. Configspec and catalog descriptions, `.awf/config.yaml`, relevant
 sidecars, and effective output state are distinct authority layers. Only this declared intro
 section is convention-part editable; field semantics remain in this generated reference.
+
+## Placeholders in overrides
+
+A convention part may splice in awf-derived values through the `awf:`-namespaced placeholder
+{{=awf:KEY}}. It is a literal substitution (not the template engine), so a stray `{{` in
+prose stays inert. A key is available only when its value is **non-empty** this render; an unknown
+or empty key, or a malformed near-miss, is a hard error that names the available keys. The keys:
+
+| key | renders |
+|---|---|
+| `commitScopeList` | the allowed commit-scope names, comma-separated |
+| `commitScopeTable` | a markdown table of scope names and meanings |
+| `commitScopeSentence` | a one-sentence statement of the allowed scopes |
+| `gatedCommands` | the backticked, comma-separated list of binary-version-gated top-level commands, followed by an `except` clause naming the group children that stay ungated |
+| `prefix` | the project's artifact prefix |
+| `gateCmd` | the configured fast pre-commit gate command |
+| `gateCmdFull` | the configured terminal exhaustive verification command |
+| `checkCmd` | the configured drift-check command |
+| `sectionDefault` | the overridden section's own rendered default; re-inject it to *extend* rather than replace (re-injecting a `stub` default is a hard render error, not a silent skip) |
+
+To write the placeholder syntax literally in a part (for documentation), put a backslash before it:
+\{{=awf:commitScopeTable}} renders as the literal {{=awf:commitScopeTable}}.
+
+
+### Path globs and domain territories
+
+Every configurable or built-in glob uses one anchored dialect against a slash-separated repository-relative path. `*.ts` matches only top-level files; use `**/*.ts` at any depth. `src/**` covers a subtree and `src/api/*.ts` scopes one directory. Domain `paths` declare the territory of current-state topic ownership; topic resolution and coverage use the same selectors. Working-tree and staged loading reject empty, duplicate, or malformed selectors, while historical audit projection omits domain sidecars.
+
+### Unset-var notes and recovery
+
+`awf check` and `awf init` note an empty or null referenced `vars:` key as an open to-do. Set it, or delete it to deliberately decline it and render generic fallback prose; deletion changes the consuming hash until the next render. A deleted key used by an `awf:` placeholder is instead a hard render error: restore the key to recover.
+
 
 This checkout currently authors the optional `commitPolicy` block. Its values are
 structurally validated, but configuration alone does not activate or wire runtime
@@ -19,18 +54,16 @@ enforcement.
 
 | Key | Type | Default | Current | Description | Availability |
 |---|---|---|---|---|---|
-| `profile` | enum: core or full | core for fresh init; existing repositories migrate to full | `full` | Selects one closed workflow footprint. Core provides operational brainstorm, implementation, review, effort, rendering, and quality tooling. Full adds decision records, plans, current-state authority, context, and governance audit. | Always; required and visible. |
+| `profile` | enum: core or full | core for fresh init; existing repositories migrate to full | `full` | Selects one closed governance footprint. Core includes the operational workflow. Full adds decision records, plans, current-state authority, and governance audit. The footprints use the same correctness, autonomy, maintainability, and review-quality bar. | Always; required and visible. |
 | `prefix` | string | none: required, set at init | `pi-tools` | The name prefix for rendered skills: a skill renders to `<prefix>-<name>` (directory and frontmatter name), and rendered prose references skills by that prefixed name. Must be non-empty, without path separators. | Always. |
-| `integrationBranch` | string | none: required; the schema migration writes integrationBranch: main | `main` | The branch effort work integrates into. `awf new adr` scaffolds a numbered decision record on this branch and a pending slug-identified one anywhere else, and the check refuses a pending record while the checkout is positively identified as being on it. Must be non-empty and free of whitespace, must not start with `-`; slashes are legal, so `release/1.0` is accepted. There is no in-code default, and audit range resolution never reads it. | Always. |
+| `integrationBranch` | string | none: required; the schema migration writes integrationBranch: main | `main` | The branch effort work integrates into. `awf new adr` scaffolds a numbered decision record on this branch and a pending slug-identified one anywhere else, and the check refuses a pending record while the checkout is positively identified as being on it. A generated pre-push hook uses the freshly resolved destination tip of this branch as the policy base for new commit-bearing refs, and changing it invalidates that consumer without reflagging unrelated outputs. Must be non-empty and free of whitespace, must not start with `-`; slashes are legal, so `release/1.0` is accepted. There is no in-code default, and audit range resolution never reads it. | Always. |
 | `render.templateSourceRoot` | normalized repository-relative directory | none (template source symbols disabled) | (none) | The repository directory containing the implementation template tree. When set, generated Markdown carries compact `awf:template-source` comments identifying the root template, included partials, and structural sections. The directory and every referenced source file must exist in the selected repository state. | Markdown outputs rendered from templates; omitted leaves output unchanged. |
-| `vars` | key → value map | seeded with every catalog-referenced var as an empty string at init | 5 keys, 5 set | Freeform values templates interpolate. A key with a value renders it; a present-but-empty key is an open to-do (rendered artifacts referencing it degrade to generic prose and a non-failing note nudges you); a deleted key is the deliberate, git-auditable decline of that var; the generic prose renders silently. A non-empty key no rendered artifact references is failing drift. | Each key is consumed only while a rendered artifact's template (or a `gateCmd`/`checkCmd` part placeholder) references it, except that `gateCmd` is also consumed by divergent effort-integration guidance. |
+| `vars` | key → value map | seeded with every catalog-referenced var as an empty string at init | 5 keys, 5 set | Freeform values templates interpolate. A key with a value renders it; a present-but-empty key is an open to-do (rendered artifacts referencing it degrade to generic prose and a non-failing note nudges you); a deleted key is the deliberate, git-auditable decline of that var; the generic prose renders silently. A non-empty key no rendered artifact references is unranked Information and exits zero. | Each key is consumed only while a rendered artifact's template (or a `gateCmd`/`checkCmd` part placeholder) references it, except that `gateCmd` is also consumed by divergent effort-integration guidance. |
 | `localDocs` | list of {name, title, description} mappings | none | 0 configured | Additive repository-local documents. Each name is a lowercase kebab-case path below docs without .md; decisions, plans, domains, topics, and pitfalls are reserved. Title and description are nonblank one-line metadata. | Always; each entry renders one managed in-place document. |
 | `localDocs[].name` | lowercase kebab-case path | required | n/a | The docs-relative path without .md. | Within each localDocs entry. |
 | `localDocs[].title` | string | required | n/a | The awf-owned document heading. | Within each localDocs entry. |
 | `localDocs[].description` | string | required | n/a | The one-line document-map description. | Within each localDocs entry. |
 | `domains` | string list | none | 1 configured | Freeform domain keys. Each renders a generated `docs/domains/<name>.md` doc (a compact topic list plus your `current-state` convention part) and can declare a file territory via the domain sidecar's `paths:`. | Always. |
-| `tags` | key → value map | none | (none) | A governed vocabulary of cross-cutting keyword tags, each mapping a tag name to a one-line meaning. ADR `tags:` and pitfall `tags:` are validated against it: with a non-empty vocabulary, a used tag that is not a declared member is failing drift, as is a member with an empty meaning. An empty or absent vocabulary disables the check (tags are then free-form). Declaring a member no artifact uses is allowed. | Always; the membership check is inert until the vocabulary is non-empty. |
-| `contextIgnore` | string list | none | (none) | Anchored doublestar globs for tracked paths that context and coverage should exclude (config source, docs, top-level non-code files). Matching paths are ineligible for directory expansion and coverage, including staged queries, alongside awf's own generated outputs. An empty or absent list adds no exclusion. | Always; consulted by working and staged context path expansion and coverage. |
 | `commitPolicy.grandfatheredThrough` | lowercase full object ID | none: required when commitPolicy is present | `d901af765a933556f563e573e1a184caf2096b28` | The exact full SHA-1 or SHA-256 commit object ID whose reachable ancestry is tolerated. Abbreviations, uppercase IDs, and non-object IDs are invalid; repository resolution happens when policy enforcement runs. Omitting the complete commitPolicy block preserves existing behavior and activates no policy. | Required when the optional commitPolicy block is present; the block itself may be absent. |
 | `commitPolicy.allowedIdentities` | list of {name, email} mappings | none (identity matching disabled) | 1 identities | Optional nonempty allowlist of exact author and committer identity pairs. Identity matching is disabled when this key is omitted; an explicitly empty or null key and duplicate pairs are invalid. | Within commitPolicy. |
 | `commitPolicy.allowedIdentities[].name` | string | required within each identity record | n/a | The exact author and committer name. It is nonempty valid UTF-8 without controls or leading/trailing whitespace, and pairs with email for byte-for-byte matching. | Within each optional commitPolicy.allowedIdentities record. |
@@ -39,19 +72,19 @@ enforcement.
 | `commitPolicy.allowedSigners` | list of {principal, key} mappings | none: required when requireSignedCommits is true | 1 signers | Nonempty exact SSH signer records when signing is required. A present empty or null list, signers while signing is disabled, and duplicate records are invalid. | Within commitPolicy while requireSignedCommits is true. |
 | `commitPolicy.allowedSigners[].principal` | ASCII authorization token | required within each signer record | n/a | The signer authorization principal, containing only letters, digits, `.`, `_`, `@`, `+`, or `-`. It authorizes its associated key and is not an asserted commit identity. | Within each commitPolicy.allowedSigners record while requireSignedCommits is true. |
 | `commitPolicy.allowedSigners[].key` | OpenSSH public-key record | required within each signer record | n/a | An exact option-free, comment-free single OpenSSH public-key record accepted by ssh-keygen and using a supported SSH algorithm. Newlines, trailing records, and unsupported keys are invalid. | Within each commitPolicy.allowedSigners record while requireSignedCommits is true. |
-| `currentState.sources` | list of {globs, marker, close} mappings | none | (none) | Source families scanned for qualified current-state relevance, advisory, and invariant proof markers during topic validation. | Consumed by current-state topic validation, coverage, context, and the staged check. |
-| `currentState.sources[].globs` | string list | none | n/a | Non-empty, duplicate-free anchored path globs matched against slash-separated repository-relative paths for one current-state marker source. | Within each `currentState.sources` entry during topic validation. |
-| `currentState.sources[].marker` | string | none | n/a | Non-empty literal opening comment token that prefixes a qualified current-state marker line. | Within each `currentState.sources` entry during topic validation. |
-| `currentState.sources[].close` | string | none: no close token stripped | n/a | Optional non-empty literal closing comment token stripped from a matched current-state marker line. | Within each `currentState.sources` entry during topic validation. |
-| `currentState.testGlobs` | string list | none | (none) | Duplicate-free anchored path globs identifying proof-eligible test files for current-state invariant claims. | Consumed by current-state topic validation, coverage, context, and the staged check. |
+| `currentState.sources` | list of {globs, marker, close} mappings | none | (none) | A current-state source family is scanned for named invariant proof markers during topic validation. | Consumed by current-state topic validation and the staged check. |
+| `currentState.sources[].globs` | string list | none | n/a | Non-empty, duplicate-free anchored path globs matched against slash-separated repository-relative paths for one current-state proof-marker source. | Within each `currentState.sources` entry during topic validation. |
+| `currentState.sources[].marker` | string | none | n/a | Non-empty literal opening comment token that prefixes a named current-state invariant proof marker. | Within each `currentState.sources` entry during topic validation. |
+| `currentState.sources[].close` | string | none: no close token stripped | n/a | Optional non-empty literal closing comment token stripped from a matched current-state proof marker. | Within each `currentState.sources` entry during topic validation. |
+| `currentState.testGlobs` | string list | none | (none) | Duplicate-free anchored path globs identifying proof-eligible test files for current-state invariant claims. | Consumed by current-state topic validation and the staged check. |
 | `audit.allowedScopes` | list of scope entries (bare string, or {name, meaning}) | accept any scope | accept any (default) | The project's Conventional Commits scope taxonomy: the single home for commit scopes; rendered prose quotes it from here. Absent = accept any scope; entries are enforced by `awf check staged commit`/`awf audit` and editing them reflags referencing rendered artifacts. | Read by `awf check staged commit`, `awf audit`, and every rendered artifact quoting the scope list. |
 | `audit.allowedScopes[].name` | string | none | n/a | The scope token as it appears in a commit subject (`feat(<name>): ...`). A bare-string list entry is shorthand for a name-only entry. | Within each `audit.allowedScopes` entry. |
 | `audit.allowedScopes[].meaning` | string | empty | n/a | Optional human meaning for the scope, shown wherever the taxonomy is rendered for people choosing a scope. | Within each `audit.allowedScopes` entry. |
 | `bootstrap.enabled` | bool | false (key absent); awf init scaffolds it true | true | Renders the self-pinning `.awf/bootstrap.sh` installer (pinned to the rendering awf version, checksum-verified) and the `.awf/upgrade.sh` porcelain. Absent and false both mean: do not render. | Always. |
-| `proseGate.exemptions` | list of {path, codepoint, count} mappings | empty (nothing is exempt) | (none) | Places where a typographic punctuation substitute is permitted, typically prose that is genuinely about the character it contains, where punctuating it would make a true statement false. An entry exempts one codepoint in one path. | Always. |
+| `proseGate.exemptions` | list of {path, codepoint, count} mappings | empty (nothing is exempt) | (none) | Places where a guarded en dash or em dash is permitted, typically a quotation, frozen record, or text discussing the character it contains. An entry exempts one guarded codepoint in one path before punctuation restraint is evaluated. | Always. |
 | `proseGate.exemptions[].path` | string | required | n/a | The repo-relative path the exemption covers. A rendered file and the source it renders from each need their own entry, because each holds its own copy of the character. | Always. |
-| `proseGate.exemptions[].codepoint` | string | required | n/a | The exempted codepoint, spelled `U+2014`, never the character itself: this file is scanned, so a typed character here would be a finding against the file that configures the exemption. Only the seven banned substitutes are accepted; anything else is an error rather than a silently wider exemption. | Always. |
-| `proseGate.exemptions[].count` | int | unset (any number is permitted) | n/a | The exact number of occurrences expected. Set, an added occurrence in an exempt file still fails, which suits a frozen record; unset, any number is permitted, which suits a living file that may gain another depiction. | Always. |
+| `proseGate.exemptions[].codepoint` | string | required | n/a | The exempted codepoint, spelled `U+2014`, never the character itself. Use `U+2013` for an en dash or `U+2014` for an em dash. Former ellipsis and curly-quote codepoints remain accepted as inert compatibility input; other values are errors. | Always. |
+| `proseGate.exemptions[].count` | int | unset (any number is permitted) | n/a | The exact whole-file occurrence count expected for the guarded codepoint. Set, a count change in an exempt file still fails, which suits a frozen record; unset, any number is permitted. The value is ignored for an inert compatibility entry. | Always. |
 | `memoryCite.exemptions` | list of {path, count} mappings | empty (nothing is exempt) | (none) | Decision records permitted to name a specific working-memory file, typically prose that is genuinely about one particular file. An entry exempts one path. Prefer rewording to the placeholder form over adding an entry. | Always. |
 | `memoryCite.exemptions[].path` | string | required | n/a | The repo-relative path the exemption covers. Only a path under the decisions or plans directory can carry a finding, so only such a path is worth exempting. | Always. |
 | `memoryCite.exemptions[].count` | int | unset (any number is permitted) | n/a | The exact number of citations expected. Set, an added citation in an exempt file still fails, which suits a frozen record; unset, any number is permitted, which suits a living file that may gain another mention. | Always. |
@@ -62,10 +95,10 @@ Each var is consumed only while a rendered artifact references it. State reads: 
 (a value), **empty** (present with no value, an open to-do), **absent** (deliberately
 declined; the generic prose renders).
 
-- `gateCmd`: Command that runs the full pre-commit gate (tests, lint, coverage). Consumed while a rendered artifact's template references it, by the `{{=awf:gateCmd}}` placeholder in convention parts (including the rendered pre-push hook payload's part channel), and by divergent effort-integration guidance.
-  State: set (`npm run check`). Consumed by: agent implementer, agents-doc, hooks pre-commit, hooks pre-push, skill adr-lifecycle, skill bugfix, skill debugging, skill executing-plans, skill retrospective, skill reviewing-impl, skill subagent-driven-development, skill tdd, skill writing-plans.
-- `gateCmdFull`: Command for the full/extended gate tier, if the project has one. Consumed while a rendered artifact's template references it.
-  State: absent, declined; the generic prose renders. Consumed by: hooks pre-push, skill bugfix, skill debugging.
+- `gateCmd`: Command that runs the fast pre-commit gate. Consumed while a rendered artifact's template references it, by the `{{=awf:gateCmd}}` placeholder in convention parts (including the rendered pre-push hook payload's part channel), and by divergent effort-integration guidance.
+  State: set (`npm run check`). Consumed by: agents-doc, hooks pre-commit, hooks pre-push, skill adr-lifecycle, skill executing-plans, skill retrospective, skill reviewing-impl, skill subagent-driven-development, skill writing-plans.
+- `gateCmdFull`: Command for terminal exhaustive verification, if the project has one. Terminal exhaustive verification command, consumed while a rendered artifact's template references it.
+  State: absent, declined; the generic prose renders. Consumed by: hooks pre-push.
 - `checkCmd`: Command that checks rendered output for drift. Leave empty to run through the always-rendered `./awf` wrapper. Consumed while a rendered artifact's template references it, and by the `{{=awf:checkCmd}}` placeholder in convention parts.
   State: set (`./awf check`). Consumed by: hooks pre-commit, hooks pre-merge-commit, hooks pre-push.
 - `commitGateCmd`: Command that validates one commit message (the commit-msg hook payload appends the message-file argument). Leave empty to run through the always-rendered `./awf` wrapper. Consumed by the always-rendered commit-msg hook payload.
@@ -79,7 +112,7 @@ declined; the generic prose renders).
 
 ## Sidecar fields
 
-- `sidecar.data` (key → value map): Per-artifact structured render data. A same-key catalog-backed list layers the catalog default followed by project entries; an empty project list keeps the complete default, and null or a non-list value is invalid. Non-list catalog data retains shallow top-level project replacement. Project-only and specialized data retain their owning behavior; see the per-artifact list below. Keys must be referenced by the artifact's template. An unreferenced key is failing drift; rejected entirely on domain sidecars (paths-only) and on the config-reference sidecar (its tables are generated).
+- `sidecar.data` (key → value map): Per-artifact structured render data. A same-key catalog-backed list layers the catalog default followed by project entries; an empty project list keeps the complete default, and null or a non-list value is invalid. Non-list catalog data retains shallow top-level project replacement. Project-only and specialized data retain their owning behavior; see the per-artifact list below. Keys must be referenced by the artifact's template. An unreferenced key is unranked Information and exits zero; rejected entirely on domain sidecars (paths-only) and on the config-reference sidecar (its tables are generated).
 - `sidecar.dataDefaults` (data-key → bool map): Controls same-key catalog-backed list defaults. An absent key or true keeps the catalog default; false suppresses it so effective content is only the authored project list, or an empty list when none is authored. Explicit true differs from absence only as configuration presence, not effective content. Every entry must name a same-key list default declared by that catalog artifact. Unknown, non-list, and differently keyed specialized values are invalid.
 - `sidecar.sections` (section-name → override map): Per-section overrides for the artifact's declared sections. Body replacement is by convention part (a file at the section's parts path); this map holds the structured overrides: currently `drop`. Section names must be catalog-declared for the artifact; unknown names refuse at open. Rejected on domain sidecars.
 - `sidecar.sections.<name>.drop` (bool): Omits the named section from the rendered artifact entirely. A drop beats a convention part; a data key referenced only inside a dropped section counts as unused. Within a declared section's override entry.
@@ -106,7 +139,7 @@ declined; the generic prose renders).
 - `agent plan-reviewer` · `data.digestLabel` (catalog default): The label heading the reviewer's returned digest.
 - `agent plan-reviewer` · `data.digestSummary` (catalog default): The digest's summary skeleton: the bullet template the reviewer fills per review.
 - `agent code-reviewer` · `data.correctnessTraps` (catalog default): The correctness traps the reviewer checks first (list of {description}); the default names error paths and boundary conditions.
-- `agent code-reviewer` · `data.focusItems` (catalog default): The reviewer's project-focus lens items (list of {name, description}); the selected catalog default contains `plan-adherence`, `test-coverage`, `verification-instrument-can-fail`, `check-authority-taxonomy`.
+- `agent code-reviewer` · `data.focusItems` (catalog default): The reviewer's project-focus lens items (list of {name, description}); the selected catalog default contains `contract-adherence`, `test-coverage`, `verification-instrument-can-fail`, `check-authority-taxonomy`.
 - `agent code-reviewer` · `data.docCurrencyItems` (catalog default): The doc-currency checks the reviewer applies (list of {check}); the default checks same-commit updates of every doc stating the old behaviour.
 - `agent code-reviewer` · `data.reviewSubject` (catalog default): The one-word subject label the review spine addresses (default: the diff).
 - `agent code-reviewer` · `data.readStep` (catalog default): The reviewer's opening read instruction: what to read in full before applying lenses.
@@ -121,6 +154,6 @@ declined; the generic prose renders).
 ## Pitfall sources
 
 Pitfalls are direct regular `.awf/docs/pitfalls/<lowercase-kebab-slug>.md` files with strict
-frontmatter: required `title`, optional `domains`, `tags`, and positive `related` lists, then a
+frontmatter: required `title`, optional `domains` and positive `related` lists, then a
 nonblank Markdown body. The slug `index` is reserved. `.awf/docs/pitfalls.yaml` is optional and may
 contain only ordinary `prepend` or `append` section configuration; it is never an entry registry.

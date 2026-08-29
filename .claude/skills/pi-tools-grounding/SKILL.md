@@ -12,10 +12,9 @@ Use this support skill when correctness depends on broad or uncertain repository
 <!-- awf:edit brief-construction-and-dispatch: default; create .awf/skills/parts/grounding/brief-construction-and-dispatch.md to override -->
 ## Procedure
 
-1. Ground guide-first: read the agent guide and applicable current-state authority, then run `./awf context <relevant paths>` before dispatch.
-On an exact two-line `AWF_CONTEXT_SPILL_V1` notice, consume the packet per the working-with-awf doc's Context spill notices contract; treat any other output as the context packet itself.
+1. Ground guide-first: read the agent guide, use CodeGraph for discovery or structural questions, then run `./awf resolve topic <relevant paths>` and `./awf read topic <domain>/<topic>[:<claim>]` for applicable authority before dispatch.
 2. Build one self-contained, read-only brief containing the proposed design or assumption, factual premises, relevant repository paths and current-state authority, user constraints, and any effort slug and owned memory path as read-only context. Do not create an effort or a separate brief file.
-3. Dispatch the `grounding-checker` agent exactly once with the brief. Choose the smallest reliable tier - `small` (narrow, mechanical), `standard` (substantive but bounded), or `large` (broad, intricate, cross-cutting, or high-consequence) - escalating after uncertainty, failed reasoning, or widened scope; select the smallest reliable target-native model explicitly, or use the harness default and note in the dispatch brief that explicit selection is unavailable. Full tier definitions: docs/working-with-awf.md.
+3. Dispatch the `grounding-checker` agent exactly once with the brief. Choose the smallest reliable tier - `small` (narrow, mechanical), `standard` (substantive but bounded), or `large` (broad, intricate, cross-cutting, or high-consequence) - escalating after uncertainty, failed reasoning, or widened scope; select the smallest reliable target-native model explicitly, or use the harness default and note in the dispatch brief that explicit selection is unavailable. Full tier definitions: docs/workflow.md.
 
 <!-- awf:edit finding-classification: default; create .awf/skills/parts/grounding/finding-classification.md to override -->
 ## Finding classification

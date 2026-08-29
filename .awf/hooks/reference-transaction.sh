@@ -13,13 +13,22 @@ root="$(git rev-parse --show-toplevel)"
 cd "$root"
 empty_oid="$(git hash-object -t blob --stdin </dev/null)"
 zero_oid="${empty_oid//?/0}"
-mapfile -t updates
+integration_branch_hex='6d61696e'
+integration_branch=
+while [[ -n "$integration_branch_hex" ]]; do
+  printf -v integration_branch_byte '%b' "\\x${integration_branch_hex:0:2}"
+  integration_branch+="$integration_branch_byte"
+  integration_branch_hex="${integration_branch_hex:2}"
+done
+integration_ref="refs/heads/$integration_branch"
+integration_tip=
+updates=()
+while IFS= read -r update || [[ -n "$update" ]]; do updates+=("$update"); done
 targets=()
-declare -A seen_targets=()
 
 add_target() {
-  [[ ${seen_targets[$1]+x} ]] && return
-  seen_targets[$1]=1
+  local target
+  for target in "${targets[@]+"${targets[@]}"}"; do [[ "$target" != "$1" ]] || return 0; done
   targets+=("$1")
 }
 
@@ -45,7 +54,18 @@ refusal() {
   exit 1
 }
 
-for update in "${updates[@]}"; do
+resolve_integration_tip() {
+  [[ -n "$integration_tip" ]] && return
+  [[ -n "$integration_branch" ]] || refusal "cannot resolve local integration branch $integration_ref"
+  git check-ref-format "$integration_ref" >/dev/null 2>&1 || refusal "local integration branch $integration_ref is malformed"
+  integration_tip="$(git show-ref --verify --hash "$integration_ref" 2>/dev/null)" || refusal "cannot resolve local integration branch $integration_ref"
+  [[ "$integration_tip" =~ ^[[:xdigit:]]+$ && ${#integration_tip} -eq ${#zero_oid} && "$integration_tip" != "$zero_oid" ]] || refusal "local integration branch $integration_ref returned malformed object ID"
+  local type
+  type="$(git cat-file -t "$integration_tip" 2>/dev/null)" || refusal "local integration branch $integration_ref names missing object $integration_tip"
+  [[ "$type" == commit ]] || refusal "local integration branch $integration_ref does not name a commit"
+}
+
+for update in "${updates[@]+"${updates[@]}"}"; do
   IFS=' ' read -r old_oid new_oid ref extra <<< "$update"
   [[ -n "${old_oid:-}" && -n "${new_oid:-}" && -n "${ref:-}" && -z "${extra:-}" ]] || refusal "malformed reference-transaction update"
   valid_oid_or_symref "$old_oid" && valid_oid_or_symref "$new_oid" || refusal "malformed object ID"
@@ -55,7 +75,11 @@ for update in "${updates[@]}"; do
   [[ "$new_oid" == "$zero_oid" ]] && continue
   git rev-parse --verify "$new_oid^{commit}" >/dev/null 2>&1 || refusal "new branch target is not a resolvable commit"
   if [[ "$old_oid" == "$zero_oid" ]]; then
-    add_target "$new_oid"
+    resolve_integration_tip
+    if git merge-base --is-ancestor "$new_oid" "$integration_tip"; then
+      continue
+    fi
+    add_target "$integration_tip..$new_oid"
     continue
   fi
   git rev-parse --verify "$old_oid^{commit}" >/dev/null 2>&1 || refusal "old branch target is not a resolvable commit"
@@ -65,6 +89,6 @@ for update in "${updates[@]}"; do
   add_target "$old_oid..$new_oid"
 done
 
-if ((${#targets[@]})); then
+if [[ ${targets[0]+present} ]]; then
   ./awf check commit-policy "${targets[@]}"
 fi

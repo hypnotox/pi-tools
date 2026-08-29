@@ -56,14 +56,14 @@ type MutationSpec = Readonly<{ name: string; label: string; description: string;
 type Snapshot = Readonly<{ slug: string; owner: string; title: string; memory: Readonly<{ phase: string; next: string; updated: string }> | null; heartbeatAt: string; managedWorktree: boolean }>;
 type Context = { cwd: string };
 type FileMutationQueue = <T>(path: string, work: () => Promise<T>) => Promise<T>;
-export type RemotePiMetadata = Readonly<{ effort: Readonly<{ slug: string; title: string }>; memory: Snapshot["memory"]; activity: Readonly<{ heartbeatAt: string }> }>;
-export type RemotePiMetadataSetPayload = Readonly<{ namespace: "awf"; value: RemotePiMetadata | null }>;
-export type RemotePiDisplaySuffixSetPayload = Readonly<{ value: string | null }>;
-export type RemotePiCapabilitiesReplyPayload = Readonly<{ displaySuffix?: unknown; [capability: string]: unknown }>;
+export type PiCockpitMetadata = Readonly<{ effort: Readonly<{ slug: string; title: string }>; memory: Snapshot["memory"]; activity: Readonly<{ heartbeatAt: string }> }>;
+export type PiCockpitMetadataSetPayload = Readonly<{ namespace: "awf"; value: PiCockpitMetadata | null }>;
+export type PiCockpitDisplaySuffixSetPayload = Readonly<{ value: string | null }>;
+export type PiCockpitCapabilitiesReplyPayload = Readonly<{ displaySuffix?: unknown; [capability: string]: unknown }>;
 type PiLike = { exec: ActivityExecutor; registerTool(tool: unknown): void; on?(name: string, handler: (event: any, ctx: Context) => any): void; events?: { emit(name: string, payload?: unknown): unknown; on?(name: string, handler: (payload: any, ctx?: Context) => void): unknown }; getActiveTools?(): readonly string[]; setActiveTools?(tools: string[]): void };
 export type EffortExtensionDependencies = Readonly<{ uuid?: () => string; isDirectory?: (path: string) => Promise<boolean>; packageVersion?: string; memoryExec?: MemoryExecutor; fileMutationQueue?: FileMutationQueue }>;
 
-function supportsDisplaySuffix(caps: RemotePiCapabilitiesReplyPayload | unknown): boolean { if (!caps || typeof caps !== "object") return false; const suffix = (caps as Record<string, unknown>).displaySuffix; if (!suffix || typeof suffix !== "object" || Array.isArray(suffix)) return false; const keys = Object.keys(suffix); return keys.length === 1 && keys[0] === "version" && (suffix as Record<string, unknown>).version === 1; }
+function supportsDisplaySuffix(caps: PiCockpitCapabilitiesReplyPayload | unknown): boolean { if (!caps || typeof caps !== "object") return false; const suffix = (caps as Record<string, unknown>).displaySuffix; if (!suffix || typeof suffix !== "object" || Array.isArray(suffix)) return false; const keys = Object.keys(suffix); return keys.length === 1 && keys[0] === "version" && (suffix as Record<string, unknown>).version === 1; }
 function immutable(reply: ActivityReply, owner: string, present: boolean): Snapshot | undefined { if (!reply.effort || !reply.memory || !reply.activity || reply.activity.owner !== owner) return; return Object.freeze({ slug: reply.effort.slug, owner, title: reply.effort.title, memory: Object.freeze({ phase: reply.memory.phase, next: reply.memory.next, updated: reply.memory.updated }), heartbeatAt: reply.activity.heartbeatAt, managedWorktree: present }); }
 function renderActivity(reply: ActivityReply): string { const outcome = reply.outcome!; const actions = outcome.nextActions.length === 1 ? outcome.nextActions[0] : outcome.nextActions.map((action, index) => `${index + 1}. ${action}`).join(" "); return `${outcome.category}; ${outcome.condition}; changedActivity=${outcome.changedActivity}${outcome.cause ? `; cause=${outcome.cause}` : ""}; ${actions}`; }
 function renderMemoryOutcome(outcome: MemoryOutcome): string { const actions = outcome.nextActions.length === 1 ? outcome.nextActions[0] : outcome.nextActions.map((action, index) => `${index + 1}. ${action}`).join(" "); return `${outcome.category}; ${outcome.condition}; changedMemory=${outcome.changedMemory}${outcome.cause ? `; cause=${outcome.cause}` : ""}; ${actions}`; }
@@ -85,9 +85,9 @@ export function registerEffort(pi: PiLike, deps: EffortExtensionDependencies = {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(owner)) throw new Error("extension owner must be a lowercase UUIDv4");
   let current: Snapshot | undefined; let suffixSupported = false; let chain = Promise.resolve();
   const emit = (name: string, payload?: unknown) => { try { pi.events?.emit(name, payload); } catch {} };
-  const publishSuffix = () => { const payload: RemotePiDisplaySuffixSetPayload = { value: suffixSupported && current ? current.slug : null }; emit("remote-pi:display-suffix:set", payload); };
-  const publish = () => { const snapshot = current; const payload: RemotePiMetadataSetPayload = { namespace: "awf", value: snapshot ? { effort: { slug: snapshot.slug, title: snapshot.title }, memory: snapshot.memory, activity: { heartbeatAt: snapshot.heartbeatAt } } : null }; emit("remote-pi:metadata:set", payload); publishSuffix(); };
-  const requestCapabilities = () => emit("remote-pi:capabilities:request");
+  const publishSuffix = () => { const payload: PiCockpitDisplaySuffixSetPayload = { value: suffixSupported && current ? current.slug : null }; emit("pi-cockpit:display-suffix:set", payload); };
+  const publish = () => { const snapshot = current; const payload: PiCockpitMetadataSetPayload = { namespace: "awf", value: snapshot ? { effort: { slug: snapshot.slug, title: snapshot.title }, memory: snapshot.memory, activity: { heartbeatAt: snapshot.heartbeatAt } } : null }; emit("pi-cockpit:metadata:set", payload); publishSuffix(); };
+  const requestCapabilities = () => emit("pi-cockpit:capabilities:request");
   const serial = <T>(work: () => Promise<T>): Promise<T> => { const run = chain.then(work, work); chain = run.then(() => undefined, () => undefined); return run; };
   const activate = (on: boolean) => { const existing = pi.getActiveTools!().filter((name) => !MEMORY_TOOL_NAMES.includes(name as typeof MEMORY_TOOL_NAMES[number])); pi.setActiveTools!(on ? [...new Set([...existing, ...MEMORY_TOOL_NAMES])] : existing); };
   const clear = () => { current = undefined; activate(false); publish(); };
@@ -133,9 +133,9 @@ export function registerEffort(pi: PiLike, deps: EffortExtensionDependencies = {
   pi.on?.("turn_end", (_event: any, ctx: Context) => serial(async () => { if (!current) return; const before = current; try { const reply = await invoke(ctx, "heartbeat", before.slug, before.owner); if (reply.condition === "not-owner" || reply.condition === "missing" || reply.condition === "unsafe-resident") { clear(); return; } if (reply.condition !== "heartbeat") { current = Object.freeze({ ...before, memory: null, managedWorktree: false }); publish(); return; } const present = await directory(join(ctx.cwd, ".awf", "worktrees", before.slug)).catch(() => false); current = immutable(reply, before.owner, present) ?? Object.freeze({ ...before, memory: null, managedWorktree: false }); publish(); } catch { current = Object.freeze({ ...before, memory: null, managedWorktree: false }); publish(); } }));
   pi.on?.("session_start", () => { clear(); requestCapabilities(); });
   pi.on?.("session_shutdown", (_event: any, ctx: Context) => serial(async () => { try { await detach(ctx); } catch { clear(); } }));
-  pi.events?.on?.("remote-pi:metadata:request", () => publish());
-  pi.events?.on?.("remote-pi:display-suffix:request", () => publishSuffix());
-  pi.events?.on?.("remote-pi:capabilities", (caps: RemotePiCapabilitiesReplyPayload) => { suffixSupported = supportsDisplaySuffix(caps); publishSuffix(); });
+  pi.events?.on?.("pi-cockpit:metadata:request", () => publish());
+  pi.events?.on?.("pi-cockpit:display-suffix:request", () => publishSuffix());
+  pi.events?.on?.("pi-cockpit:capabilities", (caps: PiCockpitCapabilitiesReplyPayload) => { suffixSupported = supportsDisplaySuffix(caps); publishSuffix(); });
   requestCapabilities();
 }
 

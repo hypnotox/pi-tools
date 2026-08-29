@@ -42,8 +42,7 @@ One authored transaction may append several Applied or Reapplied batches only ac
 
 An ADR's `## State changes` section is the authoritative link to the topics it governs: either `None.` or a list of `- add`, `- update`, and `- remove` entries, each naming one claim by its qualified `<domain>/<topic>:<slug>` id.
 
-- **At `Accepted`** the operations are settled instruction, amendable under the amendment-until-terminal rules until an Applied event references them. Every operation's destination topic metadata must already exist (an empty topic shell for a pending `add`). The claims describing current reality are unchanged; inspect lifecycle detail where needed with `./awf context --show pending <affected paths>`.
-On an exact two-line `AWF_CONTEXT_SPILL_V1` notice, consume the packet per the working-with-awf doc's Context spill notices contract; treat any other output as the context packet itself.
+- **At `Accepted`** the operations are settled instruction, amendable under the amendment-until-terminal rules until an Applied event references them. Every operation's destination topic metadata must already exist (an empty topic shell for a pending `add`). The claims describing current reality are unchanged; inspect lifecycle detail where needed with `./awf read adr <identity>`.
 - **At `Implementing`** each Applied or Reapplied operation occurrence and exactly its matching claim mutation are independently observable in an authored transaction. Several events and their mutations may share that transaction across distinct claim IDs. An initial `add` appears with this ADR as Origin; an initial `update` preserves Origin and the prior Revised-by prefix, then appends this ADR; a `remove` disappears. A Reapplied add or update makes a further material correction while preserving the provenance written by its first application. Remaining operations continue to appear as pending progress.
 - **At `Implemented`** all declarations are Applied. A direct transition uses one implicit batch; an incremental transition has already applied its final batch before the status-only event.
 - **At `Abandoned`** Applied operations and their provenance remain historical facts, while Remaining operations become Canceled and authorize nothing.
@@ -102,7 +101,7 @@ schema retrofit may migrate its machine-readable encoding.
 
 ## Decision references
 
-V4 Decision items begin with a unique inline `decision: <lowercase-kebab-slug>` marker. Use that stable slug with the ADR number or retained pending ADR slug in plan references. Pre-V4 Decision items have no stable marker: use canonical `#N` only after their authored-format lifecycle freezes the record; never treat a legacy ordinal as a current-authority or supersession anchor.
+V4 Decision items begin with a unique inline `decision: <lowercase-kebab-slug>` marker. Use that stable slug with the ADR number or retained pending ADR slug in plan references. Pre-V4 Decision items have no stable marker: canonical `#N` remains available only for frozen ADR navigation and is not plan-v2 reference syntax; never treat a legacy ordinal as a current-authority or supersession anchor.
 
 <!-- awf:edit notes: default; create .awf/skills/parts/adr-lifecycle/notes.md to override -->
 ## Notes

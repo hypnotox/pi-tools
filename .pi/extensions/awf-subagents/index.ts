@@ -2,7 +2,7 @@
 // @ts-nocheck
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   CONFIG_DIR_NAME,
@@ -115,6 +115,11 @@ async function canonicalPath(deps: ExtensionDependencies, path: string, failureM
   catch (error) { throw new Error(`${failureMessage}: ${errorText(error)}`, { cause: error }); }
 }
 
+export function verificationCheckoutWithin(root: string, checkout: string, paths = { relative, resolve, isAbsolute, sep }): boolean {
+  const descent = paths.relative(root, checkout);
+  return !((descent === "" && checkout !== root) || descent === ".." || descent.startsWith(`..${paths.sep}`) || paths.isAbsolute(descent) || paths.resolve(root, descent) !== checkout);
+}
+
 async function resolveVerificationCheckout(
   pi: ExtensionAPI, deps: ExtensionDependencies, root: string, requested: string | undefined,
 ): Promise<string> {
@@ -124,6 +129,7 @@ async function resolveVerificationCheckout(
   const candidate = resolve(root, normalized);
   const checkout = await canonicalPath(deps, candidate, `verificationCheckout does not exist: ${candidate}`);
   const canonicalRoot = await canonicalPath(deps, root, "Cannot resolve the project root checkout.");
+  if (!verificationCheckoutWithin(canonicalRoot, checkout)) throw new Error(`verificationCheckout must be the parent session checkout or an accessible descendant: ${checkout}`);
   const selectedGitEntry = join(checkout, ".git");
   let entry: { isFile(): boolean; isSymbolicLink(): boolean } | undefined;
   try { entry = await deps.lstat(selectedGitEntry); }
@@ -220,6 +226,7 @@ export function registerSubagentTools(pi: ExtensionAPI, deps: ExtensionDependenc
     preferenceNotices.add(identity);
   };
   const invocationRouting = new WeakMap<object, InvocationRouting>();
+  const invocationCheckout = new WeakMap<object, string>();
   const selectModel = async (context: any, role: Role): Promise<ConcreteModel> => {
     const state = await reloadState();
     notifyPreferenceState(state);
@@ -381,10 +388,11 @@ const SLOT_GUIDANCE: Array<{ key: PreferenceField; guidance: string }> = [
     reviewProfile({ id: "awf-review-adr", toolName: "subagent_review_adr", label: "ADR", kind: "adr", relative: REVIEWER_PATHS.adr }),
     reviewProfile({ id: "awf-review-plan", toolName: "subagent_review_plan", label: "Plan", kind: "plan", relative: REVIEWER_PATHS.plan }),
     reviewProfile({ id: "awf-review-code", toolName: "subagent_review_code", label: "Code", kind: "code", relative: REVIEWER_PATHS.code }),
-    { id: "awf-implement", toolName: "subagent_implement", label: "Implementation Subagent", description: "Run one serialized implementation child while verifying commit policy in the caller-selected project checkout. Call this tool alone in its parent tool batch. Omit verificationCheckout for the project root. Omit model for configured or inherited routing; use an exact tier provider/model-id only for deliberate override. Omission is the only model default form.", promptSnippet: "Delegate one sequential implementation task to fresh context", promptGuidelines: ["Call subagent_implement alone in a tool batch, never in parallel; set allowCommits explicitly. Set verificationCheckout when implementation intentionally targets a managed worktree; this changes verification identity only, not parent or child CWD. Omit it for root work. Omit model for configured or inherited routing; use the selected tier's exact provider/model-id only for deliberate override. Omit the model field to use configured or inherited routing."], parameters: Type.Object({ task: Type.String({ minLength: 1 }), allowCommits: Type.Boolean(), verificationCheckout: Type.Optional(Type.String()), model: Type.Optional(MODEL_REFERENCE_SCHEMA) }, { additionalProperties: false }), profileDataSchema: Type.Object({ ...ROUTING_PROFILE_DATA_FIELDS, allowCommits: Type.Boolean(), verificationCheckout: Type.String(), before: GIT_SNAPSHOT_SCHEMA, after: GIT_SNAPSHOT_SCHEMA, commitVerification: COMMIT_VERIFICATION_SCHEMA }, { additionalProperties: false }), concurrency: 1, exclusiveParentBatch: true, selectModel: (c: any) => selectModel(c, "implement"), beforeRun: async (c: any) => {
-      const verificationCheckout = await resolveVerificationCheckout(pi, deps, root, c.args.verificationCheckout);
-      return { ...routingFor(c), allowCommits: c.args.allowCommits, verificationCheckout, before: await snapshot(pi, verificationCheckout) };
-    }, prepare: (c: any) => prepare(c, IMPLEMENT_TOOLS, { relative: IMPLEMENTER_PATH, repair: "Enable the implementer agent and run ./awf render.", noun: "implementer", prepend: `You are the governed implementation subagent. ${c.args.allowCommits ? "Commits are allowed when the task requests them; you are the phase owner." : "Commits are forbidden; do not change HEAD. You are a helper."}` }), afterRun: async (_outcome: ExecutionOutcome, state: any) => { const after = await snapshot(pi, state.verificationCheckout); const verified = state.before.available && after.available; const changed = verified && state.before.head !== after.head; const failure = !state.allowCommits && changed ? `Implementation committed despite allowCommits=false (HEAD ${state.before.head} -> ${after.head}) in verification checkout ${state.verificationCheckout}; changes were not reverted.` : state.allowCommits && verified && !changed ? `Implementation was commit-capable but created no commit in ${state.verificationCheckout} (HEAD unchanged at ${state.before.head}). If work occurred in another registered worktree, retry with verificationCheckout set to that checkout root. A stopped report must carry the working-tree status, work completed, work remaining, the named failing check with its actual output, and what was already tried.` : undefined; return { ...(failure ? { failure } : {}), profileData: { ...state, after, commitVerification: verified ? "verified" : "unavailable" } }; } },
+    { id: "awf-implement", toolName: "subagent_implement", label: "Implementation Subagent", description: "Run one serialized commit-disabled implementation child in the caller-selected project checkout and prove that same checkout's HEAD remains unchanged. Call this tool alone in its parent tool batch. Omit verificationCheckout for the project root. Omit model for configured or inherited routing; use an exact tier provider/model-id only for deliberate override. Omission is the only model default form.", promptSnippet: "Delegate one sequential implementation task to fresh context", promptGuidelines: ["Call subagent_implement alone in a tool batch, never in parallel. Set verificationCheckout to the managed worktree for effort-backed pre-integration implementation; the validated checkout is both child CWD and verification identity. Omit it intentionally for root work. Parent mutations still name their paths explicitly because child CWD is not filesystem confinement. The child is commit-disabled and returns focused evidence; the parent alone integrates, stages, checks staged state, commits, and runs gates. Omit model for configured or inherited routing; use the selected tier's exact provider/model-id only for deliberate override. Omit the model field to use configured or inherited routing."], parameters: Type.Object({ task: Type.String({ minLength: 1 }), verificationCheckout: Type.Optional(Type.String()), model: Type.Optional(MODEL_REFERENCE_SCHEMA) }, { additionalProperties: false }), profileDataSchema: Type.Object({ ...ROUTING_PROFILE_DATA_FIELDS, verificationCheckout: Type.String(), before: GIT_SNAPSHOT_SCHEMA, after: GIT_SNAPSHOT_SCHEMA, commitVerification: COMMIT_VERIFICATION_SCHEMA }, { additionalProperties: false }), concurrency: 1, exclusiveParentBatch: true, selectModel: (c: any) => selectModel(c, "implement"), beforeRun: async (c: any) => {
+      const verificationCheckout = invocationCheckout.get(c);
+      if (!verificationCheckout) throw new Error("pi-tools profile lifecycle called beforeRun without completing implementation prepare for the same invocation context.");
+      return { ...routingFor(c), verificationCheckout, before: await snapshot(pi, verificationCheckout) };
+    }, prepare: async (c: any) => { const verificationCheckout = await resolveVerificationCheckout(pi, deps, root, c.args.verificationCheckout); invocationCheckout.set(c, verificationCheckout); return { ...(await prepare(c, IMPLEMENT_TOOLS, { relative: IMPLEMENTER_PATH, repair: "Enable the implementer agent and run ./awf render.", noun: "implementer", prepend: "You are the governed implementation subagent. Commits are forbidden; do not change HEAD. You are a helper." })), cwd: verificationCheckout }; }, afterRun: async (_outcome: ExecutionOutcome, state: any) => { const after = await snapshot(pi, state.verificationCheckout); const verified = state.before.available && after.available; const changed = verified && state.before.head !== after.head; const failure = !verified ? `Implementation verification unavailable for ${state.verificationCheckout}; the selected HEAD could not be compared before and after the child run. Repair snapshot availability, inspect the checkout against its known baseline, then retry with verificationCheckout set to that checkout root.` : changed ? `Implementation changed HEAD in verification checkout ${state.verificationCheckout} (${state.before.head} -> ${after.head}); changes were not reverted. The parent must inventory the checkout and restore the recorded before-run HEAD ${state.before.head} before redispatch; do not retry from the advanced HEAD.` : undefined; return { ...(failure ? { failure } : {}), profileData: { ...state, after, commitVerification: verified ? "verified" : "unavailable" } }; } },
   ];
   const register = (capability: ProfileCapability) => {
     if (capability.correlationId !== undefined && capability.correlationId !== correlationId) return;

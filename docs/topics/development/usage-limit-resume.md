@@ -4,7 +4,7 @@
 
 Detection, waiting, and automatic resume contracts for provider usage-limit interruptions.
 
-**Applicability:** Owning domain selectors: `biome.json`, `extensions/**`, `knip.json`, `package-lock.json`, `package.json`, `testing/**`, `tests/**`, `tsconfig.json`. Topic selectors: `extensions/limit-resume/**`. Both domain and topic selectors must match. Run `awf topic development/usage-limit-resume --coverage` for current applicable and owned paths and marker sites.
+**Applicability:** Owning domain selectors: `biome.json`, `extensions/**`, `knip.json`, `package-lock.json`, `package.json`, `testing/**`, `tests/**`, `tsconfig.json`. Topic selectors: `extensions/limit-resume/**`. Both domain and topic selectors must match. Run `awf read topic development/usage-limit-resume --coverage` for current applicable and owned paths and marker sites.
 
 This topic records the active detection, waiting, and resume contracts for provider usage limits.
 
