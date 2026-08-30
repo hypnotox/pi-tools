@@ -270,6 +270,22 @@ describe("fresh-session handoff extension", () => {
     ]);
   });
 
+  it("requeues a pending handoff as a terminating success so the active run can settle", async () => {
+    const h = await createHarness();
+
+    await h.execute("original kickoff");
+    await expect(h.execute("ignored retry kickoff")).resolves.toMatchObject({
+      content: [{ type: "text", text: "Fresh-session handoff already queued." }],
+      details: { kickoff: "original kickoff" },
+      terminate: true,
+    });
+
+    expect(h.queuedCommands).toEqual([
+      ["handoff-session-continue", "request-id"],
+      ["handoff-session-continue", "request-id"],
+    ]);
+  });
+
   it("cancels the countdown, clears pending state, and does not replace the session", async () => {
     const h = await createHarness();
     await h.execute();

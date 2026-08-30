@@ -153,6 +153,17 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
     ownsTool = false;
   });
 
+  const queueHandoff = (request: PendingHandoff, context: ExtensionContext): void => {
+    (pi as QueueingAPI).queueCommand(COMMAND, request.id);
+    pi.events.emit("pi-cockpit:notification-disposition.v1", {
+      version: 1,
+      sessionId: context.sessionManager.getSessionId(),
+      disposition: "suppress_next_agent_end_push",
+      id: "handoff-committed",
+    });
+    suppressThresholdCompaction = true;
+  };
+
   const registerContinuationCommand = (): void => {
     pi.registerCommand(COMMAND, {
       description: "Continue a fresh-session handoff.",
@@ -241,19 +252,19 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
         if (!params.kickoff.trim()) throw new Error("kickoff must contain non-whitespace content");
         if (new TextEncoder().encode(params.kickoff).byteLength > MAX_KICKOFF_BYTES)
           throw new Error("kickoff must not exceed the 16 KiB UTF-8 limit");
-        if (pending) throw new Error("A handoff request is already pending");
+        if (pending) {
+          queueHandoff(pending, context);
+          return {
+            content: [{ type: "text", text: "Fresh-session handoff already queued." }],
+            details: { kickoff: pending.kickoff },
+            terminate: true,
+          };
+        }
 
         const request: PendingHandoff = { id: deps.randomUUID(), kickoff: params.kickoff };
         pending = request;
         try {
-          (pi as QueueingAPI).queueCommand(COMMAND, request.id);
-          pi.events.emit("pi-cockpit:notification-disposition.v1", {
-            version: 1,
-            sessionId: context.sessionManager.getSessionId(),
-            disposition: "suppress_next_agent_end_push",
-            id: "handoff-committed",
-          });
-          suppressThresholdCompaction = true;
+          queueHandoff(request, context);
         } catch (error) {
           if (pending === request) pending = undefined;
           suppressThresholdCompaction = false;
