@@ -274,16 +274,25 @@ describe("fresh-session handoff extension", () => {
     const h = await createHarness();
 
     await h.execute("original kickoff");
-    await expect(h.execute("ignored retry kickoff")).resolves.toMatchObject({
-      content: [{ type: "text", text: "Fresh-session handoff already queued." }],
-      details: { kickoff: "original kickoff" },
-      terminate: true,
-    });
+    for (const ignoredKickoff of ["ignored retry kickoff", " ", `x${"😀".repeat(4_096)}`]) {
+      await expect(h.execute(ignoredKickoff)).resolves.toMatchObject({
+        content: [{ type: "text", text: "Fresh-session handoff already queued." }],
+        details: { kickoff: "original kickoff" },
+        terminate: true,
+      });
+    }
 
     expect(h.queuedCommands).toEqual([
       ["handoff-session-continue", "request-id"],
       ["handoff-session-continue", "request-id"],
+      ["handoff-session-continue", "request-id"],
+      ["handoff-session-continue", "request-id"],
     ]);
+
+    const continuation = h.continue();
+    h.cancel();
+    await continuation;
+    await expect(h.continue()).resolves.toBeUndefined();
   });
 
   it("cancels the countdown, clears pending state, and does not replace the session", async () => {
@@ -404,11 +413,11 @@ describe("fresh-session handoff extension", () => {
     });
   });
 
-  it("clears pending state when shutdown or command completion occurs", async () => {
+  it("clears pending state and ignores stale continuations after shutdown or completion", async () => {
     const h = await createHarness();
     await h.execute();
     await h.invokeRaw("session_shutdown", {}, h.context);
-    await expect(h.continue()).rejects.toThrow("matching pending");
+    await expect(h.continue()).resolves.toBeUndefined();
     await h.execute();
     const pending = h.continue();
     h.finish();

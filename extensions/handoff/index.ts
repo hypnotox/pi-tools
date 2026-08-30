@@ -169,8 +169,7 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
       description: "Continue a fresh-session handoff.",
       async handler(token, context) {
         const request = pending;
-        if (!request || token !== request.id)
-          throw new Error("No matching pending handoff request");
+        if (!request || token !== request.id) return;
         const envelope = handoffEnvelope(request.kickoff);
         try {
           if (!(await countdown(context, deps))) {
@@ -249,9 +248,6 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
       async execute(_id, params, _signal, _update, context) {
         if (context.mode !== "tui" || !context.sessionManager.getSessionFile())
           throw new Error("handoff_session requires a persisted interactive Pi TUI session");
-        if (!params.kickoff.trim()) throw new Error("kickoff must contain non-whitespace content");
-        if (new TextEncoder().encode(params.kickoff).byteLength > MAX_KICKOFF_BYTES)
-          throw new Error("kickoff must not exceed the 16 KiB UTF-8 limit");
         if (pending) {
           queueHandoff(pending, context);
           return {
@@ -260,6 +256,9 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
             terminate: true,
           };
         }
+        if (!params.kickoff.trim()) throw new Error("kickoff must contain non-whitespace content");
+        if (new TextEncoder().encode(params.kickoff).byteLength > MAX_KICKOFF_BYTES)
+          throw new Error("kickoff must not exceed the 16 KiB UTF-8 limit");
 
         const request: PendingHandoff = { id: deps.randomUUID(), kickoff: params.kickoff };
         pending = request;
