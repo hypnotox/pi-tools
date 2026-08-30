@@ -13,7 +13,7 @@ policy; [Debugging](debugging.md) owns recovery and failure diagnosis; and the
 <!-- awf:edit commands: default; create .awf/parts/working-with-awf/commands.md to override -->
 ## Daily commands
 
-- `awf init`: scaffold `.awf/` and render the selected governance footprint into the current project.
+- `awf init`: scaffold `.awf/` and render the standard workflow footprint into the current project.
 - `./awf render`: re-render managed artifacts from `.awf/` and update `.awf/awf.lock`.
 - `./awf check`: confirm the rendered tree and repository checks are clean.
 - `./awf upgrade`: apply pending configuration migrations and re-render after upgrading awf.
@@ -33,7 +33,7 @@ placeholder semantics. A convention part replaces one declared section; use its
 
 Generated files are awf-owned. An `awf:edit` pointer names a convention-part source; a topic
 page names its metadata and claim part. Local documents are the exception: edit only their body
-between `awf:edit-in-place` and `awf:end`. See the [documentation standard](doc-standard.md) for
+after the `awf:edit-in-place` pointer through end-of-file. See the [documentation standard](doc-standard.md) for
 authorship rules.
 
 <!-- awf:edit model-selection: default; create .awf/parts/working-with-awf/model-selection.md to override -->

@@ -29,7 +29,6 @@ or empty key, or a malformed near-miss, is a hard error that names the available
 | `gatedCommands` | the backticked, comma-separated list of binary-version-gated top-level commands, followed by an `except` clause naming the group children that stay ungated |
 | `prefix` | the project's artifact prefix |
 | `gateCmd` | the configured fast pre-commit gate command |
-| `gateCmdFull` | the configured terminal exhaustive verification command |
 | `checkCmd` | the configured drift-check command |
 | `sectionDefault` | the overridden section's own rendered default; re-inject it to *extend* rather than replace (re-injecting a `stub` default is a hard render error, not a silent skip) |
 
@@ -54,11 +53,10 @@ enforcement.
 
 | Key | Type | Default | Current | Description | Availability |
 |---|---|---|---|---|---|
-| `profile` | enum: core or full | core for fresh init; existing repositories migrate to full | `full` | Selects one closed governance footprint. Core includes the operational workflow. Full adds decision records, plans, current-state authority, and governance audit. The footprints use the same correctness, autonomy, maintainability, and review-quality bar. | Always; required and visible. |
 | `prefix` | string | none: required, set at init | `pi-tools` | The name prefix for rendered skills: a skill renders to `<prefix>-<name>` (directory and frontmatter name), and rendered prose references skills by that prefixed name. Must be non-empty, without path separators. | Always. |
-| `integrationBranch` | string | none: required; the schema migration writes integrationBranch: main | `main` | The branch effort work integrates into. `awf new adr` scaffolds a numbered decision record on this branch and a pending slug-identified one anywhere else, and the check refuses a pending record while the checkout is positively identified as being on it. A generated pre-push hook uses the freshly resolved destination tip of this branch as the policy base for new commit-bearing refs, and changing it invalidates that consumer without reflagging unrelated outputs. Must be non-empty and free of whitespace, must not start with `-`; slashes are legal, so `release/1.0` is accepted. There is no in-code default, and audit range resolution never reads it. | Always. |
+| `integrationBranch` | string | none: required; the schema migration writes integrationBranch: main | `main` | The branch effort work integrates into. A generated pre-push hook uses the freshly resolved destination tip of this branch as the policy base for new commit-bearing refs, and changing it invalidates that consumer without reflagging unrelated outputs. Must be non-empty and free of whitespace, must not start with `-`; slashes are legal, so `release/1.0` is accepted. There is no in-code default, and audit range resolution never reads it. | Always. |
 | `render.templateSourceRoot` | normalized repository-relative directory | none (template source symbols disabled) | (none) | The repository directory containing the implementation template tree. When set, generated Markdown carries compact `awf:template-source` comments identifying the root template, included partials, and structural sections. The directory and every referenced source file must exist in the selected repository state. | Markdown outputs rendered from templates; omitted leaves output unchanged. |
-| `vars` | key → value map | seeded with every catalog-referenced var as an empty string at init | 5 keys, 5 set | Freeform values templates interpolate. A key with a value renders it; a present-but-empty key is an open to-do (rendered artifacts referencing it degrade to generic prose and a non-failing note nudges you); a deleted key is the deliberate, git-auditable decline of that var; the generic prose renders silently. A non-empty key no rendered artifact references is unranked Information and exits zero. | Each key is consumed only while a rendered artifact's template (or a `gateCmd`/`checkCmd` part placeholder) references it, except that `gateCmd` is also consumed by divergent effort-integration guidance. |
+| `vars` | key → value map | seeded with every catalog-referenced var as an empty string at init | 2 keys, 2 set | Freeform values templates interpolate. A key with a value renders it; a present-but-empty key is an open to-do (rendered artifacts referencing it degrade to generic prose and a non-failing note nudges you); a deleted key is the deliberate, git-auditable decline of that var; the generic prose renders silently. A non-empty key no rendered artifact references is unranked Information and exits zero. | Each key is consumed only while a rendered artifact's template (or a `gateCmd`/`checkCmd` part placeholder) references it, except that `gateCmd` is also consumed by divergent effort-integration guidance. |
 | `localDocs` | list of {name, title, description} mappings | none | 0 configured | Additive repository-local documents. Each name is a lowercase kebab-case path below docs without .md; decisions, plans, domains, topics, and pitfalls are reserved. Title and description are nonblank one-line metadata. | Always; each entry renders one managed in-place document. |
 | `localDocs[].name` | lowercase kebab-case path | required | n/a | The docs-relative path without .md. | Within each localDocs entry. |
 | `localDocs[].title` | string | required | n/a | The awf-owned document heading. | Within each localDocs entry. |
@@ -96,19 +94,11 @@ Each var is consumed only while a rendered artifact references it. State reads: 
 declined; the generic prose renders).
 
 - `gateCmd`: Command that runs the fast pre-commit gate. Consumed while a rendered artifact's template references it, by the `{{=awf:gateCmd}}` placeholder in convention parts (including the rendered pre-push hook payload's part channel), and by divergent effort-integration guidance.
-  State: set (`npm run check`). Consumed by: agents-doc, hooks pre-commit, hooks pre-push, skill adr-lifecycle, skill executing-plans, skill retrospective, skill reviewing-impl, skill subagent-driven-development, skill writing-plans.
-- `gateCmdFull`: Command for terminal exhaustive verification, if the project has one. Terminal exhaustive verification command, consumed while a rendered artifact's template references it.
-  State: absent, declined; the generic prose renders. Consumed by: hooks pre-push.
+  State: set (`npm run check`). Consumed by: agents-doc, hooks pre-commit, hooks pre-push.
 - `checkCmd`: Command that checks rendered output for drift. Leave empty to run through the always-rendered `./awf` wrapper. Consumed while a rendered artifact's template references it, and by the `{{=awf:checkCmd}}` placeholder in convention parts.
   State: set (`./awf check`). Consumed by: hooks pre-commit, hooks pre-merge-commit, hooks pre-push.
-- `commitGateCmd`: Command that validates one commit message (the commit-msg hook payload appends the message-file argument). Leave empty to run through the always-rendered `./awf` wrapper. Consumed by the always-rendered commit-msg hook payload.
-  State: set (`./awf check staged commit`). Consumed by: hooks commit-msg.
 - `testCmd`: Command that runs the test suite. Consumed while a rendered artifact's template references it.
-  State: set (`npm test`). Consumed by: skill tdd.
-- `activeMdRegenCmd`: Command that regenerates the generated ADR decision index (INDEX.md). Consumed while a rendered artifact's template references it (the decision-index regeneration steps in the chain skills).
-  State: set (`./awf render`). Consumed by: skill adr-lifecycle, skill proposing-adr.
-- `invariantTestPath`: Path or glob where invariant-backing tests live. Consumed while a rendered artifact's template references it (the invariant-backing guidance in the decision docs and skills).
-  State: absent, declined; the generic prose renders. Consumed by: agent adr-reviewer, skill retrospective.
+  State: absent, declined; the generic prose renders. Potential catalog consumers: agents-doc, doc workflow; no rendered output currently references it.
 
 ## Sidecar fields
 
@@ -120,32 +110,6 @@ declined; the generic prose renders).
 
 ## Per-artifact data keys
 
-- `skill brainstorming` · `data.errorBoundaries`: The error-handling boundaries the design-sections step walks (list); unset, the section keeps its generic boundary prose.
-- `skill brainstorming` · `data.loadBearingExamples`: Project-specific examples of load-bearing decisions for the definitions section (list); unset, the generic examples render.
-- `skill tdd` · `data.testSurfaces` (catalog default): The project's test surfaces (list of {name, kind, location}) the skill routes new tests to; the default names generic unit/integration/e2e surfaces.
-- `skill adr-lifecycle` · `data.adrStates` (catalog default): The decision-record lifecycle states (list of {name, meaning, mutability}) the skill's state table renders; the default is the five-state current-state-v2 lifecycle.
-- `skill proposing-adr` · `data.adrSections` (catalog default): The required decision-record section names, in order (list); the default is Context through Alternatives Considered.
-- `skill proposing-adr` · `data.adrTriggers` (catalog default): The project's load-bearing triggers that warrant a decision record (list); the default names the generic boundary/dependency/format/workflow triggers.
-- `skill executing-plans` · `data.e2eSuitePaths`: Where the project's end-to-end suites live (prose or list) for the gate-tier guidance; unset, the generic tier prose renders.
-- `agent adr-reviewer` · `data.focusItems` (catalog default): The reviewer's project-focus lens items (list of {name, description}); the selected catalog default contains `consequences-honesty`, `claim-topic-cohesion`.
-- `agent adr-reviewer` · `data.reviewSubject` (catalog default): The one-word subject label the review spine addresses (default: the decision record).
-- `agent adr-reviewer` · `data.readStep` (catalog default): The reviewer's opening read instruction: what to read in full before applying lenses.
-- `agent adr-reviewer` · `data.digestLabel` (catalog default): The label heading the reviewer's returned digest.
-- `agent adr-reviewer` · `data.digestSummary` (catalog default): The digest's summary skeleton: the bullet template the reviewer fills per review.
-- `agent plan-reviewer` · `data.focusItems` (catalog default): The reviewer's project-focus lens items (list of {name, description}); the selected catalog default contains `change-specific-executability`, `dependency-order`, `snapshot-scoped-verification`, `check-authority-taxonomy`.
-- `agent plan-reviewer` · `data.docCurrencyItems` (catalog default): The doc-currency checks the reviewer applies (list of {check}); the default checks that the plan schedules every doc update its changes invalidate.
-- `agent plan-reviewer` · `data.reviewSubject` (catalog default): The one-word subject label the review spine addresses (default: the plan).
-- `agent plan-reviewer` · `data.readStep` (catalog default): The reviewer's opening read instruction: what to read in full before applying lenses.
-- `agent plan-reviewer` · `data.digestLabel` (catalog default): The label heading the reviewer's returned digest.
-- `agent plan-reviewer` · `data.digestSummary` (catalog default): The digest's summary skeleton: the bullet template the reviewer fills per review.
-- `agent code-reviewer` · `data.correctnessTraps` (catalog default): The correctness traps the reviewer checks first (list of {description}); the default names error paths and boundary conditions.
-- `agent code-reviewer` · `data.focusItems` (catalog default): The reviewer's project-focus lens items (list of {name, description}); the selected catalog default contains `contract-adherence`, `test-coverage`, `verification-instrument-can-fail`, `check-authority-taxonomy`.
-- `agent code-reviewer` · `data.docCurrencyItems` (catalog default): The doc-currency checks the reviewer applies (list of {check}); the default checks same-commit updates of every doc stating the old behaviour.
-- `agent code-reviewer` · `data.reviewSubject` (catalog default): The one-word subject label the review spine addresses (default: the diff).
-- `agent code-reviewer` · `data.readStep` (catalog default): The reviewer's opening read instruction: what to read in full before applying lenses.
-- `agent code-reviewer` · `data.digestLabel` (catalog default): The label heading the reviewer's returned digest.
-- `agent code-reviewer` · `data.digestSummary` (catalog default): The digest's summary skeleton: the bullet template the reviewer fills per review.
-- `agent implementer` · `data.prohibitedShortcuts` (catalog default): The bolt-on shortcuts the implementer must never take (list of {description}); the default names speculative abstraction and misplaced responsibility. Unset, the body omits the list and the rest of the contract renders unchanged.
 - `doc glossary` · `data.terms`: The glossary's terms as an ordered list of `{term, meaning, domains}` records; the table renders always sorted (case-insensitive, pipes escaped), and an empty term or meaning, an interior newline, an unknown record key, or a case-insensitive duplicate term fails the render naming the offending term. `domains` (optional) must resolve to configured domains. A term here overrides the standard vocabulary awf ships of the same case-insensitive name, which is how you replace or retire one. Unset, the doc renders the standard vocabulary alone; the pointer telling you where to add terms renders only when neither layer supplies a term. A meaning longer than the terseness guideline raises a non-failing advisory rather than failing the render.
 - `agents-doc` · `data.commands`: Extra command entries for the agent guide's Commands section (list of {cmd, desc}-shaped mappings rendered as lines); unset, only the built-in command list renders.
 - `agents-doc` · `data.docMap`: Extra document-map entries for the agent guide (list rendered after the managed docs); unset, only the managed docs render.
@@ -154,6 +118,6 @@ declined; the generic prose renders).
 ## Pitfall sources
 
 Pitfalls are direct regular `.awf/docs/pitfalls/<lowercase-kebab-slug>.md` files with strict
-frontmatter: required `title`, optional `domains` and positive `related` lists, then a
-nonblank Markdown body. The slug `index` is reserved. `.awf/docs/pitfalls.yaml` is optional and may
+frontmatter: required `title` and optional `domains`, then a nonblank Markdown body. The slug
+`index` is reserved. `.awf/docs/pitfalls.yaml` is optional and may
 contain only ordinary `prepend` or `append` section configuration; it is never an entry registry.

@@ -5,13 +5,7 @@ This standard reference applies only to adopters using the Pi target. It is the 
 adopter-facing owner of Pi runtime and subagent protocol. For daily render and check usage, see
 [Working with awf](working-with-awf.md); generic workflow policy remains in [Workflow](workflow.md).
 
-Pi loads generated project-extension code only after project trust. The retained awf effort integration requires Pi 0.84.2 or a later compatible build and the active-tool and real-path file-mutation queue APIs it uses. The profile adapter has no Pi package-version floor: it requires a successful `pi-tools` protocol-v2 handshake and final profile registration. It registers exactly six tools in Full and four in Core. Both governance footprints expose
-`subagent_grounding`, whose required `task` carries the workflow's premise and altitude check;
-`subagent_explore`, which requires `{task, breadth, detail}` with breadth `targeted`, `bounded`, or
-`broad` and independently selected detail `paths`, `summary`, or `analysis`; `subagent_review_code`,
-which takes a required review `task`; and `subagent_implement`, which takes required `task` plus
-optional `verificationCheckout`. Full additionally exposes
-`subagent_review_adr` and `subagent_review_plan`, each with a required review `task`. Omission verifies the project-root checkout.
+Pi loads generated project-extension code only after project trust. The retained awf effort integration requires Pi 0.84.2 or a later compatible build and the active-tool and real-path file-mutation queue APIs it uses. The profile adapter has no Pi package-version floor: it requires a successful `pi-tools` protocol-v2 handshake and final profile registration. It registers four tools: `subagent_grounding` for premise checks; `subagent_explore` for read-only exploration with required `{task, breadth, detail}`; `subagent_review_code` for one combined report-only review; and `subagent_implement` for commit-disabled implementation with required `task` plus optional `verificationCheckout`. Exploration breadth is `targeted`, `bounded`, or `broad`, and detail is `paths`, `summary`, or `analysis`. Omitting `verificationCheckout` verifies the project-root checkout.
 An explicit value resolves relative to the project root after one leading `@` is removed, must be
 an exact live checkout root for the same Git common directory, and must be the parent checkout or a canonical accessible descendant. It is the implementation child's base CWD and the before-and-after commit-policy snapshot identity. Omission keeps both at the project root. This alignment does not bind deliberately targeted mutation paths or move the parent Pi session.
 Every closed schema also accepts optional canonical `model` as
@@ -39,7 +33,7 @@ transaction, offers an embedded recommended preset only when every referenced mo
 registered and authenticated, presents per-model pricing with request-wide tiers distinguished
 from base rates alongside context and output limits and capability markers, enforces the
 repository gitignore rule at save time, persists atomically, and leaves the file unchanged on
-cancellation. Long implementations may mix inline and subagent-driven execution, but the parent owns every transaction in either mode: integration, explicit staging, staged checks, commits, fast gates, and terminal exhaustive verification. Heading-identified tasks are ordered steps, not transaction or checkpoint boundaries. Every implementation child is commit-disabled, stays sequential, receives a path-confined subset, and returns a structured focused-evidence receipt. The parent inventories the real checkout, rejects boundary violations, confirms the reported end state and unchanged HEAD, and reuses focused evidence only while checkout, relevant authority, and overlapping paths remain unchanged. Unverifiable state or overlapping later mutation invalidates affected evidence; no receipt replaces a parent gate. This guidance does not promise shell-command interception; Pi proves selected-HEAD identity while rendered contracts govern child behavior. Pi serialization and exclusive implementation-tool batching are unchanged.
+cancellation. Long implementations may mix inline and child execution, but the parent owns every transaction: integration, explicit staging, staged checks, commits, review, and final verification. A child receives one explicit path-confined unit and cannot stage or commit. Up to four implementation calls may run in one batch only when the parent has resolved dependency-independent canonical disjoint write sets in the same selected checkout. Dependent, overlapping, ambiguous, shared, global, generated, and current-state work stays sequential or parent-owned. The parent inventories the checkout before and after the wave, rejects boundary violations, and confirms unchanged HEAD and index. If one child fails, already-running siblings settle and the parent preserves their edits while recovering only the offending paths; blind reset, restore, clean, and stash are unsafe. Later overlapping mutation invalidates affected focused evidence, and no child receipt replaces parent verification. This guidance does not promise shell-command interception; Pi proves selected HEAD and index identity while rendered contracts govern path confinement.
 
 Exploration treats breadth as an adaptive maximum. Not-found is successful execution; broad absence
 names the project search universe and searched surfaces. After not-found, inconclusive, unverified,
@@ -47,20 +41,15 @@ or insufficient output, the parent may make a new fresh-context call to correct 
 detail, or widen breadth. Give each child one independent information need and fan out sibling calls,
 selecting breadth, detail, and model tier per child. A fan-out may combine a large analysis child with
 small targeted paths or summary children. Refinement that depends on a prior result remains
-sequential. Grounding, exploration, and review follow awf's no-mutation profile policy.
-Implementation must run alone in its parent tool batch and remains sequential and commit-disabled. When a task explicitly operates in a supplied managed
-worktree, the caller sets `verificationCheckout` to that path and keeps actual mutation paths
-explicit; root work omits the field. In Pi, model omission uses the configured role default and an
-exact tier reference is supplied only for a deliberate override.
+sequential. Premise checking, exploration, and review are report-only.
+Implementation remains commit-disabled. A sequential call runs alone; a parallel wave contains only implementation calls for the established disjoint units and is bounded to four. When work operates in a supplied managed worktree, every call sets `verificationCheckout` to that same path and keeps its mutation paths explicit; root work omits the field. In Pi, model omission uses the configured role default and an exact tier reference is supplied only for a deliberate override.
 
 Pi adopters install `hypnotox/pi-tools` independently at any protocol-v2-compatible revision. A
 successful capability handshake and final awf profile registration establish compatibility; missing,
 incompatible, late, or rejected negotiation reports an actionable prerequisite error and activates
 no awf fallback. `pi-tools` owns general scheduling, execution, confinement, progress presentation,
 context usage, and handoff mechanics. Awf renders the workflow-specific profile adapter and retained
-effort integration. Brainstorming uses grounding, while brainstorming, debugging, and coupling
-audits share the exploring skill when its conjunctive dispatch condition holds. Missing or modified
-awf adapter files are `awf check` drift; run `./awf render` to repair them.
+effort integration. Repository-context guidance selects orientation, exploration, or premise challenge as needed. Missing or modified awf adapter files are `awf check` drift; run `./awf render` to repair them.
 
 ## Session replacement
 

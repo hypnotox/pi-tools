@@ -24,10 +24,10 @@ Override an adopter-authored section with `.awf/parts/agents-doc/<section>.md`, 
 
 - **Identity**: one dense present-tense paragraph covering purpose, stack and module path, maturity, and audience.
 - **You and this project**: two or three sentences stating ownership of the project, not only the task.
-- **Invariants**: one terse imperative per genuinely cross-cutting hard rule, with an owning ADR or a canonical pointer where available.
+- **Invariants**: one terse imperative per genuinely cross-cutting hard rule, with a canonical authority pointer where available.
 - **Every sentence**: retain it only when it is needed before native skill selection or points to canonical authority.
 
 <!-- awf:edit rules: default; create .awf/parts/agents-md-standard/rules.md to override -->
 ## Rules
 
-Do not include a native-skill inventory, procedure, rationale, or mechanism narration. Skills own operative dispatch; workflow, current-state topics, ADRs, and documents own their respective detail. Do not duplicate the working-memory protocol: route to the workflow document. Keep the guide publication-safe with coherent unset values and no unresolved token. Refer to a placeholder by key name; reserve literal placeholder syntax for reference documentation unless the guide's brace guard deliberately recognizes it. Byte budgets are regression signals, not fill targets. Put non-essential detail in canonical documentation reached through the document map.
+Do not include a native-skill inventory, procedure, rationale, or mechanism narration. Skills own operative dispatch; workflow, current-state topics, decision records, and documents own their respective detail. Do not duplicate the working-memory protocol: route to the workflow document. Keep the guide publication-safe with coherent unset values and no unresolved token. Refer to a placeholder by key name; reserve literal placeholder syntax for reference documentation unless the guide's brace guard deliberately recognizes it. Byte budgets are regression signals, not fill targets. Put non-essential detail in canonical documentation reached through the document map.

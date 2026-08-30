@@ -1,22 +1,18 @@
 prefix: pi-tools
 commitPolicy:
-  grandfatheredThrough: d901af765a933556f563e573e1a184caf2096b28
-  allowedIdentities:
-    - name: Josua Müller
-      email: hypnotox@pm.me
-  requireSignedCommits: true
-  allowedSigners:
-    - principal: hypnotox@pm.me
-      key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF8DILJOI+TMmpnFxH0vS+3WuhYyFZHRIMfPfiLZYK18
+    grandfatheredThrough: d901af765a933556f563e573e1a184caf2096b28
+    allowedIdentities:
+        - name: Josua Müller
+          email: hypnotox@pm.me
+    requireSignedCommits: true
+    allowedSigners:
+        - principal: hypnotox@pm.me
+          key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF8DILJOI+TMmpnFxH0vS+3WuhYyFZHRIMfPfiLZYK18
 integrationBranch: main
 vars:
-  activeMdRegenCmd: ./awf render
-  checkCmd: ./awf check
-  commitGateCmd: ./awf check staged commit
-  gateCmd: npm run check
-  testCmd: npm test
+    checkCmd: ./awf check
+    gateCmd: npm run check
 bootstrap:
-  enabled: true
+    enabled: true
 domains:
-  - development
-profile: full
+    - development

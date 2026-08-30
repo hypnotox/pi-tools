@@ -4,8 +4,7 @@
 # current-state transition backstop on a merge git resolves by itself. Git runs no pre-commit
 # hook for a true merge commit. A conflict-free automerge that lands two
 # records on one identity, or a transition nobody authored, would otherwise reach the integration
-# branch unchecked. Final message trailers and MERGE_HEAD parents are not available at this hook;
-# commit-msg owns definitive stale-ADR authorization. Inert until
+# branch unchecked. Inert until
 # wired into a hook setup you own, e.g. a
 # .git/hooks/pre-merge-commit stub containing:
 #   exec bash .awf/hooks/pre-merge-commit.sh "$@"

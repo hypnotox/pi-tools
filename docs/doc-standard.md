@@ -11,8 +11,8 @@ awf-managed docs orient and link; they do not restate. Each fact lives in the si
 
 - **Terse.** Managed docs are read repeatedly; every word is a recurring cost. Use the shortest phrasing that stays precise.
 - **Glossary entries are terser still.** One sentence stating what the thing is; a second only when a contrast or boundary is load-bearing. Do not restate what the term's own words already say. An over-long entry raises a non-failing advisory.
-- **Linter-rules out of prose.** State a tooling-enforced rule once and cite the ADR that owns it; do not narrate the mechanism. The agent meets the check regardless.
-- **Reference, don't restate.** Link an ADR by id for rationale instead of reproducing it: one source of truth per fact.
+- **Linter-rules out of prose.** State a tooling-enforced rule once and point to its current-state owner; do not narrate the mechanism. The agent meets the check regardless.
+- **Reference, don't restate.** Link a decision record for durable rationale instead of reproducing it: one source of truth per fact.
 - **No editorializing or dating.** Write the rule, not its history or a judgement of it.
 - **Prefer count-free prose.** Name a changing set or its selection rule instead of stating its current count. When an exact count is essential, state the query that produces it and reverify it whenever the source population changes.
 - **Punctuation restraint.** Prefer ordinary punctuation and sentence structure. In every tracked text file, an en dash is prohibited and each blank-line-delimited paragraph may contain at most two em dashes. Both the single-codepoint and three-period forms of ellipsis are permitted, as are all curly quotes. Use a path-and-codepoint exemption only for a quotation, frozen record, or text that discusses a guarded character.
@@ -46,19 +46,18 @@ Declare repository-specific documentation that no standard document owns in
 The command creates and reports `docs/<name>.md`; without `--title`, it derives the title from the final
 kebab-case name segment (`api-v2` becomes `Api V2`). Each item has only a lowercase kebab-case path below `docs`, a
 title, and a one-line description; `decisions`, `plans`, `domains`, `topics`, and `pitfalls` are
-reserved. Render creates `docs/<name>.md`. Edit only its body between `awf:edit-in-place` and
-`awf:end`; awf owns the heading and shell. Run `./awf render` and `./awf check` after changing a
+reserved. Render creates `docs/<name>.md`. Edit only its body after the `awf:edit-in-place` pointer
+through end-of-file; awf owns the heading and shell. Run `./awf render` and `./awf check` after changing a
 declaration or body. Removing a declaration, or running `./awf uninstall`, saves a present local
 document beside itself as `.awf-bak` (with a numbered suffix if needed) before removal.
 
 Section-overridable catalog docs and `AGENTS.md` use their `awf:edit` pointers.
 Topic pages name their metadata-and-claim-part pair, while indexes and domain navigation name those
 family globs. Glossary names its sidecar and `derived:awf-standard-vocabulary`; the pitfall index
-names `.awf/docs/pitfalls/*.md`, while each pitfall leaf names its exact authored source. The ADR
-index names `derived:authored-adr-corpus`; the config reference names `derived:configspec` and
-`derived:project-configuration`; target bridges name `AGENTS.md`. Authored ADRs and plans are
-banner-free. For any source change, edit the authority, run `./awf render`, run `./awf check`, and
-commit the regenerated outputs and lock together.
+names `.awf/docs/pitfalls/*.md`, while each pitfall leaf names its exact authored source. The config
+reference names `derived:configspec` and `derived:project-configuration`; target bridges name
+`AGENTS.md`. Authored decision records are banner-free, unparsed Markdown. For any source change, edit the authority,
+run `./awf render`, run `./awf check`, and commit the regenerated outputs and lock together.
 
 To change one section, drop a **convention part** at `.awf/<kind>/parts/<target>/<section>.md` (for a
 doc, `.awf/docs/parts/<name>/<section>.md`; for an always-on singleton,

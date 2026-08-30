@@ -17,17 +17,11 @@ Everything else about how the change is carried out is the route: phase and task
 
 Precedence is decided per constraint, not per rule. A clause that bears only on how a change is carried out is subordinate to the protected contract, so one rule may be protected in its protected clauses and subordinate in its route clauses. A route detail binds only when a settled decision states that it is load-bearing.
 
-Core and Full select available governance artifacts. They do not select different standards of correctness, autonomy, maintainability, or review quality. Core includes the operational workflow. Full adds ADR, plan, current-state, and audit capabilities.
+Awf renders one standard governance footprint. Projects apply its capabilities when relevant rather than selecting a profile or rigor mode.
 
 ### Model selection
 
 Every governed subagent dispatch chooses the smallest model expected to complete reliably: `small` is for narrow, mechanical, low-ambiguity work; `standard` is for substantive but bounded work; and `large` is for broad, intricate, cross-cutting, or high-consequence work. Uncertainty, failed reasoning, or widened scope requires reconsideration and possible escalation. A runtime with model selection chooses explicitly; an unsupported runtime uses its harness default and notes that explicit selection is unavailable.
-
-**Plan flexibility.**
-
-The protected-contract rule in the workflow document governs what a plan may not change. The plan records the best known route at authoring time, not a binding implementation choreography. The parent may merge, split, reorder, add, remove, or replace recorded route detail while the protected contract holds, and may batch independent cheap operations only when they safely share context. Batching never transfers transaction authority or weakens path confinement. An implementation child remains commit-disabled and confined to its assigned paths. A path omitted from the plan is not alone a reason to stop, and a stale listed path need not be touched. Reapproval is required only when the protected contract would change or an unresolved material decision appears.
-
-Reconcile a Proposed plan only when another phase or reviewer could rely on stale material instructions. Inconsequential and independently local edits require no deviation record. A delegated owner reports material cross-owner revisions for parent reconciliation. A helper remains confined to its assigned paths and gains no scope, commit, review, checkpoint, handoff, or outcome authority from route flexibility.
 
 **Semantic-owner assurance.**
 
@@ -40,50 +34,29 @@ Decomposition preserves parent-owned focused evidence for each fresh unit, and t
 <!-- awf:edit chain: default; create .awf/parts/workflow/chain.md to override -->
 ## The chain
 
-**Rule.** Evaluate brainstorming, continuity/effort, grounding, ADR, plan, and implementation-review triggers independently at intake. Re-evaluate only affected triggers when material facts change and activate newly warranted support before further mutation; prior valid work remains valid. No line count, artifact type, or another mechanism firing selects a trigger.
+**Rule.** Evaluate brainstorming, continuity/effort, grounding, durable-decision, operational-planning, and implementation-review triggers independently at intake. Re-evaluate only affected triggers when material facts change and activate newly warranted support before further mutation; prior valid work remains valid. No line count, artifact type, or another mechanism firing selects a trigger.
 
 **Required evidence.** Repository authority, documentation currency, verification, and commit obligations apply to every change regardless of which triggers fire.
 
-**Approval rule.** Brainstorming stops only for an unresolved material decision, not for the act of mutating production code. It presents the proportionate outline and obtains explicit approval. Retained conversation, user-provenance effort Decision-log evidence, or an explicit request to execute a named plan whose Architecture summary supplies the outline each establish the approved boundary. A delegated owner consumes that boundary without another approval interaction.
+**Approval rule.** Brainstorming stops only for an unresolved material decision, not for the act of mutating production code. It presents the proportionate outline and obtains explicit approval. Retained conversation, user-provenance effort Decision-log evidence, or an explicitly approved effort-local operational plan each establish the approved boundary. A delegated owner consumes that boundary without another approval interaction.
 
-**Flexible details.** A routine change proceeds autonomously while its protected contract holds, whatever kind of file it touches. The approval boundary precedes ADR and plan authoring; later artifact and implementation work continues inside it. Effort, grounding, ADR, plan, and review triggers remain independent.
+**Flexible details.** A routine change proceeds autonomously while its protected contract holds, whatever kind of file it touches. The approval boundary precedes durable decision authoring and implementation; later artifact and implementation work continues inside it. Effort, grounding, durable-decision, operational-planning, and review triggers remain independent.
 
 **Stop when.** Return through brainstorming when a new material decision appears or the approved boundary must change. Report an unresolved blocker or safety or correctness concern through the active workflow only after diagnosis.
 
-A plan phase is one independently green coherent implementation transaction and declares `inline`
-or `subagent-driven` ownership independently of every other phase. Heading-identified tasks are ordered steps,
-not commit, dispatch, review, or checkpoint boundaries. The parent takes every complete phase from a known clean green baseline through integration,
-explicit staging, staged check, every commit, fast gates, and terminal exhaustive verification. A
-subagent-driven phase uses one sequential commit-disabled implementation child for its complete
-assigned scope; the child runs only bounded focused checks and never stages, commits, or runs a gate.
-The parent owns every report-only review settlement. Additional commit-disabled helpers may execute
-only explicit path-disjoint batch subsets, never shared files or the closing commit. If a phase owner
-stops dirty, the parent inventories the checkout and explicitly
-completes inline, restores and restarts the complete phase, or transfers the complete revised phase
-with recovery context; it never issues a blind task-level continuation. Runtime phase enforcement
-is not promised. A plan-v2 task projection may include a generated scope notice, Phase close, and
-Advances/Completes outcomes, but these are phase-owner constraints only and never transfer commit,
-review, checkpoint, handoff, helper, or outcome authority.
+When sequencing, coordination, or resumability materially helps, the parent may keep an unparsed operational plan at the resolved effort resident's `scratch/plan.md`. The file is implementation-time context only: awf does not parse, scaffold, inventory, project, review, or separately archive it. It travels as opaque effort scratch bytes and disappears from active project state when the effort is archived. The parent remains responsible for implementation route, integration, staging, commits, verification, review judgment, checkpoints, and outcomes.
 
 - Brainstorming is warranted only for a material choice or clarification.
 
-- An **ADR** is warranted by *load-bearing-ness*: a design decision the project must remember; when warranted it is written **and reviewed to a settled state before planning begins**, because the plan is execution detail derived from the decision. **Planning** is warranted when sequencing, coordination, or resumability materially helps: multi-commit or interdependent steps are common examples when they meet that criterion.
+- A durable decision record is warranted by load-bearingness: a decision the project must remember after implementation. Operational planning is warranted only when sequencing, coordination, or resumability materially helps.
 
-- A plan records and operationalizes approved choices rather than inventing speculative structure, checks, or work.
+- An operational plan records and organizes approved choices rather than inventing speculative structure, checks, or work. It is not durable authority and has no lifecycle separate from its effort.
 
-- Many tasks need neither, and the ADR-to-plan relationship is many-to-many: one plan links zero or more ADRs through parsed plan-level `adrs:`, and one ADR may have several linked Proposed plans.
+- Many tasks need neither a durable decision record nor an operational plan.
 
-- Each written artifact gets a fresh-context review.
+- Review is selected by material risk and uncertainty, not by artifact type or lifecycle state.
 
-- Full ordinary plan review verifies every linked ADR.
-
-- A substantive ADR amendment or review correction invalidates every linked Proposed plan's prior review: settle ADR review first, then run ordinary plan review separately for each deterministic typed linked-plan reference.
-
-- Never select linked plans by modification time or session implication.
-
-- A plan correction that would contradict linked authority returns to ADR amendment and review first.
-
-- If implementation has started, inventory affected completed phases and renew assurance where the changed decision can affect landed work before progression.
+- If implementation has started and durable authority changes, inventory affected completed work and renew assurance where the change can affect landed behavior before progression.
 
 - Implementation review is optional only for locally obvious, low-risk, directly verified work and otherwise follows the approved risk trigger.
 
@@ -93,10 +66,7 @@ review, checkpoint, handoff, helper, or outcome authority.
 
 - Existing efforts resume under their fixed identity only for work inside their outcome. Refinements remain in that effort; material outcome drift deliberately creates a fixed-identity successor, transfers necessary still-valid context, verifies successor resumability, then closes the obsolete effort through existing topology safety and finish/archive lifecycle. Never silently reuse, rename, replace, or create beside the active effort.
 
-- Independent fresh-context children may run concurrently where supported, but they are report-only with respect to that shared memory; refinement stays sequential, a lower-cost child model is selected deliberately when supported, and shared-checkout implementation stays alone. Governance footprints add no depth controls, rigor modes, routers, classifiers, or runtime policy knobs.
-
-
-For the detailed criteria of when a decision is load-bearing enough to warrant an ADR (and the ADR format itself), see [`docs/decisions/README.md`](decisions/README.md).
+- Independent fresh-context children may run concurrently where supported, but they are report-only with respect to shared memory and dependent refinement stays sequential. Shared-checkout implementation may use a bounded wave only for dependency-independent canonical disjoint write sets; otherwise it stays sequential. The standard footprint adds no depth controls, rigor modes, routers, classifiers, or runtime policy knobs.
 
 
 <!-- awf:edit working-memory: default; create .awf/parts/workflow/working-memory.md to override -->
@@ -127,7 +97,7 @@ For the detailed criteria of when a decision is load-bearing enough to warrant a
 
 - Its immutable slug is the command identity, resident directory, worktree path, and branch suffix; it always owns `.awf/efforts/<slug>/memory.md`.
 
-- Creation makes a managed worktree at `.awf/worktrees/<slug>/` by default and reports the path; execution continues there, with `--no-worktree` as the explicit exception that keeps the invoking checkout.
+- Creation makes a managed worktree at `.awf/worktrees/<slug>/` and reports the path; execution continues there.
 
 - The owned memory stays under the primary checkout: the literal `.awf/efforts/<slug>/memory.md` spelling is primary-root-relative, and effort commands print a resolvable absolute path from anywhere else.
 
@@ -154,13 +124,11 @@ For the detailed criteria of when a decision is load-bearing enough to warrant a
 
 - Brainstorming retains the single mandatory pre-artifact outline approval check-in, stopping for explicit approval and persisting it only when an effort exists.
 
-- Settled ADR review continues autonomously to linked-plan handling or the independently selected implementation path.
-
 - At a persisted formal phase or approval checkpoint, or another safe resumable point whose immediate successor can start independently, judge retained-context relevance and successor work. Continue autonomously or through a target-native successor when one is available. Handoff is prohibited while required late-creation memory initialization remains incomplete.
 
 - Reorient from repository authority before substantive successor work. Append a log only for an actual fresh boundary; continuation, cancellation, or failure that leaves the current session active appends none. Target-specific skill guidance owns any executable replacement protocol.
 
-A routine implementation checkpoint occurs only after a phase's closing commit has received report-only review and all findings are settled; heading-identified tasks, executable projections, and helper returns are not checkpoint boundaries.
+A routine implementation checkpoint occurs only at a safe resumable transaction boundary after required verification and any selected review have settled; task headings and helper returns are not checkpoint boundaries.
 
 ### Memory format and logs
 
@@ -188,11 +156,11 @@ A routine implementation checkpoint occurs only after a phase's closing commit h
 ### Finish and prohibitions
 
 
-- Never commit the file or cite a concrete owned-memory path in a durable ADR, plan, or commit message; the bare efforts directory and angle-bracket placeholder form remain legal.
+- Never commit the file or cite a concrete owned-memory path in a durable decision record or commit message; the bare efforts directory and angle-bracket placeholder form remain legal.
 
 - Optional `activity.json` is advisory and may make older binaries unable to read the effort, but never gates unrelated show, list, or finish commands.
 
-- After implementation assurance settles or is explicitly skipped, `effort-workflow` integrates a managed-worktree effort, activates review after any divergent merge, completes deferred artifact transitions, removes path, registration, and branch, invokes retrospective, and runs `./awf effort finish <slug>` last.
+- After implementation assurance settles or is explicitly skipped, `effort-workflow` integrates a managed-worktree effort, activates review after any divergent merge, removes path, registration, and branch, invokes retrospective, and runs `./awf effort finish <slug>` last.
 
 
 <!-- awf:edit commit-discipline: default; create .awf/parts/workflow/commit-discipline.md to override -->
@@ -203,7 +171,7 @@ Use Conventional Commits, one concern per commit. Stage files explicitly rather 
 <!-- awf:edit doc-currency: default; create .awf/parts/workflow/doc-currency.md to override -->
 ## Documentation currency
 
-Documentation travels with the change that makes it true. When you change behaviour, update the affected docs (this file, the agent guide, ADRs, and any reference tables) in the same commit.
+Documentation travels with the change that makes it true. When you change behaviour, update the affected docs, current-state claims, decision records, and reference tables in the same commit.
 
 <!-- awf:edit composing-the-gate: from .awf/parts/workflow/composing-the-gate.md -->
 ## Composing the gate
@@ -215,7 +183,7 @@ Keep both layers deterministic and fast. Add the cheapest reliable check for eac
 <!-- awf:edit local-hooks: default; create .awf/parts/workflow/local-hooks.md to override -->
 ## Local git hooks
 
-awf always renders five inert payload scripts under `.awf/hooks/`: `pre-commit.sh` (rendered-file drift check, then the gate), `commit-msg.sh` (the definitive commit-message and stale-ADR merge gate), `pre-merge-commit.sh` (the staged check available before Git exposes final message and parent evidence), `reference-transaction.sh` (a local ref-update provenance check when commit policy is configured), and `pre-push.sh` (the provenance check followed by the fullest configured gate tier). awf never installs or activates Git hooks; the payloads are tracked and kept current by `awf render` like every rendered file, and do nothing until you invoke them from hook wiring you own:
+awf always renders five inert payload scripts under `.awf/hooks/`: `pre-commit.sh` (rendered-file drift check, then the gate), `commit-msg.sh` (the definitive commit-message gate), `pre-merge-commit.sh` (the staged check), `reference-transaction.sh` (a local ref-update provenance check when commit policy is configured), and `pre-push.sh` (the provenance check followed by the configured gate). awf never installs or activates Git hooks; the payloads are tracked and kept current by `awf render` like every rendered file, and do nothing until you invoke them from hook wiring you own:
 
 
 - a per-clone stub under `.git/hooks/`;
@@ -226,7 +194,7 @@ awf always renders five inert payload scripts under `.awf/hooks/`: `pre-commit.s
 
 A tracked stub should locate the invoking worktree, not assume the primary checkout or its current directory, then exec that worktree's payload. For example: `repo_root=$(git rev-parse --show-toplevel) || exit 1; exec bash "$repo_root/.awf/hooks/pre-push.sh" "$@"`. This form works whether `core.hooksPath` is absolute or relative and ensures linked worktrees resolve their own configuration. Before enabling a commit policy or wiring its two enforcement payloads, run `./awf check commit-policy <revision-or-range>...` over the intended history and correct its findings. Local hooks are only a client-side preflight: the remote's protected-branch and receiving policy are the final boundary.
 
-`awf check staged commit` is the deterministic, blocking commit-message gate: it validates Conventional Commits and rejects concrete effort-memory citations. It also definitively qualifies any older-format ADR introduced by a real merge against the incoming parents and adjacent `AWF-Allow-Version` / nonempty `AWF-Allow-Reason` trailers. Malformed reserved trailers refuse. A refusal leaves the index and `MERGE_HEAD` intact: correct the message and run `git commit` to finish the existing merge. A proactive flow may use `git merge --no-commit --no-ff`; a true fast-forward has no authorization event. Never retrofit the ADR or create allowance state. The `commit-msg.sh` payload runs the check with Git's message file; run `./awf check staged commit --help` for details.
+`awf check staged commit` is the deterministic, blocking commit-message gate: it validates Conventional Commits and rejects concrete effort-memory citations. The `commit-msg.sh` payload runs the check with Git's message file; run `./awf check staged commit --help` for details.
 
 **Your stub is the override point.** The rendered payloads are deliberately all-or-nothing; they take no convention parts. To deviate from a payload's policy (say, a docs-only fast path that skips the test gate), put the deviation in the stub you own instead of forking the payload: keep the payload canonical, have the stub carry the project-specific logic, and mark the divergence with a comment naming it a deliberate deviation from the rendered script. The payload then keeps updating through `awf render` while your deviation stays visible, reviewable, and yours.
 

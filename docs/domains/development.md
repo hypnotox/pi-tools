@@ -16,4 +16,3 @@ The development domain owns contributor tooling and verification contracts for e
 - [Extension Toolchain](../topics/development/extension-toolchain.md): Shared language, quality, and verification contracts for executable Pi extensions.
 - [Subagent Toolkit](../topics/development/subagent-toolkit.md): Runtime and public profile integration contracts for general-purpose subagent delegation.
 - [Usage Limit Resume](../topics/development/usage-limit-resume.md): Detection, waiting, and automatic resume contracts for provider usage-limit interruptions.
-
