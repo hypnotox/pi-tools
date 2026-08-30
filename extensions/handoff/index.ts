@@ -241,10 +241,7 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
         "When using handoff_session, assume the replacement starts without knowledge of the previous conversation; put every necessary fact in durable files or the kickoff and cite relevant files explicitly.",
         "When using handoff_session, include the objective, current state, next action, relevant references, decisions, constraints, completed work, verification, blockers, and unresolved questions only when relevant.",
       ],
-      parameters: Type.Object(
-        { kickoff: Type.String({ maxLength: MAX_KICKOFF_BYTES }) },
-        { additionalProperties: false },
-      ),
+      parameters: Type.Object({ kickoff: Type.String() }, { additionalProperties: false }),
       async execute(_id, params, _signal, _update, context) {
         if (context.mode !== "tui" || !context.sessionManager.getSessionFile())
           throw new Error("handoff_session requires a persisted interactive Pi TUI session");

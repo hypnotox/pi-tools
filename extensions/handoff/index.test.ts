@@ -274,7 +274,12 @@ describe("fresh-session handoff extension", () => {
     const h = await createHarness();
 
     await h.execute("original kickoff");
-    for (const ignoredKickoff of ["ignored retry kickoff", " ", `x${"😀".repeat(4_096)}`]) {
+    for (const ignoredKickoff of [
+      "ignored retry kickoff",
+      " ",
+      `x${"😀".repeat(4_096)}`,
+      "x".repeat(16 * 1_024 + 1),
+    ]) {
       await expect(h.execute(ignoredKickoff)).resolves.toMatchObject({
         content: [{ type: "text", text: "Fresh-session handoff already queued." }],
         details: { kickoff: "original kickoff" },
@@ -283,6 +288,7 @@ describe("fresh-session handoff extension", () => {
     }
 
     expect(h.queuedCommands).toEqual([
+      ["handoff-session-continue", "request-id"],
       ["handoff-session-continue", "request-id"],
       ["handoff-session-continue", "request-id"],
       ["handoff-session-continue", "request-id"],
@@ -398,9 +404,7 @@ describe("fresh-session handoff extension", () => {
 
   it("enforces the 16 KiB UTF-8 kickoff boundary", async () => {
     const schemaHarness = await createHarness();
-    expect(schemaHarness.tools[0]?.parameters).toMatchObject({
-      properties: { kickoff: { maxLength: 16 * 1_024 } },
-    });
+    expect(schemaHarness.tools[0]?.parameters).not.toHaveProperty("properties.kickoff.maxLength");
 
     await expect((await createHarness()).execute("x".repeat(16 * 1_024))).resolves.toMatchObject({
       terminate: true,
