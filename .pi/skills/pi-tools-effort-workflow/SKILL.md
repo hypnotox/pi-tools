@@ -11,14 +11,14 @@ Use when durable continuity materially helps multi-step work, likely resumption,
 <!-- awf:edit continuity-and-resident: default; create .awf/skills/parts/effort-workflow/continuity-and-resident.md to override -->
 ## Continuity, identity, and resident
 
-Judge continuity at entry and again when continuity-relevant facts change. Create or resume only when it helps. An effort has a fixed title and slug, one resident at `.awf/efforts/<slug>/memory.md`, and one deterministic managed worktree at `.awf/worktrees/<slug>` on `awf/<slug>`. Do not retitle, create parallel residents or worktrees, infer another topology, or use activity as a lock.
+Judge continuity at entry and again when continuity-relevant facts change. Create or resume only when it helps. An effort has a fixed title and slug, one resident with a memory path reported by `./awf effort show <slug>`, and one deterministic managed worktree at `.awf/worktrees/<slug>` on `awf/<slug>`. Do not retitle, create parallel residents or worktrees, infer another topology, or use activity as a lock.
 
-Create with the ordinary `./awf effort` creation command. If discussion predates creation, initialize the resident from retained evidence: outcome, settled decisions with actual approval evidence, observations, phase, and next action. Do not reconstruct missing approval evidence. On resume or takeover, validate the slug and resident path, identify the sole writer, and revalidate all checkpoint claims against repository authority, source, tests, history, and applicable current state. Memory is a checkpoint, not authority.
+Create with the ordinary `./awf effort` creation command. If discussion predates creation, initialize the resident from retained evidence: outcome, settled decisions with actual approval evidence, observations, phase, and next action. Do not reconstruct missing approval evidence. On resume, run `./awf effort show <slug>` from the current checkout to resolve the memory path, identify the sole writer, and revalidate all checkpoint claims against repository authority, source, tests, history, and applicable current state. Memory is a checkpoint, not authority.
 
 <!-- awf:edit execution-and-checkpoints: default; create .awf/skills/parts/effort-workflow/execution-and-checkpoints.md to override -->
 ## Execution, checkpoints, and handoff
 
-Use the exact managed worktree for pre-integration work. Write a checkpoint at a meaningful resumable boundary: completed work, decisions and observations, verification, repository state, next action, and blockers. A handoff or switch requires such a checkpoint; the successor reorients and revalidates before substantive work. Before switching away, leave the current effort resumable or deliberately discontinue it after transferring necessary valid context.
+Use the exact managed worktree for pre-integration work. Use ordinary file tools to update the reported Markdown memory path. Write a checkpoint at a meaningful resumable boundary: completed work, decisions and observations, verification, repository state, next action, and blockers. A handoff or switch requires such a checkpoint; the successor reorients and revalidates before substantive work. Before switching away, leave the current effort resumable or deliberately discontinue it after transferring necessary valid context.
 
 A changed material outcome needs a fixed-identity successor, not a renamed effort. Create and make the successor resumable, transfer only valid context, then close the obsolete effort safely.
 
