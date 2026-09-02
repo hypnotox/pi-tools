@@ -21,9 +21,9 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "format": "biome check --write .",
-    "format:check": "biome check --linter-enabled=false .",
-    "lint": "biome lint .",
+    "format": "node scripts/run-biome.mjs check --write --linter-enabled=false",
+    "format:check": "node scripts/run-biome.mjs check --linter-enabled=false",
+    "lint": "node scripts/run-biome.mjs lint",
     "typecheck": "tsc --noEmit",
     "deadcode": "knip",
     "test": "vitest run",

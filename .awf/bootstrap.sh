@@ -7,7 +7,7 @@
 # stderr.
 set -euo pipefail
 
-AWF_VERSION="${AWF_VERSION:-0.46.0}"
+AWF_VERSION="${AWF_VERSION:-0.46.1}"
 REPO="hypnotox/agentic-workflows"
 
 # Local-first: an awf on PATH reporting exactly the pinned version wins over

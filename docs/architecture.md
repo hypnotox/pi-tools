@@ -16,7 +16,6 @@
 - `.awf/`: authored workflow configuration and convention parts.
 - `.pi/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, and the generated catalog under `docs/`: awf-rendered project workflow and documentation surfaces.
 - `docs/decisions/`: banner-free, append-only durable decision records authored directly.
-- `docs/plans/`: retained historical implementation plans; active operational plans live only in effort scratch and are not durable authority.
 - `testing/`: source-only `pi-tools/testing` harness for documented Pi extension-boundary recordings; it deliberately does not simulate Pi runtime behavior.
 
 

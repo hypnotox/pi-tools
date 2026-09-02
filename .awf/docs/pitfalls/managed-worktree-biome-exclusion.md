@@ -1,6 +1,6 @@
 ---
 title: Managed Worktree Biome Exclusion
 ---
-Canonical effort worktrees live below `.awf/`, while `biome.json` excludes `**/.awf`. A literal Biome or aggregate npm gate run from such a worktree can therefore process zero intended files.
+Canonical effort worktrees live below `.awf/`, while `biome.json` excludes `**/.awf`. A literal Biome invocation over the current directory from such a worktree can therefore process zero intended files.
 
-For managed-worktree verification, use a temporary exhaustive Biome include override for the repository's executable-resource population, require the intended files to be processed, and restore the original configuration on every exit path. Never accept a zero-file result as a passing gate.
+The committed npm format and lint commands route through `scripts/run-biome.mjs`. It selects the repository's nonignored executable-resource population explicitly and fails unless Biome reports that every nonzero selected target was checked. Keep that assertion in the canonical gate instead of relying on a temporary per-run configuration override.

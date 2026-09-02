@@ -10,4 +10,4 @@ Add only specific, durable items. Do not graduate a generic placeholder or an it
 
 <!-- awf:edit deferred: from .awf/docs/parts/roadmap/deferred.md -->
 ## Deferred
-- Make the executable-resource gate run directly from canonical managed worktrees without an external snapshot while still proving the exhaustive intended file population. This promotes the recurring [Managed Worktree Biome Exclusion](pitfalls/managed-worktree-biome-exclusion.md) pitfall toward deterministic enforcement.
+No deferred work is currently recorded.
