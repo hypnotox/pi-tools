@@ -172,7 +172,7 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
         if (!request || token !== request.id) return;
         const envelope = handoffEnvelope(request.kickoff);
         try {
-          if (!(await countdown(context, deps))) {
+          if (context.mode === "tui" && !(await countdown(context, deps))) {
             context.ui.notify("Fresh-session handoff canceled.");
             return;
           }
@@ -231,7 +231,7 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
     pi.registerTool({
       name: TOOL,
       label: "Fresh Session Handoff",
-      description: "Continue in a parent-linked fresh Pi TUI session.",
+      description: "Continue in a fresh, parent-linked persisted Pi session.",
       promptSnippet: "Continue work in a fresh session with a self-contained kickoff",
       promptGuidelines: [
         "When context pressure is low, handoff_session is optional and normal work can continue.",
@@ -243,8 +243,11 @@ export function registerHandoff(pi: ExtensionAPI, deps: HandoffDependencies): vo
       ],
       parameters: Type.Object({ kickoff: Type.String() }, { additionalProperties: false }),
       async execute(_id, params, _signal, _update, context) {
-        if (context.mode !== "tui" || !context.sessionManager.getSessionFile())
-          throw new Error("handoff_session requires a persisted interactive Pi TUI session");
+        if (
+          (context.mode !== "tui" && context.mode !== "rpc") ||
+          !context.sessionManager.getSessionFile()
+        )
+          throw new Error("handoff_session requires a persisted Pi session");
         if (pending) {
           queueHandoff(pending, context);
           return {

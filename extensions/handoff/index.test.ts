@@ -29,6 +29,7 @@ async function createHarness(
     staleAfterFailure?: boolean;
     replacementEditorFails?: boolean;
     existingTools?: string[];
+    mode?: "tui" | "rpc" | "print" | "json";
   } = {},
 ) {
   const clearInterval = vi.fn();
@@ -61,6 +62,25 @@ async function createHarness(
   let oldUiCalls = 0;
   let done: ((result: boolean) => void) | undefined;
   let component: CountdownComponent | undefined;
+  const confirm = vi.fn(async () => true);
+  const custom = vi.fn(
+    (factory: unknown) =>
+      new Promise<boolean>((resolve) => {
+        const make = factory as (
+          tui: { requestRender(): void },
+          theme: unknown,
+          keys: { matches(data: string, binding: string): boolean },
+          finish: (result: boolean) => void,
+        ) => CountdownComponent;
+        done = resolve;
+        component = make(
+          { requestRender: vi.fn() },
+          {},
+          { matches: (data) => data === "escape" },
+          resolve,
+        );
+      }),
+  );
   let queueFails = options.queueFails ?? false;
   let sessionFile: string | undefined = "parent.jsonl";
   let leaf: unknown = {
@@ -71,6 +91,7 @@ async function createHarness(
     },
   };
   const context = shared.makeCommandContext({
+    mode: options.mode ?? "tui",
     sessionManager: {
       getSessionId: () => "parent-session-id",
       getSessionFile: () => sessionFile,
@@ -87,22 +108,8 @@ async function createHarness(
         if (oldContextStale) throw new Error("stale context");
         editor.push(text);
       },
-      custom: (factory: unknown) =>
-        new Promise<boolean>((resolve) => {
-          const make = factory as (
-            tui: { requestRender(): void },
-            theme: unknown,
-            keys: { matches(data: string, binding: string): boolean },
-            finish: (result: boolean) => void,
-          ) => CountdownComponent;
-          done = resolve;
-          component = make(
-            { requestRender: vi.fn() },
-            {},
-            { matches: (data) => data === "escape" },
-            resolve,
-          );
-        }),
+      confirm,
+      custom,
     } as never,
     newSession: async (request) => {
       sessions.push(request as { parentSession?: string });
@@ -159,6 +166,10 @@ async function createHarness(
     cancel: () => component?.handleInput("escape"),
     clearInterval,
     clearTimeout,
+    setInterval: dependencies.setInterval,
+    setTimeout: dependencies.setTimeout,
+    custom,
+    confirm,
     get oldUiCalls() {
       return oldUiCalls;
     },
@@ -225,6 +236,7 @@ describe("fresh-session handoff extension", () => {
     const h = await createHarness();
     const tool = h.tools[0];
 
+    expect(tool?.description).toBe("Continue in a fresh, parent-linked persisted Pi session.");
     expect(tool?.promptSnippet).toBe(
       "Continue work in a fresh session with a self-contained kickoff",
     );
@@ -268,6 +280,52 @@ describe("fresh-session handoff extension", () => {
     expect(h.setupEntries).toEqual([
       ["pi-tools:handoff-continuity", { timing: { agentDurationMs: 5_000, turnCount: 2 } }],
     ]);
+  });
+
+  it("continues an RPC handoff immediately with the exact replacement context", async () => {
+    const h = await createHarness({ mode: "rpc" });
+    const kickoff = "  preserve this RPC kickoff exactly\n";
+    h.api.events.on("pi-tools:handoff-continuity-request", (value: unknown) => {
+      (value as { timing?: unknown }).timing = { agentDurationMs: 7_000, turnCount: 3 };
+    });
+
+    await expect(h.execute(kickoff)).resolves.toMatchObject({
+      content: [{ type: "text", text: "Fresh-session handoff queued." }],
+      details: { kickoff },
+      terminate: true,
+    });
+    await h.continue();
+
+    const envelope = handoffEnvelope(kickoff);
+    expect(h.queuedCommands).toEqual([["handoff-session-continue", "request-id"]]);
+    expect(h.sessions[0]?.parentSession).toBe("parent.jsonl");
+    expect(h.setupEntries).toEqual([
+      ["pi-tools:handoff-continuity", { timing: { agentDurationMs: 7_000, turnCount: 3 } }],
+    ]);
+    expect(h.sent).toEqual([
+      [{ customType: "session-handoff", content: envelope, display: true }, { triggerTurn: true }],
+    ]);
+    expect(envelope.endsWith(kickoff)).toBe(true);
+    expect(h.custom).not.toHaveBeenCalled();
+    expect(h.setInterval).not.toHaveBeenCalled();
+    expect(h.setTimeout).not.toHaveBeenCalled();
+    expect(h.confirm).not.toHaveBeenCalled();
+  });
+
+  it("uses the existing recovery path when RPC session replacement is cancelled", async () => {
+    const h = await createHarness({ mode: "rpc", newCancelled: true });
+    await h.execute("recover RPC exactly");
+
+    await h.continue();
+
+    expect(h.editor).toEqual([handoffEnvelope("recover RPC exactly")]);
+    expect(h.notices).toEqual([
+      ["Fresh-session handoff canceled; recovery text is in the editor.", "warning"],
+    ]);
+    expect(h.custom).not.toHaveBeenCalled();
+    expect(h.setInterval).not.toHaveBeenCalled();
+    expect(h.setTimeout).not.toHaveBeenCalled();
+    expect(h.confirm).not.toHaveBeenCalled();
   });
 
   it("requeues a pending handoff as a terminating success so the active run can settle", async () => {
@@ -386,7 +444,19 @@ describe("fresh-session handoff extension", () => {
     h.dropSession();
     const fresh = await createHarness();
     fresh.dropSession();
-    await expect(fresh.execute()).rejects.toThrow("persisted interactive");
+    await expect(fresh.execute()).rejects.toThrow("persisted Pi session");
+  });
+
+  it("rejects print, JSON, and non-persisted sessions", async () => {
+    for (const mode of ["print", "json"] as const) {
+      const h = await createHarness({ mode });
+      await expect(h.execute()).rejects.toThrow("persisted Pi session");
+    }
+    for (const mode of ["tui", "rpc"] as const) {
+      const h = await createHarness({ mode });
+      h.dropSession();
+      await expect(h.execute()).rejects.toThrow("persisted Pi session");
+    }
   });
 
   it("completes automatically after five seconds and clears both timers", async () => {
