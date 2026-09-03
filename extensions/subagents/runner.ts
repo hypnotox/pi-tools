@@ -353,7 +353,6 @@ export class SubprocessRunner {
         "--print",
         "--no-session",
         "--no-context-files",
-        "--no-skills",
         "--system-prompt",
         promptPath,
         "--model",

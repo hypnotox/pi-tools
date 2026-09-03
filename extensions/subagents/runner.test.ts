@@ -110,7 +110,7 @@ describe("SubprocessRunner", () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
-  it("uses exact isolated arguments, restrictive prompt storage, and descendant trust", async () => {
+  it("loads skills while isolating context files and preserving descendant trust", async () => {
     const deps = dependencies();
     const { promise } = await launch(deps);
     deps.child.emit("close", 0);
@@ -126,7 +126,6 @@ describe("SubprocessRunner", () => {
       "--print",
       "--no-session",
       "--no-context-files",
-      "--no-skills",
       "--system-prompt",
       "/tmp/test/system-prompt.txt",
       "--model",
