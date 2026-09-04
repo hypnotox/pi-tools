@@ -8,9 +8,9 @@
 # deterministic .awf/bootstrap.sh instead.
 #
 # This porcelain runs the ordinary `awf upgrade` for supported live schemas.
-# A below-floor or retired layout is refused without mutation; recover it with a
-# release that supports that source first. If recovery is required, run
-# `awf upgrade --recover` directly.
+# A below-floor or retired layout is refused without mutation; first use a
+# release that supports that source. If an ordered upgrade fails, inspect the
+# reported paths and Git diff, correct the blocker, and rerun this command.
 set -euo pipefail
 
 REPO="hypnotox/agentic-workflows"

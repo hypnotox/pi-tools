@@ -17,7 +17,7 @@ awf-managed docs orient and link; they do not restate. Each fact lives in the si
 - **Prefer count-free prose.** Name a changing set or its selection rule instead of stating its current count. When an exact count is essential, state the query that produces it and reverify it whenever the source population changes.
 - **Punctuation restraint.** Prefer ordinary punctuation and sentence structure. In every tracked text file, an en dash is prohibited and each blank-line-delimited paragraph may contain at most two em dashes. Both the single-codepoint and three-period forms of ellipsis are permitted, as are all curly quotes. Use a path-and-codepoint exemption only for a quotation, frozen record, or text that discusses a guarded character.
 - **Present-tense, authoritative voice.** Describe what is; use the imperative for instructions.
-- **Tool-agnostic, action-first.** Rendered skill and agent prose names the action an agent takes, not the tool one runtime exposes to take it: "dispatch a fresh-context subagent", not a runtime's tool name. Project-specific identifiers (skill names, command names) are not runtime tools and stay. Keep action-first tool-agnostic prose by default. An awf-owned capability-selected integration may name its native tool, as Pi rendering names `subagent_explore`; this exception does not permit arbitrary runtime tool names.
+- **Tool-agnostic, action-first.** Rendered skill prose names the action an agent takes, not the tool one runtime exposes to take it. Project-specific identifiers such as skill and command names are not runtime tools and stay. Keep action-first tool-agnostic prose by default.
 - **Reference catalog docs directly.** Every catalog document renders unconditionally, so authored prose may link any catalog doc; the dead-reference gate still rejects an unknown target.
 - **Local-doc boundary.** When a repository-specific fact has no standard document owner, declare a `localDocs` item and author only its rendered `awf:edit-in-place` body. awf owns the shell and heading.
 - **Adjust `.layout.*` values for link relativity.** `.layout.*` paths are root-relative; a markdown link target resolves file-relative to the citing doc's own directory. Citing a sibling under the documentation root needs only its bare filename (e.g. `doc-standard.md`), not the full `.layout.*` value; using the full value from a file already under the documentation root doubles the path.
@@ -48,8 +48,8 @@ kebab-case name segment (`api-v2` becomes `Api V2`). Each item has only a lowerc
 title, and a one-line description; `decisions`, `plans`, `domains`, `topics`, and `pitfalls` are
 reserved. Render creates `docs/<name>.md`. Edit only its body after the `awf:edit-in-place` pointer
 through end-of-file; awf owns the heading and shell. Run `./awf render` and `./awf check` after changing a
-declaration or body. Removing a declaration, or running `./awf uninstall`, saves a present local
-document beside itself as `.awf-bak` (with a numbered suffix if needed) before removal.
+declaration or body. Removing a declaration, or running `./awf uninstall`, refuses when a present local
+document contains protected authored content. Reconcile the reported path explicitly before rerunning.
 
 Section-overridable catalog docs and `AGENTS.md` use their `awf:edit` pointers.
 Topic pages name their metadata-and-claim-part pair, while indexes and domain navigation name those

@@ -9,7 +9,7 @@ Use the narrowest relevant test, build, or lint command while editing, then run 
 <!-- awf:edit awf-setup: default; create .awf/parts/agents-doc/awf-setup.md to override -->
 ## Working with awf
 
-This guide and the project's skills, agents, and docs render from [awf](https://github.com/hypnotox/agentic-workflows) configuration in `.awf/`; change generated sources, run `./awf render` and `./awf check`, and commit generated outputs with their sources. See [docs/working-with-awf.md](docs/working-with-awf.md) for ownership, rendering, and commands.
+This guide, the four repository-local `awf-*` skills, and managed docs render from [awf](https://github.com/hypnotox/agentic-workflows) configuration in `.awf/`; change generated sources, run `./awf render` and `./awf check`, and commit generated outputs with their sources. Install [agentic-skills](https://github.com/hypnotox/agentic-skills) globally for generic skills and roles. Pi users install `pi-tools` separately for role delegation. AWF does not install or probe either dependency. See [docs/working-with-awf.md](docs/working-with-awf.md) for ownership, rendering, and commands.
 
 <!-- awf:edit you-and-this-project: from .awf/parts/agents-doc/you-and-this-project.md -->
 ## You and this project
@@ -41,12 +41,12 @@ Hard rules every change must respect:
 <!-- awf:edit workflow: default; create .awf/parts/agents-doc/workflow.md to override -->
 ## Workflow
 
-Treat exposed native-skill descriptions as routing metadata. Before loading a skill, identify the next concrete action. Load only a skill that governs that action; a possible later edit, render, documentation update, review, or commit does not justify loading its skill now. Load multiple bodies only when each independently governs that same next action before another routing decision can occur. Before any mutation, load the native skill that governs that action. Change size, including a minimal change, never excuses this routing step. The workflow governs a change's protected contract, not its execution route. Obtain an explicitly approved proportionate outline through brainstorming when a material decision is unresolved, not because a change touches production code. Apply the clean-integration operative rule proportionally; `docs/maintainable-code-design.md` remains its canonical doctrine owner. Preserve the approved design boundary; see `docs/maintainable-code-design.md`. Route settled content by authority lifetime: durable choices belong in decision records, active rules in current-state topics, operational plans in effort scratch, and transient context in effort memory. Conventional Commits; one concern per commit. See [docs/workflow.md](docs/workflow.md) for workflow procedure.
+Treat exposed native-skill descriptions as routing metadata. Globally installed `agentic-*` skills govern general context, brainstorming, debugging, code design, planning, implementation, and review. Repository-local `awf-*` skills govern only AWF efforts, topics, durable decisions, and maintenance. Before loading a skill, identify the next concrete action. Load only a skill that governs that action; a possible later edit, render, documentation update, review, or commit does not justify loading its skill now. Load multiple bodies only when each independently governs that same next action before another routing decision can occur. Before any mutation, load the native skill that governs that action. Change size, including a minimal change, never excuses this routing step. The workflow governs a change's protected contract, not its execution route. Resolve a material choice through `agentic-brainstorming`; use `agentic-code-design` only for structural questions raised by agreed behavior. Preserve the approved design boundary. Route settled content by authority lifetime: durable choices belong in decision records, active rules in current-state topics, and transient context in effort memory. Generic plans remain interaction-local by default; only deliberately effort-backed operational plans enter effort scratch. Conventional Commits; one concern per commit. See [docs/workflow.md](docs/workflow.md) for workflow procedure.
 
 <!-- awf:edit working-memory: default; create .awf/parts/agents-doc/working-memory.md to override -->
 ## Working memory
 
-Evaluate continuity independently; when durable continuity materially helps, use the applicable native workflow skill to create or resume an effort. One effort has one user-managed memory writer; see the working-memory protocol in [docs/workflow.md](docs/workflow.md).
+Evaluate continuity independently; when durable continuity materially helps, use `awf-effort` to create or resume an effort. One effort has one user-managed memory writer; see the working-memory protocol in [docs/workflow.md](docs/workflow.md).
 
 <!-- awf:edit commands: from .awf/parts/agents-doc/commands.md -->
 ## Commands
@@ -61,7 +61,6 @@ Evaluate continuity independently; when durable continuity materially helps, use
 - **Authoring AGENTS.md:** [docs/agents-md-standard.md](docs/agents-md-standard.md), layout and rules for the agent guide.
 - **Configuration reference:** [docs/config-reference.md](docs/config-reference.md), awf configuration and this project's live state.
 - **Documentation standard:** [docs/doc-standard.md](docs/doc-standard.md), awf-managed prose rules.
-- **Maintainable code design:** [docs/maintainable-code-design.md](docs/maintainable-code-design.md), design boundaries and dependency direction.
 - **Workflow:** [docs/workflow.md](docs/workflow.md), contributor workflow and continuity.
 - **Working with awf:** [docs/working-with-awf.md](docs/working-with-awf.md), source/render/check procedure.
 - **Architecture:** [docs/architecture.md](docs/architecture.md), the four package capabilities and dependencies.

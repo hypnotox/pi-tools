@@ -18,7 +18,7 @@ This guide covers day-to-day source and render handling. [Workflow](workflow.md)
 - `./awf config [<key-or-var>]`: inspect effective configuration.
 
 Use the repository `./awf` wrapper for local commands. For workflow and effort commands, see
-[Workflow](workflow.md); for a command refusal, recovery, or upgrade residue, see
+[Workflow](workflow.md); for a command refusal or failed upgrade, see
 [Debugging](debugging.md).
 
 <!-- awf:edit config-and-overrides: default; create .awf/parts/working-with-awf/config-and-overrides.md to override -->
@@ -34,12 +34,12 @@ page names its metadata and claim part. Local documents are the exception: edit 
 after the `awf:edit-in-place` pointer through end-of-file. See the [documentation standard](doc-standard.md) for
 authorship rules.
 
-<!-- awf:edit model-selection: from .awf/parts/working-with-awf/model-selection.md -->
-## Advanced workflow
+<!-- awf:edit advanced-workflow: default; create .awf/parts/working-with-awf/advanced-workflow.md to override -->
 ## Advanced workflow
 
-For effort lifecycle, model tiers, hook and commit policy, and verification procedure, see [Workflow](workflow.md). Package runtime behavior belongs in `README.md` and [Architecture](architecture.md).
-
+For AWF effort lifecycle, hook and commit policy, and verification procedure, see
+[Workflow](workflow.md). Generic task behavior and role prompts come from `agentic-skills`.
+Pi dependency and handoff guidance is in the [Pi runtime reference](pi-runtime-reference.md).
 
 <!-- awf:edit placeholders: default; create .awf/parts/working-with-awf/placeholders.md to override -->
 ## Advanced configuration
@@ -64,4 +64,7 @@ bash .awf/upgrade.sh
 ```
 
 Then inspect the changed generated outputs, run `./awf check`, and commit the source, output, and
-lock updates together. For advanced upgrade recovery and triage, see [Debugging](debugging.md).
+lock updates together. Upgrades rename retained authored skill overrides to the four fixed AWF
+identities only when ownership and collision checks permit it. Content AWF cannot prove it owns
+blocks mutation rather than being overwritten, moved, or copied aside. If an upgrade fails, inspect
+the reported paths and Git diff, correct the blocker, and rerun it. See [Debugging](debugging.md).

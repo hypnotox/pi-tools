@@ -2,7 +2,6 @@
 - **Authoring AGENTS.md:** [docs/agents-md-standard.md](docs/agents-md-standard.md), layout and rules for the agent guide.
 - **Configuration reference:** [docs/config-reference.md](docs/config-reference.md), awf configuration and this project's live state.
 - **Documentation standard:** [docs/doc-standard.md](docs/doc-standard.md), awf-managed prose rules.
-- **Maintainable code design:** [docs/maintainable-code-design.md](docs/maintainable-code-design.md), design boundaries and dependency direction.
 - **Workflow:** [docs/workflow.md](docs/workflow.md), contributor workflow and continuity.
 - **Working with awf:** [docs/working-with-awf.md](docs/working-with-awf.md), source/render/check procedure.
 - **Architecture:** [docs/architecture.md](docs/architecture.md), the four package capabilities and dependencies.
