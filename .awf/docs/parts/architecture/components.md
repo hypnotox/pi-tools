@@ -1,9 +1,8 @@
-- `package.json`: package identity, Node compatibility, and Pi resource entry points.
-- `extensions/`: TypeScript or JavaScript extensions exported by the package.
-- `skills/`: portable Agent Skills exported by the package.
-- `prompts/`: Markdown prompt templates exported by the package.
-- `themes/`: JSON themes exported by the package.
+- `package.json`: package identity and the four Pi extension entry points.
+- `extensions/timing/`: agent, turn, and tool timing plus handoff continuity.
+- `extensions/context-usage/`: source-backed context telemetry injected into model context.
+- `extensions/handoff/`: immediate persisted-session replacement and kickoff delivery.
+- `extensions/subagents/`: direct generic delegation, the private role bridge, and POSIX child execution.
+- `tests/`: small test-local fixtures and cross-entrypoint smoke coverage.
 - `.awf/`: authored workflow configuration and convention parts.
-- `.pi/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, and the generated catalog under `docs/`: awf-rendered project workflow and documentation surfaces.
-- `docs/decisions/`: banner-free, append-only durable decision records authored directly.
-- `testing/`: source-only `pi-tools/testing` harness for documented Pi extension-boundary recordings; it deliberately does not simulate Pi runtime behavior.
+- `.pi/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, and generated `docs/`: repository workflow surfaces, not package exports.

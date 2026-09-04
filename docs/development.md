@@ -3,11 +3,9 @@
 
 <!-- awf:edit setup: from .awf/docs/parts/development/setup.md -->
 ## Setup
-Use Git, Bash, Node.js 22.19.0 or newer, npm, and a compatible Pi installation. Clone the repository, run `npm ci`, and open it in Pi; trust the project so Pi can load the generated project-local workflow resources. No build step, service, or environment variable is required.
+Use Git, Bash, the current Node release, npm, and the current personal Pi fork. Clone the repository, run `npm install --no-package-lock`, and open it in Pi; trust the project so Pi can load project-local workflow resources. No build step or environment variable is required.
 
-The awf wrapper uses the cached pinned binary when available. First use on Linux or macOS requires an amd64 or arm64 system, network access to GitHub, `curl`, `tar`, and either `sha256sum` or `shasum`; installing the pinned awf version on `PATH` avoids the download.
-
-Clone or install the public repository over HTTPS without GitHub credentials. SSH remains available for authenticated maintainer access. Run `/reload` after changing a resource during an active Pi session.
+The awf wrapper uses its cached configured binary when available. First use on Linux or macOS requires network access to GitHub, `curl`, `tar`, and either `sha256sum` or `shasum`. Run `/reload` after changing a Pi resource during an active session.
 
 
 <!-- awf:edit command-runner: from .awf/docs/parts/development/command-runner.md -->
@@ -29,6 +27,4 @@ See [Working with awf](working-with-awf.md) for the full command reference.
 
 <!-- awf:edit dependencies: from .awf/docs/parts/development/dependencies.md -->
 ## Dependencies
-`package.json` declares Node.js 22.19.0 or newer. Run `npm ci` to install the lockfile-pinned TypeScript, Biome, Knip, and Vitest development toolchain. The awf bootstrap pins the repository workflow tool independently of npm.
-
-When an extension imports a third-party runtime package, add it to `dependencies`. When it imports Pi core APIs, add the corresponding package to `peerDependencies` with a `*` range. Do not add dependencies for Markdown skills, prompts, or JSON themes unless their helpers require them.
+Run `npm install --no-package-lock` to resolve current dependencies without creating a lockfile. Registry development dependencies use `*`; the current coding-agent fork resolves from `releases/latest/download/pi-coding-agent.tgz`. Pi core packages and TypeBox remain wildcard peers supplied by Pi at runtime.

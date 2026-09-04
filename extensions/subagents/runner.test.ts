@@ -1,663 +1,223 @@
 import { EventEmitter } from "node:events";
-import { win32 } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { ExecutionOutcome } from "./api.js";
-import type { RunRequest } from "./runner.js";
-import { isPathWithin, SubprocessRunner, truncateUtf8 } from "./runner.js";
+import { type RunRequest, SubprocessRunner, truncateUtf8 } from "./runner.js";
 
-function fakeChild(pid = 123): EventEmitter & {
-  pid: number;
-  stdin: EventEmitter & { end: ReturnType<typeof vi.fn> };
-  stdout: EventEmitter;
-  stderr: EventEmitter;
-  kill: ReturnType<typeof vi.fn>;
-  killed: boolean;
-} {
+function fakeChild(pid = 123) {
   return Object.assign(new EventEmitter(), {
     pid,
     stdin: Object.assign(new EventEmitter(), { end: vi.fn() }),
     stdout: new EventEmitter(),
     stderr: new EventEmitter(),
     kill: vi.fn(),
-    killed: false,
   });
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
 }
 
 function request(overrides: Partial<RunRequest> = {}): RunRequest {
   return {
-    prepared: {
-      cwd: "/parent/child",
-      systemPrompt: "minimal system",
-      prompt: "task",
-      toolPolicy: { mode: "allowlist", tools: ["read"] },
-    },
-    model: { provider: "p", id: "m", thinkingLevels: ["off"] },
-    thinkingLevel: "off",
-    tools: ["read"],
-    parentCwd: "/parent",
-    parentTrusted: true,
+    cwd: "/project",
+    task: "inspect this",
+    systemPrompt: "role prompt",
+    model: { provider: "provider", id: "model" },
+    thinkingLevel: "high",
+    tools: ["read", "bash"],
+    approved: true,
     ...overrides,
   };
 }
 
 function dependencies(child = fakeChild()) {
-  const refreshState = {
-    callback: undefined as (() => void) | undefined,
-    stop: vi.fn(),
-  };
   return {
     child,
-    refreshState,
     spawn: vi.fn((..._args: unknown[]) => child),
-    canonicalize: async (value: string) => value,
-    mkdtemp: (async () => "/tmp/test") as never,
+    mkdtemp: vi.fn(async () => "/tmp/prompt"),
     writeFile: vi.fn(async () => undefined),
     rm: vi.fn(async () => undefined),
     executable: () => ({ command: "pi", prefix: [] }),
     signalTree: vi.fn(),
     delay: vi.fn(async () => undefined),
-    scheduleRefresh: vi.fn((callback: () => void) => {
-      refreshState.callback = callback;
-      return refreshState.stop;
-    }),
   };
 }
 
-async function launch(deps: ReturnType<typeof dependencies>, value = request()) {
+async function launch(deps = dependencies(), value = request()) {
   const runner = new SubprocessRunner(deps as never);
-  const promise = runner.run(value);
+  const result = runner.run(value);
   await new Promise((resolve) => setTimeout(resolve, 0));
-  return { runner, promise };
+  return { deps, runner, result };
+}
+
+function event(child: ReturnType<typeof fakeChild>, value: unknown): void {
+  child.stdout.emit("data", Buffer.from(`${JSON.stringify(value)}\n`));
+}
+
+function assistant(text: string, extra: Record<string, unknown> = {}) {
+  return {
+    type: "message_end",
+    message: { role: "assistant", content: [{ type: "text", text }], ...extra },
+  };
 }
 
 describe("SubprocessRunner", () => {
-  it("does not launch an already aborted invocation", async () => {
-    const spawn = vi.fn();
-    const controller = new AbortController();
-    controller.abort();
-    const runner = new SubprocessRunner({ spawn: spawn as never });
-    const result = await runner.run(request({ signal: controller.signal }));
-    expect(result.state).toBe("cancelled");
-    expect(result.execution?.prompt).toBe("task");
-    expect(spawn).not.toHaveBeenCalled();
-  });
-
-  it("retains the bounded prompt when invoked after shutdown", async () => {
-    const spawn = vi.fn();
-    const runner = new SubprocessRunner({ spawn: spawn as never });
-    await runner.shutdown();
-    const result = await runner.run(
-      request({
-        prepared: {
-          ...request().prepared,
-          prompt: "x".repeat(20_000),
-        },
-      }),
-    );
-    expect(result.state).toBe("cancelled");
-    expect(result.execution?.prompt).toContain("...[truncated]");
-    expect(Buffer.byteLength(result.execution?.prompt ?? "", "utf8")).toBeLessThanOrEqual(
-      16 * 1024,
-    );
-    expect(spawn).not.toHaveBeenCalled();
-  });
-
-  it("loads skills while isolating context files and preserving descendant trust", async () => {
-    const deps = dependencies();
-    const { promise } = await launch(deps);
+  it("launches a no-session JSON child with skills, no context files, and stdin task", async () => {
+    const { deps, result } = await launch();
     deps.child.emit("close", 0);
-    await expect(promise).resolves.toMatchObject({ state: "completed" });
+    await expect(result).resolves.toMatchObject({ state: "completed" });
+
+    const args = deps.spawn.mock.calls[0]?.[1] as unknown as string[];
+    expect(args).toEqual(
+      expect.arrayContaining([
+        "--mode",
+        "json",
+        "--print",
+        "--no-session",
+        "--no-context-files",
+        "--model",
+        "provider/model",
+        "--thinking",
+        "high",
+        "--tools",
+        "read,bash",
+        "--approve",
+      ]),
+    );
+    expect(args).not.toContain("--no-skills");
+    expect(args).not.toContain("--no-extensions");
+    expect(deps.child.stdin.end).toHaveBeenCalledWith("inspect this", "utf8");
     expect(deps.writeFile).toHaveBeenCalledWith(
-      "/tmp/test/system-prompt.txt",
-      "minimal system",
+      "/tmp/prompt/system-prompt.txt",
+      "role prompt",
       expect.objectContaining({ mode: 0o600 }),
     );
-    expect(deps.spawn.mock.calls[0]?.[1]).toEqual([
-      "--mode",
-      "json",
-      "--print",
-      "--no-session",
-      "--no-context-files",
-      "--system-prompt",
-      "/tmp/test/system-prompt.txt",
-      "--model",
-      "p/m",
-      "--thinking",
-      "off",
-      "--tools",
-      "read",
-      "--approve",
-    ]);
-    expect(deps.child.stdin.end).toHaveBeenCalledWith("task", "utf8");
     expect(deps.spawn.mock.calls[0]?.[2]).toMatchObject({
-      cwd: "/parent/child",
+      cwd: "/project",
       detached: true,
-      stdio: ["pipe", "pipe", "pipe"],
+      shell: false,
       env: expect.objectContaining({ PI_TOOLS_SUBAGENT_CHILD: "1" }),
     });
-    expect(deps.rm).toHaveBeenCalled();
   });
 
-  it.each(["--approve", "-a", "--no-tools", "--help", "@secret", "-arbitrary"])(
-    "passes parser-sensitive prompt %s only through stdin",
-    async (prompt) => {
-      const deps = dependencies();
-      const { promise } = await launch(
-        deps,
-        request({
-          prepared: { ...request().prepared, cwd: "/outside", prompt },
-          parentTrusted: false,
-        }),
-      );
-      deps.child.emit("close", 0);
-      await promise;
-      expect(deps.spawn.mock.calls[0]?.[1]).not.toContain(prompt);
-      expect(deps.child.stdin.end).toHaveBeenCalledWith(prompt, "utf8");
-    },
-  );
-
-  it("rejects a descendant-looking symlink whose canonical target escapes", async () => {
-    const deps = dependencies();
-    deps.canonicalize = vi.fn(async (value: string) =>
-      value.endsWith("/link") ? "/outside/target" : "/parent",
-    );
-    const { promise } = await launch(
-      deps,
-      request({ prepared: { ...request().prepared, cwd: "/parent/link" } }),
-    );
+  it("omits a custom system prompt for the direct generic tool and approval for untrusted parents", async () => {
+    const { systemPrompt: _systemPrompt, ...genericRequest } = request({
+      approved: false,
+      tools: [],
+    });
+    const { deps, result } = await launch(dependencies(), genericRequest);
     deps.child.emit("close", 0);
-    await promise;
-    expect(deps.spawn.mock.calls[0]?.[1]).not.toContain("--approve");
+    await result;
+    const args = deps.spawn.mock.calls[0]?.[1] as unknown as string[];
+    expect(args).not.toContain("--system-prompt");
+    expect(args).not.toContain("--approve");
+    expect(args).toContain("--no-tools");
+    expect(deps.mkdtemp).not.toHaveBeenCalled();
   });
 
-  it("does not trust siblings, prefix collisions, or cross-volume Windows paths", async () => {
-    expect(isPathWithin("/parent", "/parentish/child")).toBe(false);
-    expect(isPathWithin("C:\\parent", "D:\\parent\\child", win32)).toBe(false);
-    const deps = dependencies();
-    const { promise } = await launch(
-      deps,
-      request({ prepared: { ...request().prepared, cwd: "/outside" } }),
-    );
-    deps.child.emit("close", 0);
-    await promise;
-    expect(deps.spawn.mock.calls[0]?.[1]).not.toContain("--approve");
-    expect(deps.spawn.mock.calls[0]?.[1]).not.toContain("--no-approve");
-  });
-
-  it("parses split multibyte JSONL, EOF lines, usage, retry, and tool activity", async () => {
-    const deps = dependencies();
-    const updates: ExecutionOutcome[] = [];
-    const { promise } = await launch(
-      deps,
-      request({
-        onUpdate: (value) => {
-          value.usage.cost.total = 999;
-          updates.push(value);
+  it("lets a successful automatic retry supersede the earlier assistant failure", async () => {
+    const { deps, result } = await launch();
+    event(deps.child, assistant("", { errorMessage: "temporary failure", usage: { input: 1 } }));
+    event(deps.child, { type: "auto_retry_start", attempt: 1 });
+    event(deps.child, { type: "auto_retry_end", success: true });
+    event(
+      deps.child,
+      assistant("final report", {
+        usage: {
+          input: 2,
+          output: 3,
+          totalTokens: 5,
+          cost: { total: 0.25 },
         },
       }),
     );
-    const retry = `${JSON.stringify({ type: "auto_retry_start", attempt: 1, maxAttempts: 3, errorMessage: "retry 😀" })}\n`;
-    const bytes = Buffer.from(retry);
-    const split = bytes.indexOf(Buffer.from("😀")) + 2;
-    deps.child.stdout.emit("data", bytes.subarray(0, split));
-    deps.child.stdout.emit("data", bytes.subarray(split));
-    deps.child.stdout.emit(
-      "data",
-      Buffer.from(
-        `${JSON.stringify({ type: "tool_execution_start", toolCallId: "read-id", toolName: "read" })}\n${JSON.stringify({ type: "auto_retry_end", success: true, attempt: 1 })}\n${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "done" }], usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cacheWrite1h: 2, reasoning: 1, totalTokens: 10, cost: { input: 0.1, output: 0.2, cacheRead: 0.05, cacheWrite: 0.15, total: 0.5 } } } })}`,
-      ),
-    );
     deps.child.emit("close", 0);
-    const result = await promise;
-    expect(result).toMatchObject({
+
+    await expect(result).resolves.toMatchObject({
       state: "completed",
-      report: "done",
-      retries: 1,
-      retryActive: false,
-      usage: {
-        input: 1,
-        output: 2,
-        cacheRead: 3,
-        cacheWrite: 4,
-        cacheWrite1h: 2,
-        reasoning: 1,
-        totalTokens: 10,
-        cost: { input: 0.1, output: 0.2, cacheRead: 0.05, cacheWrite: 0.15, total: 0.5 },
-      },
+      report: "final report",
+      usage: { input: 3, output: 3, totalTokens: 5, cost: { total: 0.25 } },
     });
-    expect(result.activity.map((entry) => entry.kind)).toEqual(["retry_start", "retry_end"]);
-    expect(result.execution?.activity).toContainEqual(
-      expect.objectContaining({ kind: "tool", toolCallId: "read-id", state: "error" }),
-    );
-    expect(result.execution?.activity).toContainEqual(
-      expect.objectContaining({
-        kind: "retry",
-        attempt: 1,
-        maxAttempts: 3,
-        state: "success",
-      }),
-    );
-    expect(result.activity[0]?.text).toContain("😀");
-    expect(updates.length).toBeGreaterThan(0);
   });
 
-  it("updates one retry row across attempts and settles it as failed", async () => {
-    let now = 10;
-    const deps = { ...dependencies(), monotonicNow: () => now };
-    const { promise } = await launch(deps as ReturnType<typeof dependencies>);
-    deps.child.stdout.emit(
-      "data",
-      Buffer.from(`${JSON.stringify({ type: "auto_retry_start", attempt: 1, maxAttempts: 3 })}\n`),
-    );
-    now = 20;
-    deps.child.stdout.emit(
-      "data",
-      Buffer.from(`${JSON.stringify({ type: "auto_retry_start", attempt: 2, maxAttempts: 3 })}\n`),
-    );
-    now = 30;
-    deps.child.stdout.emit(
-      "data",
-      Buffer.from(`${JSON.stringify({ type: "auto_retry_end", success: false, attempt: 2 })}\n`),
-    );
+  it("treats prompt cleanup as best effort for success and failure", async () => {
+    for (const code of [0, 1]) {
+      const deps = dependencies();
+      deps.rm.mockRejectedValueOnce(new Error("permission denied"));
+      const launched = await launch(deps);
+      if (code === 0) event(deps.child, assistant("done"));
+      else deps.child.stderr.emit("data", Buffer.from("real failure"));
+      deps.child.emit("close", code);
+      await expect(launched.result).resolves.toMatchObject(
+        code === 0
+          ? { state: "completed", report: "done" }
+          : { state: "failed", failure: "real failure" },
+      );
+    }
+  });
+
+  it("normalizes a successful blank assistant report", async () => {
+    const { deps, result } = await launch();
+    event(deps.child, assistant("  \n"));
     deps.child.emit("close", 0);
-    const result = await promise;
-    expect(result.execution?.activity.filter((entry) => entry.kind === "retry")).toEqual([
-      {
-        kind: "retry",
-        attempt: 2,
-        maxAttempts: 3,
-        state: "error",
-        durationMs: 20,
-      },
-    ]);
+    await expect(result).resolves.toMatchObject({
+      state: "completed",
+      report: "Subagent completed without a text report.",
+    });
   });
 
-  it("retains only a safe tool summary, never raw tool arguments", async () => {
-    const deps = dependencies();
-    const secret = "RAW_ARGUMENT_SENTINEL";
-    const updates: ExecutionOutcome[] = [];
-    const { promise } = await launch(
-      deps,
-      request({
-        summarizeTool: (name, args) =>
-          name === "custom" && (args as { secret?: string }).secret === secret
-            ? "custom safe"
-            : name,
-        onUpdate: (outcome) => updates.push(outcome),
-      }),
-    );
-    deps.child.stdout.emit(
-      "data",
-      Buffer.from(
-        `${JSON.stringify({ type: "tool_execution_start", toolCallId: "custom-id", toolName: "custom", args: { secret } })}\n`,
-      ),
-    );
-    deps.child.emit("close", 0);
-    const outcome = await promise;
-    expect(JSON.stringify(outcome)).not.toContain(secret);
-    expect(JSON.stringify(updates)).not.toContain(secret);
-    expect(outcome.execution?.activity).toContainEqual(
-      expect.objectContaining({ kind: "tool", toolCallId: "custom-id", summary: "custom safe" }),
-    );
-  });
-
-  it("bounds malformed and oversized lines without corrupting later events", async () => {
-    const deps = dependencies();
-    const { promise } = await launch(deps);
+  it("bounds malformed and oversized JSONL while retaining later valid output", async () => {
+    const { deps, result } = await launch();
     deps.child.stdout.emit("data", Buffer.from(`not json\n${"x".repeat(1024 * 1024 + 1)}\n`));
-    deps.child.stdout.emit(
-      "data",
-      Buffer.from(
-        `${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "after" }] } })}\n`,
-      ),
-    );
+    event(deps.child, assistant("after bounds"));
     deps.child.emit("close", 0);
-    const result = await promise;
-    expect(result.report).toBe("after");
-    expect(result.activity.filter((entry) => entry.kind === "diagnostic")).toHaveLength(2);
+    await expect(result).resolves.toMatchObject({ report: "after bounds" });
   });
 
-  it("terminates and clears retry state when cancelled during a child request retry", async () => {
-    const deps = dependencies();
-    const controller = new AbortController();
-    const { promise } = await launch(deps, request({ signal: controller.signal }));
-    deps.child.stdout.emit(
-      "data",
-      Buffer.from(
-        `${JSON.stringify({ type: "auto_retry_start", errorMessage: "retrying" })}\n${JSON.stringify({ type: "tool_execution_start", toolCallId: "active", toolName: "read", args: {} })}\n`,
-      ),
-    );
-    controller.abort();
-    const result = await promise;
-    expect(result).toMatchObject({ state: "cancelled", retries: 1, retryActive: false });
-    expect(result.execution?.activity).toContainEqual(
-      expect.objectContaining({ kind: "tool", toolCallId: "active", state: "error" }),
-    );
-    expect(result.execution?.activity).toContainEqual(
-      expect.objectContaining({ kind: "retry", state: "error" }),
-    );
-    expect(result.activity).toContainEqual({ kind: "retry_start", text: "retrying" });
-    expect(deps.signalTree).toHaveBeenCalledWith(deps.child, "SIGTERM");
+  it("bounds stderr and reports spawn failures", async () => {
+    const stderrRun = await launch();
+    stderrRun.deps.child.stderr.emit("data", Buffer.from("😀".repeat(20_000)));
+    stderrRun.deps.child.emit("close", 1);
+    const stderrResult = await stderrRun.result;
+    expect(stderrResult.state).toBe("failed");
+    expect(Buffer.byteLength(stderrResult.failure ?? "", "utf8")).toBeLessThanOrEqual(16 * 1024);
+    expect(stderrResult.failure).not.toContain("�");
+
+    const spawnRun = await launch();
+    spawnRun.deps.child.emit("error", new Error("spawn failed"));
+    await expect(spawnRun.result).resolves.toMatchObject({
+      state: "failed",
+      failure: "spawn failed",
+    });
   });
 
-  it("terminates the process tree gracefully then forcibly on cancellation", async () => {
-    const deps = dependencies();
+  it("terminates the POSIX process group with TERM then KILL on cancellation", async () => {
     const controller = new AbortController();
-    const { promise } = await launch(deps, request({ signal: controller.signal }));
+    const { deps, result } = await launch(dependencies(), request({ signal: controller.signal }));
     controller.abort();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await expect(result).resolves.toMatchObject({ state: "cancelled" });
     expect(deps.signalTree).toHaveBeenNthCalledWith(1, deps.child, "SIGTERM");
     expect(deps.signalTree).toHaveBeenNthCalledWith(2, deps.child, "SIGKILL");
-    await expect(promise).resolves.toMatchObject({ state: "cancelled" });
   });
 
-  it("finalizes active tool and retry rows as failed when the child exits abnormally", async () => {
-    const deps = dependencies();
-    const { promise } = await launch(deps);
-    deps.child.stdout.emit(
-      "data",
-      Buffer.from(
-        `${JSON.stringify({ type: "tool_execution_start", toolCallId: "active", toolName: "read", args: {} })}\n${JSON.stringify({ type: "auto_retry_start", attempt: 1, maxAttempts: 3 })}\n`,
-      ),
-    );
-    deps.child.stderr.emit("data", Buffer.from("child failed"));
-    deps.child.emit("close", 1);
-    const result = await promise;
-    expect(result).toMatchObject({ state: "failed", failure: "child failed" });
-    expect(result.execution?.activity).toContainEqual(
-      expect.objectContaining({ kind: "tool", toolCallId: "active", state: "error" }),
-    );
-    expect(result.execution?.activity).toContainEqual(
-      expect.objectContaining({ kind: "retry", state: "error" }),
-    );
-  });
-
-  it("normalizes prompt pipe failures and terminates the child tree", async () => {
-    const deps = dependencies();
-    const { promise } = await launch(deps);
-    deps.child.stdin.emit("error", new Error("broken pipe"));
-    await expect(promise).resolves.toMatchObject({
-      state: "failed",
-      failure: "Failed to send subagent prompt: broken pipe",
-    });
-    expect(deps.signalTree).toHaveBeenCalledWith(deps.child, "SIGTERM");
-  });
-
-  it("settles close/error races once and cleans up", async () => {
-    const deps = dependencies();
-    const { promise } = await launch(deps);
-    deps.child.emit("error", new Error("spawn failed"));
-    deps.child.emit("close", 1);
-    await expect(promise).resolves.toMatchObject({ state: "failed", failure: "spawn failed" });
-    expect(deps.rm).toHaveBeenCalledTimes(1);
-  });
-
-  it("reports cleanup failures instead of rejecting or hiding them", async () => {
-    const deps = dependencies();
-    deps.rm.mockRejectedValueOnce(new Error("permission denied"));
-    const { promise } = await launch(deps);
-    deps.child.emit("close", 0);
-    await expect(promise).resolves.toMatchObject({
-      state: "failed",
-      failure: "Failed to clean up subagent prompt: permission denied",
-    });
-  });
-
-  it("awaits termination of active children during shutdown", async () => {
-    const deps = dependencies();
-    const { runner, promise } = await launch(deps);
+  it("waits for active children during shutdown", async () => {
+    const { deps, runner, result } = await launch();
     const shutdown = runner.shutdown();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(deps.signalTree).toHaveBeenCalledWith(deps.child, "SIGTERM");
     deps.child.emit("close", 0);
     await shutdown;
-    await promise;
+    await expect(result).resolves.toMatchObject({ state: "cancelled" });
   });
 
-  it("prevents spawn when the invocation is aborted during pre-launch setup", async () => {
-    const gate = deferred<string>();
-    const deps = dependencies();
-    deps.canonicalize = vi.fn(() => gate.promise);
+  it("does not launch an already aborted request and truncates UTF-8 safely", async () => {
     const controller = new AbortController();
-    const runner = new SubprocessRunner(deps as never);
-    const run = runner.run(request({ signal: controller.signal }));
     controller.abort();
-    gate.resolve("/parent/child");
-    await expect(run).resolves.toMatchObject({ state: "cancelled" });
-    expect(deps.spawn).not.toHaveBeenCalled();
-  });
+    const spawn = vi.fn();
+    const runner = new SubprocessRunner({ spawn: spawn as never });
+    await expect(runner.run(request({ signal: controller.signal }))).resolves.toMatchObject({
+      state: "cancelled",
+    });
+    expect(spawn).not.toHaveBeenCalled();
 
-  it("prevents spawn and awaits a run interrupted during pre-launch setup", async () => {
-    const gate = deferred<string>();
-    const deps = dependencies();
-    deps.canonicalize = vi.fn(() => gate.promise);
-    const runner = new SubprocessRunner(deps as never);
-    const run = runner.run(request());
-    const shutdown = runner.shutdown();
-    let shutdownFinished = false;
-    void shutdown.then(() => {
-      shutdownFinished = true;
-    });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(shutdownFinished).toBe(false);
-    gate.resolve("/parent/child");
-    await expect(run).resolves.toMatchObject({ state: "cancelled" });
-    await shutdown;
-    expect(deps.spawn).not.toHaveBeenCalled();
-  });
-
-  it("awaits delayed prompt cleanup before shutdown completes", async () => {
-    const cleanup = deferred<void>();
-    const deps = dependencies();
-    deps.rm = vi.fn(() => cleanup.promise);
-    const { runner, promise } = await launch(deps);
-    deps.child.emit("close", 0);
-    const shutdown = runner.shutdown();
-    let shutdownFinished = false;
-    void shutdown.then(() => {
-      shutdownFinished = true;
-    });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(shutdownFinished).toBe(false);
-    cleanup.resolve();
-    await promise;
-    await shutdown;
-  });
-
-  it("projects bounded thinking, correlated tools, cumulative usage, and monotonic timing", async () => {
-    const deps = dependencies();
-    let now = 0;
-    const updates: Array<ExecutionOutcome & { execution?: Record<string, unknown> }> = [];
-    const { promise } = await launch(
-      { ...deps, monotonicNow: () => now } as never,
-      request({ onUpdate: (outcome) => updates.push(outcome as (typeof updates)[number]) }),
-    );
-    const event = (value: unknown) =>
-      deps.child.stdout.emit("data", Buffer.from(`${JSON.stringify(value)}\n`));
-
-    now = 10;
-    event({
-      type: "message_update",
-      usage: { input: 2, output: 1, cacheRead: 8, cacheWrite: 2, totalTokens: 13 },
-      assistantMessageEvent: { type: "thinking_delta", delta: "first\nsecond" },
-    });
-    now = 20;
-    event({ type: "tool_execution_start", toolCallId: "one", toolName: "read", args: {} });
-    now = 25;
-    deps.refreshState.callback?.();
-    expect(updates.at(-1)?.execution).toMatchObject({
-      elapsedMs: 25,
-      activity: [
-        { kind: "thinking", text: "first" },
-        { kind: "tool", toolCallId: "one", state: "running", durationMs: 5 },
-      ],
-    });
-    now = 30;
-    event({ type: "tool_execution_start", toolCallId: "two", toolName: "bash", args: {} });
-    now = 40;
-    event({
-      type: "tool_execution_end",
-      toolCallId: "one",
-      toolName: "read",
-      result: { content: [{ type: "text", text: "first line\nsecond line" }] },
-    });
-    now = 50;
-    event({
-      type: "tool_execution_end",
-      toolCallId: "two",
-      toolName: "bash",
-      isError: true,
-      result: { content: [{ type: "text", text: "command failed" }] },
-    });
-    now = 60;
-    event({
-      type: "message_update",
-      usage: { input: 3, output: 4, cacheRead: 20, cacheWrite: 5, totalTokens: 32 },
-      assistantMessageEvent: { type: "thinking_delta", delta: " line\n  \nthird" },
-    });
-    now = 70;
-    event({
-      type: "message_end",
-      message: {
-        role: "assistant",
-        content: [{ type: "text", text: "done" }],
-        usage: { input: 4, output: 5, cacheRead: 21, cacheWrite: 6, totalTokens: 36 },
-      },
-    });
-    deps.child.emit("close", 0);
-    const result = (await promise) as ExecutionOutcome & { execution: Record<string, unknown> };
-
-    expect(result.usage).toMatchObject({ input: 4, output: 5, cacheRead: 21, cacheWrite: 6 });
-    expect(result.execution).toMatchObject({
-      prompt: "task",
-      elapsedMs: 70,
-      turns: 1,
-      latestTurnUsage: { cacheRead: 21, input: 4 },
-      activity: [
-        { kind: "thinking", text: "first" },
-        {
-          kind: "tool",
-          toolCallId: "one",
-          summary: "read",
-          state: "success",
-          durationMs: 20,
-        },
-        {
-          kind: "tool",
-          toolCallId: "two",
-          summary: "bash",
-          state: "error",
-          durationMs: 20,
-        },
-        { kind: "thinking", text: "second line" },
-        { kind: "thinking", text: "third" },
-      ],
-    });
-    expect(JSON.stringify(result)).not.toContain('"args"');
-    expect(JSON.stringify(result.execution?.activity)).not.toContain("first line");
-    expect(JSON.stringify(result.execution?.activity)).not.toContain("command failed");
-    const liveTool = updates.find((update) =>
-      (update.execution?.activity as Array<Record<string, unknown>> | undefined)?.some(
-        (entry) => entry.toolCallId === "two" && entry.state === "running",
-      ),
-    );
-    expect(liveTool?.execution).toMatchObject({ elapsedMs: 30 });
-    expect(deps.scheduleRefresh).toHaveBeenCalledWith(expect.any(Function), 1_000);
-    expect(deps.refreshState.stop).toHaveBeenCalledTimes(1);
-  });
-
-  it("flushes completed thinking blocks before later activity", async () => {
-    const deps = dependencies();
-    const { promise } = await launch(deps);
-    const event = (value: unknown) =>
-      deps.child.stdout.emit("data", Buffer.from(`${JSON.stringify(value)}\n`));
-    event({
-      type: "message_update",
-      assistantMessageEvent: { type: "thinking_delta", delta: "first block" },
-    });
-    event({ type: "message_update", assistantMessageEvent: { type: "thinking_end" } });
-    event({ type: "tool_execution_start", toolCallId: "read-id", toolName: "read", args: {} });
-    event({
-      type: "message_update",
-      assistantMessageEvent: { type: "thinking_delta", delta: "second block" },
-    });
-    event({ type: "message_update", assistantMessageEvent: { type: "thinking_end" } });
-    event({
-      type: "message_end",
-      message: { role: "assistant", content: [{ type: "text", text: "done" }] },
-    });
-    deps.child.emit("close", 0);
-
-    const result = await promise;
-    expect(result.execution?.unfinishedThinking).toBeUndefined();
-    expect(result.execution?.activity).toEqual([
-      { kind: "thinking", text: "first block" },
-      expect.objectContaining({ kind: "tool", toolCallId: "read-id" }),
-      { kind: "thinking", text: "second block" },
-    ]);
-  });
-
-  it("counts the unfinished thinking line toward the retained execution history", async () => {
-    const deps = dependencies();
-    const { promise } = await launch(deps);
-    for (let index = 0; index < 50; index++)
-      deps.child.stdout.emit(
-        "data",
-        Buffer.from(
-          `${JSON.stringify({ type: "message_update", assistantMessageEvent: { type: "thinking_delta", delta: `line ${index}\n` } })}\n`,
-        ),
-      );
-    deps.child.stdout.emit(
-      "data",
-      Buffer.from(
-        `${JSON.stringify({ type: "message_update", assistantMessageEvent: { type: "thinking_delta", delta: "unfinished" } })}\n`,
-      ),
-    );
-    deps.child.emit("close", 0);
-    const result = (await promise) as ExecutionOutcome & { execution: Record<string, unknown> };
-    expect(result.execution).toMatchObject({
-      omittedActivity: 1,
-      unfinishedThinking: "unfinished",
-    });
-    expect(result.execution.activity).toHaveLength(49);
-    expect((result.execution.activity as Array<Record<string, unknown>>)[0]).toMatchObject({
-      text: "line 1",
-    });
-  });
-
-  it("does not persist child tool results", async () => {
-    const deps = dependencies();
-    const { promise } = await launch(deps);
-    const event = (value: unknown) =>
-      deps.child.stdout.emit("data", Buffer.from(`${JSON.stringify(value)}\n`));
-    event({ type: "tool_execution_start", toolCallId: "large", toolName: "read", args: {} });
-    event({
-      type: "tool_execution_end",
-      toolCallId: "large",
-      toolName: "read",
-      result: { content: [{ type: "text", text: "child-owned result" }] },
-    });
-    deps.child.emit("close", 0);
-
-    const result = await promise;
-    const tool = result.execution?.activity.find((entry) => entry.kind === "tool");
-    expect(tool).toMatchObject({ kind: "tool", state: "success" });
-    expect(tool).not.toHaveProperty("result");
-    expect(JSON.stringify(result)).not.toContain("child-owned result");
-  });
-
-  it("truncates UTF-8 without splitting a code point", () => {
-    const value = truncateUtf8("😀".repeat(100), 31);
-    expect(Buffer.byteLength(value, "utf8")).toBeLessThanOrEqual(31);
-    expect(value).not.toContain("�");
-    expect(value).toContain("[truncated]");
+    const text = truncateUtf8("😀".repeat(100), 31);
+    expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(31);
+    expect(text).not.toContain("�");
+    expect(text).toContain("[truncated]");
   });
 });

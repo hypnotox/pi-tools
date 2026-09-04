@@ -1,72 +1,37 @@
-import { createExtensionRecorder } from "pi-tools/testing";
 import { describe, expect, it } from "vitest";
-import { contextUsageLine, formatCount, registerContextUsage } from "./index.js";
+import { createExtensionHarness } from "../../tests/extension-harness.js";
+import { contextUsageLine, registerContextUsage } from "./index.js";
 
 describe("context usage extension", () => {
-  it("formats current usage and active-branch compactions", () => {
-    const context = {
-      getContextUsage: () => ({ tokens: 118_200, contextWindow: 272_000 }),
-      sessionManager: {
-        getBranch: () => [{ type: "compaction" }, { type: "message" }, { type: "compaction" }],
-      },
-    };
-
-    expect(formatCount(118_200)).toBe("118.2k");
-    expect(contextUsageLine(context)).toBe(
-      "[session context] 118.2k/272k (43%); pressure=low; compactions=2",
-    );
-  });
-
-  it("uses the highest pressure reached by either percentage or absolute usage", () => {
-    const line = (tokens: number, contextWindow: number) =>
-      contextUsageLine({
-        getContextUsage: () => ({ tokens, contextWindow }),
-        sessionManager: { getBranch: () => [] },
-      });
-
-    expect(line(69_999, 100_000)).toContain("pressure=low");
-    expect(line(70_000, 100_000)).toContain("pressure=medium");
-    expect(line(149_999, 1_000_000)).toContain("pressure=low");
-    expect(line(150_000, 1_000_000)).toContain("pressure=medium");
-    expect(line(79_999, 100_000)).toContain("pressure=medium");
-    expect(line(80_000, 100_000)).toContain("pressure=high");
-    expect(line(199_999, 1_000_000)).toContain("pressure=medium");
-    expect(line(200_000, 1_000_000)).toContain("pressure=high");
-    expect(line(89_999, 100_000)).toContain("pressure=high");
-    expect(line(90_000, 100_000)).toContain("pressure=critical");
-    expect(line(249_999, 1_000_000)).toContain("pressure=high");
-    expect(line(250_000, 1_000_000)).toContain("pressure=critical");
-    expect(line(244_799, 272_000)).toContain("pressure=high");
-    expect(line(244_800, 272_000)).toContain("pressure=critical");
-  });
-
-  it("reports deterministic unknown and unavailable values without mutating session state", () => {
-    const context = {
-      getContextUsage: () => ({ tokens: Number.NaN, contextWindow: 4_000 }),
-      sessionManager: { getBranch: () => [{ type: "compaction" }, { type: "message" }] },
-    };
-    expect(contextUsageLine(context)).toBe(
-      "[session context] unknown/4k; pressure=unknown; compactions=1",
-    );
+  it("reports source values and direct arithmetic without inference", () => {
     expect(
       contextUsageLine({
-        ...context,
-        getContextUsage: () => ({ tokens: 1, contextWindow: 0 }),
+        getContextUsage: () => ({ tokens: 118_200, contextWindow: 272_000 }),
       }),
-    ).toBe("[session context] unavailable; pressure=unknown; compactions=1");
-    expect(formatCount(999.5)).toBe("1000");
-    expect(formatCount(1_250_000)).toBe("1.3m");
+    ).toBe("[session context] tokens=118200; context-window=272000; remaining=153800; used=43.46%");
   });
 
-  it("injects a fresh hidden, package-neutral message for each model request", async () => {
-    const harness = createExtensionRecorder();
-    void harness.install(registerContextUsage);
+  it.each([
+    undefined,
+    { tokens: undefined, contextWindow: 4_000 },
+    { tokens: 10, contextWindow: undefined },
+    { tokens: Number.NaN, contextWindow: 4_000 },
+    { tokens: 10.5, contextWindow: 4_000 },
+    { tokens: 10, contextWindow: 0 },
+  ])("reports unavailable for unavailable source values %#", (usage) => {
+    expect(contextUsageLine({ getContextUsage: () => usage })).toBe(
+      "[session context] unavailable",
+    );
+  });
+
+  it("injects a fresh hidden message without scanning session history", async () => {
+    const harness = createExtensionHarness();
+    registerContextUsage(harness.api);
     const messages = [{ role: "user", content: "hello" }];
-    const context = harness.makeContext({
-      getContextUsage: () => ({ tokens: 2_000, contextWindow: 4_000, percent: 50 }),
-      sessionManager: { getBranch: () => [{ type: "compaction" }] } as never,
-    });
-    const [result] = await harness.invokeRaw("context", { messages }, context);
+    const context = {
+      getContextUsage: () => ({ tokens: 2_000, contextWindow: 4_000 }),
+    };
+    const [result] = await harness.invoke("context", { messages }, context);
 
     expect(result).toMatchObject({
       messages: [
@@ -74,7 +39,8 @@ describe("context usage extension", () => {
         {
           role: "custom",
           customType: "context-usage",
-          content: "[session context] 2k/4k (50%); pressure=low; compactions=1",
+          content:
+            "[session context] tokens=2000; context-window=4000; remaining=2000; used=50.00%",
           display: false,
         },
       ],

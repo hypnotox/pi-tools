@@ -18,7 +18,7 @@ Maintain `pi-tools` as the shared source for the owner's portable Pi resources. 
 
 <!-- awf:edit identity: from .awf/parts/agents-doc/identity.md -->
 ## Identity
-`pi-tools` is a public, pre-1.0 Pi package for portable personal extensions, Agent Skills, prompt templates, and themes in the `@earendil-works/pi-coding-agent` ecosystem. It ships a timing extension and keeps its package resources ready for direct installation across the owner's systems.
+`pi-tools` is a public, pre-1.0 personal Pi package for timing, exact context telemetry, fresh-session handoff, and ephemeral subagent execution in the `@earendil-works/pi-coding-agent` ecosystem.
 
 
 <!-- awf:edit invariants: from .awf/parts/agents-doc/invariants.md -->
@@ -31,12 +31,11 @@ Hard rules every change must respect:
 - **Docs travel with the change.** Update reality and its documentation together.
 - **Stage and gate each commit.** Stage the complete transaction; run `./awf check staged` and `npm run check`. A wired pre-commit hook enforces both; run them manually only in a clone without wired hooks.
 
-- **Focused, portable resources.** Keep resources focused and portable, and document user-facing behavior in `README.md`.
+- **Focused, portable resources.** Keep the four package capabilities focused and portable, and document user-facing behavior in `README.md`.
 - **No private machine state.** Never commit credentials, tokens, session data, or machine-specific absolute paths.
-- **Correct dependency classes.** Put extension runtime packages in `dependencies`; declare Pi core imports in `peerDependencies` with a `*` range.
+- **Floating current dependencies.** Keep Pi core and TypeBox imports as wildcard peers, registry development dependencies as `*`, and installs lockfile-free.
 - **Pi authority first.** Read Pi's installed documentation and working examples before implementing or changing a resource.
-- **Bounded extension resources.** Truncate potentially large extension tool output and clean up long-lived resources on `session_shutdown`.
-- **Portable Agent Skills.** Use valid Agent Skills frontmatter and resolve helper paths relative to the skill directory.
+- **Bounded extension resources.** Truncate potentially large tool output and clean up long-lived resources on `session_shutdown`.
 
 
 <!-- awf:edit workflow: default; create .awf/parts/agents-doc/workflow.md to override -->
@@ -56,22 +55,18 @@ Evaluate continuity independently; when durable continuity materially helps, use
 - `/reload`: reload Pi resources after editing them during local development
 
 
-<!-- awf:edit document-map: default; create .awf/parts/agents-doc/document-map.md to override -->
+<!-- awf:edit document-map: from .awf/parts/agents-doc/document-map.md -->
 ## Document map
-
 - **Decision records:** `docs/decisions/`, durable project decisions.
-- **Authoring AGENTS.md:** [docs/agents-md-standard.md](docs/agents-md-standard.md), layout, content, and rules for the agent guide
-- **Configuration Reference:** [docs/config-reference.md](docs/config-reference.md), every .awf config key, var, sidecar field, and data key: descriptions, defaults, availability, and this project's live state
-- **Documentation Standard:** [docs/doc-standard.md](docs/doc-standard.md), how-to-write rules for all awf-managed prose
-- **Maintainable Code Design:** [docs/maintainable-code-design.md](docs/maintainable-code-design.md), decision framework for cohesive models, explicit boundaries, dependencies, refactoring, and testable design
-- **Pi Runtime Reference:** [docs/pi-runtime-reference.md](docs/pi-runtime-reference.md), Pi-only runtime, subagent, model-routing, and handoff protocol
-- **Workflow:** [docs/workflow.md](docs/workflow.md), principles, conditional capabilities, continuity, review, and commit discipline
-- **Working with awf:** [docs/working-with-awf.md](docs/working-with-awf.md), day-to-day usage: commands, overrides, placeholders, and the sync/check loop
-- **Architecture:** [docs/architecture.md](docs/architecture.md), system shape, packages, key components, dependencies
-- **Debugging:** [docs/debugging.md](docs/debugging.md), recipes for common failure modes
-- **Development:** [docs/development.md](docs/development.md), local setup, the command runner, dependency reference
-- **Glossary:** [docs/glossary.md](docs/glossary.md), project jargon and the awf vocabulary it ships
-- **Pitfalls:** [docs/pitfalls.md](docs/pitfalls.md), recurring bugs and tricky areas
-- **Releasing:** [docs/releasing.md](docs/releasing.md), how to cut a release: versioning, artifacts, and the publish process
-- **Roadmap:** [docs/roadmap.md](docs/roadmap.md), uncommitted ideas and future phases
-- **Testing:** [docs/testing.md](docs/testing.md), gate tiers, test layout, what each tier covers
+- **Authoring AGENTS.md:** [docs/agents-md-standard.md](docs/agents-md-standard.md), layout and rules for the agent guide.
+- **Configuration reference:** [docs/config-reference.md](docs/config-reference.md), awf configuration and this project's live state.
+- **Documentation standard:** [docs/doc-standard.md](docs/doc-standard.md), awf-managed prose rules.
+- **Maintainable code design:** [docs/maintainable-code-design.md](docs/maintainable-code-design.md), design boundaries and dependency direction.
+- **Workflow:** [docs/workflow.md](docs/workflow.md), contributor workflow and continuity.
+- **Working with awf:** [docs/working-with-awf.md](docs/working-with-awf.md), source/render/check procedure.
+- **Architecture:** [docs/architecture.md](docs/architecture.md), the four package capabilities and dependencies.
+- **Development:** [docs/development.md](docs/development.md), local setup and commands.
+- **Testing:** [docs/testing.md](docs/testing.md), gate tiers and behavioral proof.
+- **Debugging:** [docs/debugging.md](docs/debugging.md), focused recovery recipes.
+- **Glossary:** [docs/glossary.md](docs/glossary.md), project and awf terminology.
+- **Pitfalls:** [docs/pitfalls.md](docs/pitfalls.md), recurring implementation hazards.

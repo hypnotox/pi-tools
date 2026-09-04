@@ -1,6 +1,0 @@
----
-title: Provider Response Headers Are Transport Dependent
----
-Pi's `after_provider_response` is documented as reporting the status and normalized headers of a provider response, but a provider that does not speak plain HTTP never fires it at all. `openai-codex` is the case to know: pi-ai calls `onResponse` only in that provider's SSE branch, so under the default `transport: "auto"` the request is served over a WebSocket and an extension observes no status, no headers, and no indication that anything was skipped. Switching the setting to `sse` makes the same failing request deliver a 429 with the full `x-codex-*` limit header set. An extension that reads response headers therefore has an availability contract set by operator configuration, not by the extension.
-
-Treat header absence as an expected state with its own behaviour rather than an error, and never infer the value the headers would have carried. Confirm what a provider actually emits by logging the event against the real runtime instead of reasoning from the documented shape; the useful headers here appear in no Pi type or doc, and pi reads none of them. Prefer a relative header such as a remaining-seconds value over an absolute epoch when both are present, since the absolute one silently encodes an assumption that the local clock agrees with the provider's.

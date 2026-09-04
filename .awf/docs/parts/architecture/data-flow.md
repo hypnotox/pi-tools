@@ -1,3 +1,3 @@
-Pi installs the repository as a package, reads `package.json`, and discovers resources through its declared paths. A Pi session loads those resources at startup or after `/reload`.
+Pi installs the repository, reads the four explicit extension paths in `package.json`, and loads them at startup or after `/reload`. Timing and context telemetry observe Pi events, handoff replaces a persisted session through a queued command, and subagent tools spawn fresh no-session Pi children. `agentic-skills` may publish specialized roles over Pi's event bus; `pi-tools` owns execution.
 
-Maintainers edit package resources directly. For governed workflow or generated documentation changes, maintainers edit `.awf/`, run `./awf render`, and commit the source, rendered outputs, and `.awf/awf.lock` together. `./awf check` verifies the resulting tree.
+Maintainers edit package resources directly. For governed workflow or generated documentation changes, edit `.awf/` and run `./awf render`; `./awf check` may report expected adapter drift until the deferred AWF upgrade.

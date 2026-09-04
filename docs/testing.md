@@ -17,18 +17,16 @@ For a nondeterministic race, stress or invariant evidence may be the strongest p
 
 <!-- awf:edit gate: from .awf/docs/parts/testing/gate.md -->
 ## Gate
-Run `npm run check` before every commit. It verifies formatting, lint, strict types, dead code and dependencies, and Vitest tests. Its Biome lanes select nonignored repository executable resources explicitly and fail unless Biome reports that every nonzero selected target was checked, including from managed worktrees below `.awf/`. The pre-commit payload also runs `./awf check` for rendered drift, awf configuration, links, prose rules, and workflow state. A failure in either layer blocks the commit.
+Run `npm run check` before every commit. It verifies direct Biome formatting and linting, strict TypeScript, Knip dead-code and dependency analysis, and focused Vitest behavior. The pre-commit flow also runs `./awf check` for workflow state and generated drift.
 
-Hosted push and pull-request CI runs the pinned AWF check, a clean `npm ci`, and `npm run check` under Node.js 22.19.0. Minimum-runtime evidence uses the same clean install and executable-resource gate under Node.js 22 at or above the package's 22.19.0 floor. Pi extension smoke evidence loads each package directory entry with `pi -e ./extensions/timing/index.ts --list-models` and `pi -e ./extensions/subagents --list-models`, requiring a clean exit without extension diagnostics. Subagent unit tests cover profile policy, capability negotiation and batch finalization, scheduling, process isolation, and rendering boundaries; the package-level integration test compiles a consumer through the canonical type-only subpath, negotiates and executes an atomic replacement, and restores its persisted result.
+Hosted CI uses the current Node release, performs `npm install --no-package-lock`, and runs the same gate without dependency caching. Completion evidence also includes the isolated real-Pi loader smoke and the local-checkout cross-package role test.
 
 
 <!-- awf:edit tiers: from .awf/docs/parts/testing/tiers.md -->
 ## Tiers and lanes
-Focused npm scripts provide fast format, lint, type, dead-code, and test lanes. `npm run check` is the aggregate executable-resource tier, while `./awf check` is the repository-workflow tier. Minimum-Node and Pi-load smoke checks are release-of-change evidence rather than part of every local aggregate run.
+Focused Vitest files provide fast feedback. `npm run check` is the executable-resource gate; `./awf check` is the repository-workflow gate. Fresh-install, real-loader, and cross-package checks are completion evidence.
 
 
 <!-- awf:edit layout: from .awf/docs/parts/testing/layout.md -->
 ## Layout and test shape
-Timing-extension tests live beside their implementation under `extensions/timing/`. Keep narrowly coupled tests beside a resource; place package-loading or cross-resource tests under `tests/`. Name regression tests for the behavior they protect and ensure `npm run check` runs them.
-All extension adapter and package-integration suites consume `testing/` as the single home for reusable Pi-boundary fixtures. `testing/` provides the framework-neutral source-only `pi-tools/testing` recorder: configure it before installing factories, then use its recorded API, contexts, UI, registry, discovery, and named raw/direct calls. Raw listener errors and raw/direct calls are recorder behavior; they do not emulate Pi middleware, error conversion, command routing, or session scheduling. Keep specialized clocks, countdowns, processes, streams, and rendering fixtures in their extension domains.
-The separate SDK integration test uses only public Pi SDK loading and session inspection APIs to prove real extension registration with isolated, credential-free resources.
+Keep narrowly coupled tests beside each extension and tiny shared fixtures under `tests/`. Tests cover the four retained behaviors, the two-event role bridge, child process isolation and bounds, immediate handoff, and timing continuity. The loader smoke uses the real current Pi CLI with isolated package, config, and session directories.

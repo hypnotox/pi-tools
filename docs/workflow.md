@@ -185,5 +185,5 @@ A tracked stub should locate the invoking worktree, not assume the primary check
 
 <!-- awf:edit ci: from .awf/parts/workflow/ci.md -->
 ## Continuous integration
-GitHub Actions runs the pinned AWF check, a clean `npm ci`, and the canonical `npm run check` gate on every push and pull request. Local staged checks and rendered hook payloads remain the pre-commit boundary; require the hosted `gate` status in remote branch policy before treating it as an enforced receiving boundary.
+GitHub Actions runs the configured AWF check, a fresh `npm install --no-package-lock`, and `npm run check` on every push and pull request using the current Node release. Local staged checks and rendered hooks remain the pre-commit boundary; require the hosted `gate` status in remote branch policy before treating it as an enforced receiving boundary.
 

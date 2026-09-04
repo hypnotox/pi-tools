@@ -3,36 +3,35 @@
 
 <!-- awf:edit overview: from .awf/docs/parts/architecture/overview.md -->
 ## Overview
-`pi-tools` is a public-source Pi package and its own awf-governed development workspace. The package manifest exposes the top-level resource directories to installed Pi environments. The `.awf/` configuration renders project-local workflow support under `.pi/`, `.claude/`, `docs/`, and the root agent guides; those generated resources maintain this repository and are not package exports.
+`pi-tools` is a personal Pi package and an awf-governed development workspace. Its manifest exposes only timing, context telemetry, handoff, and subagent extensions. Generated workflow resources maintain this repository and are not package exports.
 
 
 <!-- awf:edit components: from .awf/docs/parts/architecture/components.md -->
 ## Components
-- `package.json`: package identity, Node compatibility, and Pi resource entry points.
-- `extensions/`: TypeScript or JavaScript extensions exported by the package.
-- `skills/`: portable Agent Skills exported by the package.
-- `prompts/`: Markdown prompt templates exported by the package.
-- `themes/`: JSON themes exported by the package.
+- `package.json`: package identity and the four Pi extension entry points.
+- `extensions/timing/`: agent, turn, and tool timing plus handoff continuity.
+- `extensions/context-usage/`: source-backed context telemetry injected into model context.
+- `extensions/handoff/`: immediate persisted-session replacement and kickoff delivery.
+- `extensions/subagents/`: direct generic delegation, the private role bridge, and POSIX child execution.
+- `tests/`: small test-local fixtures and cross-entrypoint smoke coverage.
 - `.awf/`: authored workflow configuration and convention parts.
-- `.pi/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, and the generated catalog under `docs/`: awf-rendered project workflow and documentation surfaces.
-- `docs/decisions/`: banner-free, append-only durable decision records authored directly.
-- `testing/`: source-only `pi-tools/testing` harness for documented Pi extension-boundary recordings; it deliberately does not simulate Pi runtime behavior.
+- `.pi/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, and generated `docs/`: repository workflow surfaces, not package exports.
 
 
 <!-- awf:edit data-flow: from .awf/docs/parts/architecture/data-flow.md -->
 ## Data flow
-Pi installs the repository as a package, reads `package.json`, and discovers resources through its declared paths. A Pi session loads those resources at startup or after `/reload`.
+Pi installs the repository, reads the four explicit extension paths in `package.json`, and loads them at startup or after `/reload`. Timing and context telemetry observe Pi events, handoff replaces a persisted session through a queued command, and subagent tools spawn fresh no-session Pi children. `agentic-skills` may publish specialized roles over Pi's event bus; `pi-tools` owns execution.
 
-Maintainers edit package resources directly. For governed workflow or generated documentation changes, maintainers edit `.awf/`, run `./awf render`, and commit the source, rendered outputs, and `.awf/awf.lock` together. `./awf check` verifies the resulting tree.
+Maintainers edit package resources directly. For governed workflow or generated documentation changes, edit `.awf/` and run `./awf render`; `./awf check` may report expected adapter drift until the deferred AWF upgrade.
 
 
 <!-- awf:edit dependencies: from .awf/docs/parts/architecture/dependencies.md -->
 ## Key dependencies
 | Dependency | Role |
 |---|---|
-| Pi | Loads the package manifest and executes or presents its resources. |
-| Node.js 22.19.0 or newer | Runtime baseline declared by the package. |
-| awf | Pinned development tool that renders and checks the repository workflow. |
+| Pi | Supplies runtime host modules and loads the four extension entry points. |
+| Current Node release | Runs development checks and POSIX child processes. |
+| awf | Renders and checks the repository contributor workflow. |
 | TypeScript, Biome, Knip, and Vitest | Development-only type, format, lint, dead-code, dependency, and test checks. |
 
-Imported Pi core packages are wildcard `peerDependencies` supplied by Pi. Quality tooling is confined to `devDependencies`; future third-party extension runtime libraries belong in `dependencies`.
+Pi core packages and TypeBox are wildcard peers supplied by Pi. Registry development dependencies use `*`; the coding-agent development artifact resolves through its stable latest-release URL. Installs create no lockfile.

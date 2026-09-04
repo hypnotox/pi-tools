@@ -13,6 +13,5 @@ The development domain owns contributor tooling and verification contracts for e
 
 - [Commit Provenance](../topics/development/commit-provenance.md): Author, committer, and signature requirements for repository history.
 - [Distribution Policy](../topics/development/distribution-policy.md): Source distribution, licensing, and publication boundaries.
-- [Extension Toolchain](../topics/development/extension-toolchain.md): Shared language, quality, and verification contracts for executable Pi extensions.
-- [Subagent Toolkit](../topics/development/subagent-toolkit.md): Runtime and public profile integration contracts for general-purpose subagent delegation.
-- [Usage Limit Resume](../topics/development/usage-limit-resume.md): Detection, waiting, and automatic resume contracts for provider usage-limit interruptions.
+- [Extension Toolchain](../topics/development/extension-toolchain.md): Language, floating dependency, and verification contracts for the four Pi extensions.
+- [Subagent Execution](../topics/development/subagent-execution.md): Direct generic delegation, specialized role publication, and child runner contracts.

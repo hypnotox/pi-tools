@@ -3,63 +3,41 @@
   "version": "0.3.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Personal extensions, skills, prompts, and themes for pi.",
+  "description": "Personal timing, context telemetry, handoff, and subagent extensions for Pi.",
   "type": "module",
-  "exports": {
-    "./subagent-profile": {
-      "types": "./extensions/subagents/api.ts"
-    },
-    "./testing": {
-      "types": "./testing/index.ts",
-      "import": "./testing/index.ts"
-    }
-  },
   "keywords": [
     "pi-package"
   ],
-  "engines": {
-    "node": ">=22.19.0"
-  },
   "scripts": {
-    "format": "node scripts/run-biome.mjs check --write --linter-enabled=false",
-    "format:check": "node scripts/run-biome.mjs check --linter-enabled=false",
-    "lint": "node scripts/run-biome.mjs lint",
+    "format": "biome check --vcs-enabled=false --write --linter-enabled=false extensions tests biome.json knip.json package.json tsconfig.json",
+    "format:check": "biome check --vcs-enabled=false --linter-enabled=false extensions tests biome.json knip.json package.json tsconfig.json",
+    "lint": "biome lint --vcs-enabled=false extensions tests biome.json knip.json package.json tsconfig.json",
     "typecheck": "tsc --noEmit",
     "deadcode": "knip",
     "test": "vitest run",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run deadcode && npm test"
   },
-  "dependencies": {
-    "typebox": "1.3.7"
-  },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*"
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.8",
-    "@types/node": "20.19.37",
-    "knip": "5.88.1",
-    "typescript": "5.9.3",
-    "vitest": "3.2.7"
+    "@biomejs/biome": "*",
+    "@earendil-works/pi-coding-agent": "https://github.com/hypnotox/pi/releases/latest/download/pi-coding-agent.tgz",
+    "@types/node": "*",
+    "knip": "*",
+    "typebox": "*",
+    "typescript": "*",
+    "vitest": "*"
   },
   "pi": {
     "extensions": [
       "./extensions/timing",
       "./extensions/subagents",
       "./extensions/context-usage",
-      "./extensions/handoff",
-      "./extensions/limit-resume"
-    ],
-    "skills": [
-      "./skills"
-    ],
-    "prompts": [
-      "./prompts"
-    ],
-    "themes": [
-      "./themes"
+      "./extensions/handoff"
     ]
   }
 }

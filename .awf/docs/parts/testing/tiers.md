@@ -1,1 +1,1 @@
-Focused npm scripts provide fast format, lint, type, dead-code, and test lanes. `npm run check` is the aggregate executable-resource tier, while `./awf check` is the repository-workflow tier. Minimum-Node and Pi-load smoke checks are release-of-change evidence rather than part of every local aggregate run.
+Focused Vitest files provide fast feedback. `npm run check` is the executable-resource gate; `./awf check` is the repository-workflow gate. Fresh-install, real-loader, and cross-package checks are completion evidence.

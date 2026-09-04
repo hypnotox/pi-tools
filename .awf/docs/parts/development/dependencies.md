@@ -1,3 +1,1 @@
-`package.json` declares Node.js 22.19.0 or newer. Run `npm ci` to install the lockfile-pinned TypeScript, Biome, Knip, and Vitest development toolchain. The awf bootstrap pins the repository workflow tool independently of npm.
-
-When an extension imports a third-party runtime package, add it to `dependencies`. When it imports Pi core APIs, add the corresponding package to `peerDependencies` with a `*` range. Do not add dependencies for Markdown skills, prompts, or JSON themes unless their helpers require them.
+Run `npm install --no-package-lock` to resolve current dependencies without creating a lockfile. Registry development dependencies use `*`; the current coding-agent fork resolves from `releases/latest/download/pi-coding-agent.tgz`. Pi core packages and TypeBox remain wildcard peers supplied by Pi at runtime.
