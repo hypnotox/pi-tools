@@ -47,7 +47,7 @@ export interface RunOutcome {
   usage: ExecutionUsage;
 }
 
-export interface RunnerDependencies {
+interface RunnerDependencies {
   spawn?: typeof nodeSpawn;
   mkdtemp?: typeof mkdtemp;
   writeFile?: typeof writeFile;

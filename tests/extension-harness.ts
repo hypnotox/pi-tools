@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-export interface TestBus {
+interface TestBus {
   emissions: Array<[string, unknown]>;
   on(name: string, listener: (value: unknown) => void): () => void;
   emit(name: string, value?: unknown): void;
