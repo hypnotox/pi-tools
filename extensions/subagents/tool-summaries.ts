@@ -1,4 +1,5 @@
 const MAX_VALUE = 256;
+const TRUNCATION_MARKER = "...";
 
 function text(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -11,7 +12,10 @@ function text(value: unknown): string | undefined {
     .join("")
     .replace(/\s+/g, " ")
     .trim();
-  return clean && clean.length <= MAX_VALUE ? clean : undefined;
+  if (!clean) return undefined;
+  const characters = Array.from(clean);
+  if (characters.length <= MAX_VALUE) return clean;
+  return `${characters.slice(0, MAX_VALUE - TRUNCATION_MARKER.length).join("")}${TRUNCATION_MARKER}`;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -35,8 +39,10 @@ export function summarizeTool(toolName: string, args: unknown): string {
     case "edit":
     case "write":
       return path ? `${toolName} ${path}` : toolName;
-    case "bash":
-      return toolName;
+    case "bash": {
+      const command = text(values.command);
+      return command ? `bash ${command}` : toolName;
+    }
     case "grep": {
       const pattern = text(values.pattern);
       return pattern ? `grep ${pattern}${path ? ` ${path}` : ""}` : toolName;

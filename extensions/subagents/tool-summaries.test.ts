@@ -2,13 +2,15 @@ import { describe, expect, it } from "vitest";
 import { summarizeTool } from "./tool-summaries.js";
 
 describe("subagent tool summaries", () => {
-  it("never persists bash command text", () => {
-    expect(
-      summarizeTool("bash", {
-        command: "API_TOKEN=secret curl -H 'Authorization: Bearer hidden' https://example.test",
-      }),
-    ).toBe("bash");
-    expect(summarizeTool("bash", { command: "TOKEN=\\ EXAMPLE_SECRET" })).toBe("bash");
+  it("shows as much of a bash command as the bounded single-line preview allows", () => {
+    expect(summarizeTool("bash", { command: "printf first\nprintf second" })).toBe(
+      "bash printf first printf second",
+    );
+
+    const summary = summarizeTool("bash", { command: "x".repeat(300) });
+    expect(summary).toBe(`bash ${"x".repeat(253)}...`);
+    expect(summary).not.toBe("bash");
+    expect(summary).not.toContain("\n");
   });
 
   it("falls back to the tool name for unknown tools instead of retaining arguments", () => {
