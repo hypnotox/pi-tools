@@ -26,4 +26,4 @@ Focused Vitest files provide fast feedback. `npm run check` is the executable-re
 
 ## Layout and test shape
 
-Keep narrowly coupled tests beside each extension and tiny shared fixtures under `tests/`. Tests cover the four retained behaviors, the two-event role bridge, child process isolation and bounds, immediate handoff, and timing continuity. The loader smoke uses the real current Pi CLI with isolated package, config, and session directories; it also installs the local package through settings and verifies native handoff prompt discovery and expansion.
+Keep narrowly coupled tests beside each extension and tiny shared fixtures under `tests/`. Tests cover the four retained behaviors, the two-event role bridge, child process isolation and bounds, immediate handoff, model and thinking-level continuity, and timing continuity. The loader smoke uses the real current Pi CLI with isolated package, config, and session directories; it also installs the local package through settings and verifies native handoff prompt discovery and expansion.

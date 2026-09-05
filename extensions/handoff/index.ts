@@ -9,11 +9,13 @@ import {
   HANDOFF_CONTINUITY_ENTRY,
   HANDOFF_CONTINUITY_REQUEST,
   type HandoffContinuity,
+  type HandoffSessionContinuation,
 } from "../handoff-continuity.js";
 
 const COMMAND = "handoff-session-continue";
 const TOOL = "handoff_session";
 const MAX_KICKOFF_BYTES = 16 * 1024;
+const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
 interface PendingHandoff {
   id: string;
@@ -26,6 +28,55 @@ export interface HandoffDependencies {
 
 export function handoffEnvelope(kickoff: string): string {
   return `Handoff context from the previous session; this is not user input:\n\n${kickoff}`;
+}
+
+function isSessionContinuation(value: unknown): value is HandoffSessionContinuation {
+  if (!value || typeof value !== "object") return false;
+  const continuation = value as Record<string, unknown>;
+  const model = continuation.model;
+  return (
+    !!model &&
+    typeof model === "object" &&
+    typeof (model as Record<string, unknown>).provider === "string" &&
+    typeof (model as Record<string, unknown>).id === "string" &&
+    typeof continuation.thinkingLevel === "string" &&
+    THINKING_LEVELS.has(continuation.thinkingLevel)
+  );
+}
+
+async function restoreSessionContinuation(
+  pi: ExtensionAPI,
+  context: ExtensionContext,
+): Promise<void> {
+  const entry = [...context.sessionManager.getEntries()]
+    .reverse()
+    .find(
+      (candidate) =>
+        candidate.type === "custom" && candidate.customType === HANDOFF_CONTINUITY_ENTRY,
+    );
+  const continuity = entry && "data" in entry ? (entry.data as HandoffContinuity) : undefined;
+  if (!isSessionContinuation(continuity?.session)) return;
+
+  const { model: requestedModel, thinkingLevel } = continuity.session;
+  const model = context.modelRegistry.find(requestedModel.provider, requestedModel.id);
+  if (!model) {
+    context.ui.notify(
+      `Could not preserve handoff model ${requestedModel.provider}/${requestedModel.id}; using the session default.`,
+      "warning",
+    );
+    return;
+  }
+
+  const alreadyActive =
+    context.model?.provider === requestedModel.provider && context.model.id === requestedModel.id;
+  if (!alreadyActive && !(await pi.setModel(model))) {
+    context.ui.notify(
+      `Could not authenticate handoff model ${requestedModel.provider}/${requestedModel.id}; using the session default.`,
+      "warning",
+    );
+    return;
+  }
+  pi.setThinkingLevel(thinkingLevel);
 }
 
 function toolCallsInCurrentBatch(context: ExtensionContext, event: ToolCallEvent) {
@@ -85,7 +136,8 @@ export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependenc
     suppressThresholdCompaction = true;
   };
 
-  pi.on("session_start", (_event, sessionContext) => {
+  pi.on("session_start", async (event, sessionContext) => {
+    if (event.reason === "new") await restoreSessionContinuation(pi, sessionContext);
     if (registered || !sessionContext.sessionManager.getSessionFile()) return;
     if (pi.getAllTools().some((tool) => tool.name === TOOL)) return;
     registered = true;
@@ -100,7 +152,14 @@ export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependenc
           if (pending !== request) return;
           const parentSession = context.sessionManager.getSessionFile();
           if (!parentSession) throw new Error("The active session is no longer persisted");
-          const continuity: HandoffContinuity = {};
+          const continuity: HandoffContinuity = context.model
+            ? {
+                session: {
+                  model: { provider: context.model.provider, id: context.model.id },
+                  thinkingLevel: context.thinkingLevel ?? "off",
+                },
+              }
+            : {};
           pi.events.emit(HANDOFF_CONTINUITY_REQUEST, continuity);
           const result = await context.newSession({
             parentSession,

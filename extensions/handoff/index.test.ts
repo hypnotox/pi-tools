@@ -15,8 +15,21 @@ interface NewSessionRequest {
   }): Promise<void>;
 }
 
-function createHarness(options: { persisted?: boolean; mode?: "tui" | "rpc" | "print" } = {}) {
+function createHarness(
+  options: {
+    persisted?: boolean;
+    mode?: "tui" | "rpc" | "print";
+    entries?: unknown[];
+    model?: { provider: string; id: string };
+    thinkingLevel?: string;
+    modelAvailable?: boolean;
+    modelAuthenticated?: boolean;
+  } = {},
+) {
   const harness = createExtensionHarness();
+  const setModel = vi.fn(async () => options.modelAuthenticated !== false);
+  const setThinkingLevel = vi.fn();
+  Object.assign(harness.api, { setModel, setThinkingLevel });
   let leaf: unknown = {
     type: "message",
     message: {
@@ -45,9 +58,16 @@ function createHarness(options: { persisted?: boolean; mode?: "tui" | "rpc" | "p
   });
   const context = {
     mode: options.mode ?? "tui",
+    model: options.model ?? { provider: "anthropic", id: "current-model" },
+    thinkingLevel: options.thinkingLevel ?? "high",
+    modelRegistry: {
+      find: (provider: string, id: string) =>
+        options.modelAvailable === false ? undefined : { provider, id },
+    },
     sessionManager: {
       getSessionFile: () => (options.persisted === false ? undefined : "parent.jsonl"),
       getLeafEntry: () => leaf,
+      getEntries: () => options.entries ?? [],
     },
     ui: {
       setEditorText: (text: string) => editor.push(text),
@@ -65,7 +85,9 @@ function createHarness(options: { persisted?: boolean; mode?: "tui" | "rpc" | "p
     editor,
     notices,
     newSession,
-    start: () => harness.invoke("session_start", {}, context),
+    setModel,
+    setThinkingLevel,
+    start: (event: { reason?: string } = {}) => harness.invoke("session_start", event, context),
     execute: (kickoff = "Continue.") => harness.execute("handoff_session", { kickoff }, context),
     continue: (token = "request-id") =>
       harness.commands.get("handoff-session-continue")?.handler(token, context),
@@ -125,7 +147,109 @@ describe("fresh-session handoff", () => {
     await harness.execute();
     await harness.continue();
     expect(harness.setupEntries).toEqual([
-      ["pi-tools:handoff-continuity", { timing: { agentDurationMs: 5_000, turnCount: 2 } }],
+      [
+        "pi-tools:handoff-continuity",
+        {
+          session: {
+            model: { provider: "anthropic", id: "current-model" },
+            thinkingLevel: "high",
+          },
+          timing: { agentDurationMs: 5_000, turnCount: 2 },
+        },
+      ],
+    ]);
+  });
+
+  it("restores the parent model and thinking level before the replacement turn", async () => {
+    const harness = createHarness({
+      model: { provider: "openai", id: "default-model" },
+      thinkingLevel: "low",
+      entries: [
+        {
+          type: "custom",
+          customType: "pi-tools:handoff-continuity",
+          data: {
+            session: {
+              model: { provider: "anthropic", id: "preserved-model" },
+              thinkingLevel: "xhigh",
+            },
+          },
+        },
+      ],
+    });
+
+    await harness.start({ reason: "new" });
+
+    expect(harness.setModel).toHaveBeenCalledWith({
+      provider: "anthropic",
+      id: "preserved-model",
+    });
+    expect(harness.setThinkingLevel).toHaveBeenCalledWith("xhigh");
+  });
+
+  it("leaves an ordinary new session on its defaults", async () => {
+    const harness = createHarness();
+
+    await harness.start({ reason: "new" });
+
+    expect(harness.setModel).not.toHaveBeenCalled();
+    expect(harness.setThinkingLevel).not.toHaveBeenCalled();
+  });
+
+  it("warns and retains defaults when the preserved model is unavailable", async () => {
+    const harness = createHarness({
+      modelAvailable: false,
+      entries: [
+        {
+          type: "custom",
+          customType: "pi-tools:handoff-continuity",
+          data: {
+            session: {
+              model: { provider: "anthropic", id: "missing-model" },
+              thinkingLevel: "high",
+            },
+          },
+        },
+      ],
+    });
+
+    await harness.start({ reason: "new" });
+
+    expect(harness.setModel).not.toHaveBeenCalled();
+    expect(harness.setThinkingLevel).not.toHaveBeenCalled();
+    expect(harness.notices).toEqual([
+      [
+        "Could not preserve handoff model anthropic/missing-model; using the session default.",
+        "warning",
+      ],
+    ]);
+  });
+
+  it("warns and retains defaults when the preserved model cannot authenticate", async () => {
+    const harness = createHarness({
+      modelAuthenticated: false,
+      entries: [
+        {
+          type: "custom",
+          customType: "pi-tools:handoff-continuity",
+          data: {
+            session: {
+              model: { provider: "anthropic", id: "unauthenticated-model" },
+              thinkingLevel: "high",
+            },
+          },
+        },
+      ],
+    });
+
+    await harness.start({ reason: "new" });
+
+    expect(harness.setThinkingLevel).not.toHaveBeenCalled();
+    expect(harness.notices).toEqual([
+      [
+        "Could not authenticate handoff model anthropic/unauthenticated-model; using the session default.",
+        "warning",
+      ],
     ]);
   });
 
