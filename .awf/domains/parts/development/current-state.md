@@ -1,1 +1,0 @@
-The development domain owns contributor tooling and verification contracts for executable package resources. Project-wide workflow mechanics remain documented in `docs/development.md`, `docs/testing.md`, and `docs/workflow.md`.

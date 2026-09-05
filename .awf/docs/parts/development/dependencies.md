@@ -1,1 +1,0 @@
-Run `npm install --no-package-lock` to resolve current dependencies without creating a lockfile. Registry development dependencies use `*`; the current coding-agent fork resolves from `releases/latest/download/pi-coding-agent.tgz`. Pi core packages and TypeBox remain wildcard peers supplied by Pi at runtime.

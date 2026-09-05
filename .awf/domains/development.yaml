@@ -1,7 +1,0 @@
-paths:
-- extensions/**
-- package.json
-- tsconfig.json
-- biome.json
-- knip.json
-- tests/**

@@ -1,1 +1,0 @@
-Maintain `pi-tools` as the shared source for the owner's portable Pi resources. Keep package resources usable across systems, keep the awf-managed contributor workflow aligned with repository reality, and update user-facing documentation with every behavior change.

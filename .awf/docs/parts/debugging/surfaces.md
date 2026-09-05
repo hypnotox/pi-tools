@@ -1,6 +1,0 @@
-- `pi list`: show installed packages and their configured sources.
-- `pi config`: inspect whether package resources are enabled.
-- Pi startup output: inspect the four loaded package extensions.
-- `git status --short`: distinguish authored edits from regenerated files.
-- `./awf check`: report generated drift, invalid awf configuration, broken links, and workflow-state violations.
-- `./awf render`: print each generated file changed by current `.awf/` authority.

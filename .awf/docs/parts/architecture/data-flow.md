@@ -1,3 +1,0 @@
-Pi installs the repository, reads the four explicit extension paths in `package.json`, and loads them at startup or after `/reload`. Timing and context telemetry observe Pi events, handoff replaces a persisted session through a queued command, and subagent tools spawn fresh no-session Pi children and project their JSON event streams into bounded live tool updates. `agentic-skills` may publish specialized roles over Pi's event bus; `pi-tools` owns execution and child-activity presentation.
-
-Maintainers edit package resources directly. For governed workflow or generated documentation changes, edit `.awf/` and run `./awf render`; `./awf check` may report expected adapter drift until the deferred AWF upgrade.

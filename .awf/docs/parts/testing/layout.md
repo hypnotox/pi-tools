@@ -1,1 +1,0 @@
-Keep narrowly coupled tests beside each extension and tiny shared fixtures under `tests/`. Tests cover the four retained behaviors, the two-event role bridge, child process isolation and bounds, immediate handoff, and timing continuity. The loader smoke uses the real current Pi CLI with isolated package, config, and session directories.

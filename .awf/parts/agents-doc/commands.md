@@ -1,3 +1,0 @@
-- `./awf render`: regenerate awf-owned guidance after changing `.awf/`
-- `./awf check`: verify rendered output and repository workflow state
-- `/reload`: reload Pi resources after editing them during local development

@@ -1,1 +1,0 @@
-GitHub Actions runs the configured AWF check, a fresh `npm install --no-package-lock`, and `npm run check` on every push and pull request using the current Node release. Local staged checks and rendered hooks remain the pre-commit boundary; require the hosted `gate` status in remote branch policy before treating it as an enforced receiving boundary.

@@ -1,1 +1,0 @@
-`pi-tools` is a personal Pi package and an awf-governed development workspace. Its manifest exposes only timing, context telemetry, handoff, and subagent extensions. Generated workflow resources maintain this repository and are not package exports.

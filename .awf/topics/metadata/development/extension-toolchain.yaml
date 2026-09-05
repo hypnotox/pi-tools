@@ -1,9 +1,0 @@
-title: Extension Toolchain
-summary: Language, floating dependency, and verification contracts for the four Pi extensions.
-paths:
-- extensions/**
-- package.json
-- tsconfig.json
-- biome.json
-- knip.json
-- tests/**

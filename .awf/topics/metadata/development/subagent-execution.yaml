@@ -1,4 +1,0 @@
-title: Subagent Execution
-summary: Direct generic delegation, specialized role publication, and child runner contracts.
-paths:
-- extensions/subagents/**

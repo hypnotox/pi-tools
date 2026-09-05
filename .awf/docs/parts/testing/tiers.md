@@ -1,1 +1,0 @@
-Focused Vitest files provide fast feedback. `npm run check` is the executable-resource gate; `./awf check` is the repository-workflow gate. Fresh-install, real-loader, and cross-package checks are completion evidence.
