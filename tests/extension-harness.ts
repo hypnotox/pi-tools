@@ -38,6 +38,8 @@ interface TestTool {
     properties: Record<string, unknown>;
   };
   execute(...args: unknown[]): Promise<Record<string, unknown>>;
+  renderCall?: unknown;
+  renderResult?: unknown;
 }
 
 interface TestCommand {
@@ -87,10 +89,16 @@ export function createExtensionHarness(options: { activeTools?: string[]; bus?: 
     for (const handler of handlers.get(name) ?? []) results.push(await handler(event, context));
     return results;
   };
-  const execute = async (name: string, params: unknown, context: unknown, signal?: AbortSignal) => {
+  const execute = async (
+    name: string,
+    params: unknown,
+    context: unknown,
+    signal?: AbortSignal,
+    onUpdate?: (result: unknown) => void,
+  ) => {
     const tool = tools.find((candidate) => candidate.name === name);
     if (!tool) throw new Error(`No registered tool named ${name}`);
-    return tool.execute("call", params, signal, undefined, context);
+    return tool.execute("call", params, signal, onUpdate, context);
   };
   return {
     api,

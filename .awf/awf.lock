@@ -159,8 +159,8 @@
     "docs/architecture.md": {
       "templateId": "docs/architecture.md.tmpl",
       "templateHash": "sha256:c6a71d0bd83cb580c5da4ef2421d13177a7525f8c15bdf0b985f93f44d73b571",
-      "configHash": "sha256:171035b18ad63d11e89a4adc812e904850678096d1f0a46746ed2024b3a94f19",
-      "outputHash": "sha256:12516ed759d1c2e76c2bc9e2cfd010208ea77321bffbab7e3afc6ea7a9e2030a",
+      "configHash": "sha256:8f7086ab25c4513e3be692e4424fb23b31319ff90becaeffc2f21d28f0220856",
+      "outputHash": "sha256:35cd8ca934db960c84bbe9a46819f4078d6aa803bd2d228e9ccc201bf1d8d1d9",
       "mode": 420
     },
     "docs/config-reference.md": {
@@ -287,8 +287,8 @@
     "docs/topics/development/subagent-execution.md": {
       "templateId": "topics/topic.md.tmpl",
       "templateHash": "sha256:25b4ec23c7a22667f9d78b1e5883af8702d82f67896c3a42ac0ad19032d7c7bb",
-      "configHash": "sha256:e1e37b34ff8eef60102de61ae0cc7b79efc000a8010704a1ef63a6c3b6c0bfde",
-      "outputHash": "sha256:621d46139cffde876af408e06423a20002c6a8e513e60abaec768b1afa461549",
+      "configHash": "sha256:6b2e107e15b678d8b9957b2838d3dfcdccd0733b0b202fa0f4e444ba1d438577",
+      "outputHash": "sha256:8fd3cee7cc85ac43ee30f41593bf9f5639562cba49bde615cc477f291488372f",
       "mode": 420
     },
     "docs/workflow.md": {

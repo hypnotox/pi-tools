@@ -3,13 +3,18 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import type { ExecutionProjection, RunProgress } from "./activity.js";
+import { summarizeTool } from "./tool-summaries.js";
 
 export const CHILD_MARKER = "PI_TOOLS_SUBAGENT_CHILD";
 
 const MAX_TEXT_BYTES = 16 * 1024;
+const MAX_ACTIVITY_TEXT_BYTES = 1024;
+const MAX_EXECUTION_HISTORY = 50;
 const MAX_JSON_LINE_BYTES = 1024 * 1024;
 const TERMINATE_GRACE_MS = 1_000;
 const FORCE_WAIT_MS = 1_000;
+const REFRESH_INTERVAL_MS = 1_000;
 const BLANK_REPORT = "Subagent completed without a text report.";
 
 export interface ExecutionUsage {
@@ -38,6 +43,7 @@ export interface RunRequest {
   tools: string[];
   approved: boolean;
   signal?: AbortSignal;
+  onUpdate?: (progress: RunProgress) => void;
 }
 
 export interface RunOutcome {
@@ -45,6 +51,7 @@ export interface RunOutcome {
   report: string;
   failure?: string;
   usage: ExecutionUsage;
+  execution: ExecutionProjection;
 }
 
 interface RunnerDependencies {
@@ -55,6 +62,8 @@ interface RunnerDependencies {
   executable?: () => { command: string; prefix: string[] };
   signalTree?: (child: ChildProcess, signal: NodeJS.Signals) => void;
   delay?: (milliseconds: number) => Promise<void>;
+  monotonicNow?: () => number;
+  scheduleRefresh?: (callback: () => void, milliseconds: number) => () => void;
 }
 
 const emptyUsage = (): ExecutionUsage => ({
@@ -65,6 +74,23 @@ const emptyUsage = (): ExecutionUsage => ({
   totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 });
+
+function copyUsage(usage: ExecutionUsage): ExecutionUsage {
+  return { ...usage, cost: { ...usage.cost } };
+}
+
+function copyExecution(execution: ExecutionProjection): ExecutionProjection {
+  return {
+    ...execution,
+    activity: execution.activity.map((entry) => ({ ...entry })),
+    ...(execution.activeUsage === undefined
+      ? {}
+      : { activeUsage: copyUsage(execution.activeUsage) }),
+    ...(execution.latestTurnUsage === undefined
+      ? {}
+      : { latestTurnUsage: copyUsage(execution.latestTurnUsage) }),
+  };
+}
 
 function finiteNonnegative(value: unknown): number {
   const number = Number(value ?? 0);
@@ -142,6 +168,14 @@ export class SubprocessRunner {
       delay:
         dependencies.delay ??
         ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))),
+      monotonicNow: dependencies.monotonicNow ?? (() => performance.now()),
+      scheduleRefresh:
+        dependencies.scheduleRefresh ??
+        ((callback, milliseconds) => {
+          const timer = setInterval(callback, milliseconds);
+          timer.unref();
+          return () => clearInterval(timer);
+        }),
     };
   }
 
@@ -161,11 +195,95 @@ export class SubprocessRunner {
 
   async #run(request: RunRequest): Promise<RunOutcome> {
     const usage = emptyUsage();
+    const execution: ExecutionProjection = {
+      prompt: truncateUtf8(request.task),
+      activity: [],
+      omittedActivity: 0,
+      elapsedMs: 0,
+      turns: 0,
+    };
+    const invocationStarted = this.#deps.monotonicNow();
+    const activeTools = new Map<
+      string,
+      { started: number; entry: Extract<ExecutionProjection["activity"][number], { kind: "tool" }> }
+    >();
+    let activeRetry:
+      | {
+          started: number;
+          entry: Extract<ExecutionProjection["activity"][number], { kind: "retry" }>;
+        }
+      | undefined;
+    let unfinishedThinking = "";
+
+    const updateDurations = (): void => {
+      const now = this.#deps.monotonicNow();
+      execution.elapsedMs = Math.max(0, now - invocationStarted);
+      for (const active of activeTools.values())
+        if (active.entry.state === "running") active.entry.durationMs = now - active.started;
+      if (activeRetry?.entry.state === "running")
+        activeRetry.entry.durationMs = now - activeRetry.started;
+    };
+    const emit = (): void => {
+      updateDurations();
+      request.onUpdate?.({
+        state: "running",
+        usage: copyUsage(usage),
+        execution: copyExecution(execution),
+      });
+    };
+    const boundHistory = (reserved = 0): void => {
+      while (execution.activity.length > MAX_EXECUTION_HISTORY - reserved) {
+        execution.activity.shift();
+        execution.omittedActivity++;
+      }
+    };
+    const history = (entry: ExecutionProjection["activity"][number]): void => {
+      execution.activity.push(entry);
+      boundHistory(execution.unfinishedThinking === undefined ? 0 : 1);
+    };
+    const thinking = (delta: unknown): void => {
+      if (typeof delta !== "string") return;
+      delete execution.unfinishedThinking;
+      const lines = (unfinishedThinking + delta).split("\n");
+      unfinishedThinking = truncateUtf8(lines.pop() ?? "", MAX_ACTIVITY_TEXT_BYTES);
+      for (const line of lines) {
+        const text = line.trim();
+        if (text) history({ kind: "thinking", text: truncateUtf8(text, MAX_ACTIVITY_TEXT_BYTES) });
+      }
+      const partial = unfinishedThinking.trim();
+      if (partial) {
+        execution.unfinishedThinking = partial;
+        boundHistory(1);
+      }
+    };
+    const flushThinking = (): void => {
+      const text = unfinishedThinking.trim();
+      unfinishedThinking = "";
+      delete execution.unfinishedThinking;
+      if (text) history({ kind: "thinking", text: truncateUtf8(text, MAX_ACTIVITY_TEXT_BYTES) });
+    };
+    const finishActivity = (): void => {
+      updateDurations();
+      for (const active of activeTools.values()) active.entry.state = "error";
+      activeTools.clear();
+      if (activeRetry) {
+        activeRetry.entry.state = "error";
+        activeRetry = undefined;
+      }
+      flushThinking();
+      if (execution.activeUsage) {
+        addUsage(usage, execution.activeUsage);
+        execution.latestTurnUsage = copyUsage(execution.activeUsage);
+        execution.turns++;
+        delete execution.activeUsage;
+      }
+    };
     const cancelled = (message: string): RunOutcome => ({
       state: "cancelled",
       report: message,
       failure: message,
       usage,
+      execution,
     });
     if (this.#disposed) return cancelled("Cancelled by shutdown");
     if (request.signal?.aborted) return cancelled("Cancelled before launch");
@@ -175,6 +293,7 @@ export class SubprocessRunner {
     let removeAbort = (): void => undefined;
     let removeListeners = (): void => undefined;
     let terminate = async (): Promise<void> => undefined;
+    let stopRefresh = (): void => undefined;
 
     try {
       let promptPath: string | undefined;
@@ -273,12 +392,95 @@ export class SubprocessRunner {
         } catch {
           return;
         }
+        if (event.type === "tool_execution_start") {
+          const id = typeof event.toolCallId === "string" ? event.toolCallId : "";
+          if (!id || activeTools.has(id)) return;
+          const toolName = typeof event.toolName === "string" ? event.toolName : "tool";
+          const entry = {
+            kind: "tool" as const,
+            toolCallId: truncateUtf8(id, MAX_ACTIVITY_TEXT_BYTES),
+            summary: truncateUtf8(summarizeTool(toolName, event.args), MAX_ACTIVITY_TEXT_BYTES),
+            state: "running" as const,
+            durationMs: 0,
+          };
+          history(entry);
+          activeTools.set(id, { started: this.#deps.monotonicNow(), entry });
+          emit();
+          return;
+        }
+        if (event.type === "tool_execution_end") {
+          const id = typeof event.toolCallId === "string" ? event.toolCallId : "";
+          const active = activeTools.get(id);
+          if (!active) return;
+          active.entry.durationMs = Math.max(0, this.#deps.monotonicNow() - active.started);
+          active.entry.state =
+            event.isError === true || event.error !== undefined ? "error" : "success";
+          activeTools.delete(id);
+          emit();
+          return;
+        }
+        if (event.type === "message_update") {
+          if (event.usage && typeof event.usage === "object")
+            execution.activeUsage = usageFrom(event.usage as Record<string, unknown>);
+          const messageEvent = event.assistantMessageEvent as Record<string, unknown> | undefined;
+          if (messageEvent?.type === "thinking_delta") thinking(messageEvent.delta);
+          else if (messageEvent?.type === "thinking_end") flushThinking();
+          emit();
+          return;
+        }
+        if (event.type === "auto_retry_start") {
+          const attempt =
+            Number.isInteger(event.attempt) && Number(event.attempt) > 0
+              ? Number(event.attempt)
+              : 1;
+          const maxAttempts =
+            Number.isInteger(event.maxAttempts) && Number(event.maxAttempts) >= attempt
+              ? Number(event.maxAttempts)
+              : attempt;
+          if (activeRetry) {
+            activeRetry.entry.attempt = attempt;
+            activeRetry.entry.maxAttempts = maxAttempts;
+          } else {
+            const entry = {
+              kind: "retry" as const,
+              attempt,
+              maxAttempts,
+              state: "running" as const,
+              durationMs: 0,
+            };
+            history(entry);
+            activeRetry = { started: this.#deps.monotonicNow(), entry };
+          }
+          emit();
+          return;
+        }
+        if (event.type === "auto_retry_end") {
+          if (activeRetry) {
+            activeRetry.entry.durationMs = Math.max(
+              0,
+              this.#deps.monotonicNow() - activeRetry.started,
+            );
+            activeRetry.entry.state = event.success === true ? "success" : "error";
+            activeRetry = undefined;
+          }
+          emit();
+          return;
+        }
         if (event.type !== "message_end" || !event.message || typeof event.message !== "object")
           return;
         const message = event.message as Record<string, unknown>;
         if (message.role !== "assistant") return;
-        if (message.usage && typeof message.usage === "object")
-          addUsage(usage, usageFrom(message.usage as Record<string, unknown>));
+        flushThinking();
+        const turnUsage =
+          message.usage && typeof message.usage === "object"
+            ? usageFrom(message.usage as Record<string, unknown>)
+            : execution.activeUsage;
+        if (turnUsage) {
+          addUsage(usage, turnUsage);
+          execution.latestTurnUsage = copyUsage(turnUsage);
+          execution.turns++;
+          delete execution.activeUsage;
+        }
         const text = Array.isArray(message.content)
           ? message.content
               .flatMap((part) =>
@@ -292,10 +494,11 @@ export class SubprocessRunner {
           : "";
         if (typeof message.errorMessage === "string" && message.errorMessage.trim()) {
           assistantFailure = truncateUtf8(message.errorMessage);
-          return;
+        } else {
+          assistantFailure = undefined;
+          if (text.trim()) report = truncateUtf8(text);
         }
-        assistantFailure = undefined;
-        report = truncateUtf8(text.trim() ? text : BLANK_REPORT);
+        emit();
       };
 
       const feed = (text: string, final = false): void => {
@@ -340,25 +543,29 @@ export class SubprocessRunner {
         child?.removeListener("close", settleClose);
         child?.removeListener("error", rejectClose);
       };
+      if (request.onUpdate) stopRefresh = this.#deps.scheduleRefresh(emit, REFRESH_INTERVAL_MS);
 
       const code = await close;
       feed(stdoutDecoder.end(), true);
       stderr = truncateUtf8(stderr + stderrDecoder.end());
+      finishActivity();
       if (request.signal?.aborted || this.#disposed)
         return cancelled(this.#disposed ? "Cancelled by shutdown" : "Cancelled");
       const failure =
         transportFailure ??
         assistantFailure ??
         (code === 0 ? undefined : stderr || "Child process failed");
-      if (failure) return { state: "failed", report: failure, failure, usage };
-      return { state: "completed", report: report ?? BLANK_REPORT, usage };
+      if (failure) return { state: "failed", report: failure, failure, usage, execution };
+      return { state: "completed", report: report ?? BLANK_REPORT, usage, execution };
     } catch (error) {
       await terminate();
+      finishActivity();
       const message = truncateUtf8(error instanceof Error ? error.message : String(error));
       if (request.signal?.aborted || this.#disposed)
         return cancelled(this.#disposed ? "Cancelled by shutdown" : "Cancelled");
-      return { state: "failed", report: message, failure: message, usage };
+      return { state: "failed", report: message, failure: message, usage, execution };
     } finally {
+      stopRefresh();
       removeAbort();
       removeListeners();
       this.#terminations.delete(terminate);

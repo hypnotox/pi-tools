@@ -5,7 +5,7 @@ Personal Pi extensions for four capabilities:
 1. **Timing** records agent, turn, and tool durations and carries timing continuity into a handoff.
 2. **Context telemetry** adds exact source-backed token usage, context-window size, remaining tokens, and percentage used to each model request.
 3. **Fresh-session handoff** immediately replaces a persisted TUI or RPC session with a parent-linked session and delivers a self-contained kickoff.
-4. **Ephemeral subagents** run focused tasks in fresh no-session Pi subprocesses that inherit the parent model, thinking level, working directory, trust state, and ordinary active tools. Children load skills without loading context files and expose neither delegation nor handoff.
+4. **Ephemeral subagents** run focused tasks in fresh no-session Pi subprocesses that inherit the parent model, thinking level, working directory, trust state, and ordinary active tools. Children load skills without loading context files and expose neither delegation nor handoff. Their tool rows stream a bounded execution view with child thinking, correlated tool calls and durations, retry state, live usage, elapsed time, and the final report.
 
 ## Install and update
 

@@ -12,7 +12,7 @@
 - `extensions/timing/`: agent, turn, and tool timing plus handoff continuity.
 - `extensions/context-usage/`: source-backed context telemetry injected into model context.
 - `extensions/handoff/`: immediate persisted-session replacement and kickoff delivery.
-- `extensions/subagents/`: direct generic delegation, the private role bridge, and POSIX child execution.
+- `extensions/subagents/`: direct generic delegation, the private role bridge, POSIX child execution, and bounded live child-activity rendering.
 - `tests/`: small test-local fixtures and cross-entrypoint smoke coverage.
 - `.awf/`: authored workflow configuration and convention parts.
 - `.pi/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, and generated `docs/`: repository workflow surfaces, not package exports.
@@ -20,7 +20,7 @@
 
 <!-- awf:edit data-flow: from .awf/docs/parts/architecture/data-flow.md -->
 ## Data flow
-Pi installs the repository, reads the four explicit extension paths in `package.json`, and loads them at startup or after `/reload`. Timing and context telemetry observe Pi events, handoff replaces a persisted session through a queued command, and subagent tools spawn fresh no-session Pi children. `agentic-skills` may publish specialized roles over Pi's event bus; `pi-tools` owns execution.
+Pi installs the repository, reads the four explicit extension paths in `package.json`, and loads them at startup or after `/reload`. Timing and context telemetry observe Pi events, handoff replaces a persisted session through a queued command, and subagent tools spawn fresh no-session Pi children and project their JSON event streams into bounded live tool updates. `agentic-skills` may publish specialized roles over Pi's event bus; `pi-tools` owns execution and child-activity presentation.
 
 Maintainers edit package resources directly. For governed workflow or generated documentation changes, edit `.awf/` and run `./awf render`; `./awf check` may report expected adapter drift until the deferred AWF upgrade.
 

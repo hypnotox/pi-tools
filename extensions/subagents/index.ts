@@ -1,5 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import type { SubagentDetails } from "./activity.js";
+import { renderExecution } from "./rendering.js";
 import {
   CHILD_MARKER,
   type ExecutionUsage,
@@ -28,6 +30,11 @@ interface ToolDetails {
   usage: ExecutionUsage;
 }
 
+type ToolUpdate = (result: {
+  content: Array<{ type: "text"; text: string }>;
+  details: SubagentDetails;
+}) => void;
+
 export interface SubagentDependencies {
   runner?: Pick<SubprocessRunner, "run" | "shutdown">;
 }
@@ -52,6 +59,17 @@ function labelFromToolName(toolName: string): string {
     .join(" ");
 }
 
+function resultText(content: unknown): string {
+  if (!Array.isArray(content)) return "";
+  return content
+    .flatMap((part) =>
+      part && typeof part === "object" && (part as { type?: unknown }).type === "text"
+        ? [String((part as { text?: unknown }).text ?? "")]
+        : [],
+    )
+    .join("\n");
+}
+
 export function registerSubagents(pi: ExtensionAPI, dependencies: SubagentDependencies = {}): void {
   if (process.env[CHILD_MARKER] === "1") return;
 
@@ -60,27 +78,33 @@ export function registerSubagents(pi: ExtensionAPI, dependencies: SubagentDepend
   const registeredRoleTools = new Set<string>();
 
   const execute = async (
+    label: string,
     task: string,
     systemPrompt: string | undefined,
     signal: AbortSignal | undefined,
+    onUpdate: ToolUpdate | undefined,
     context: Parameters<Parameters<ExtensionAPI["registerTool"]>[0]["execute"]>[4],
   ) => {
     if (!context.model) {
       const failure = "Subagent requires an active parent model.";
-      return {
-        content: [{ type: "text" as const, text: failure }],
-        details: {
-          state: "failed" as const,
-          usage: {
-            input: 0,
-            output: 0,
-            cacheRead: 0,
-            cacheWrite: 0,
-            totalTokens: 0,
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-          },
-        },
+      const usage: ExecutionUsage = {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
       };
+      const details: SubagentDetails = {
+        label,
+        state: "failed",
+        model: { provider: "unknown", id: "unknown" },
+        thinkingLevel: context.thinkingLevel ?? "off",
+        usage,
+        report: failure,
+        failure,
+      };
+      return { content: [{ type: "text" as const, text: failure }], details };
     }
     const denied = new Set([GENERIC_TOOL, HANDOFF_TOOL, ...roleToolNames]);
     const request: RunRequest = {
@@ -92,11 +116,32 @@ export function registerSubagents(pi: ExtensionAPI, dependencies: SubagentDepend
       tools: pi.getActiveTools().filter((name) => !denied.has(name)),
       approved: context.isProjectTrusted(),
       ...(signal === undefined ? {} : { signal }),
+      onUpdate: (progress) => {
+        const details: SubagentDetails = {
+          label,
+          state: progress.state,
+          model: request.model,
+          thinkingLevel: request.thinkingLevel,
+          usage: progress.usage,
+          execution: progress.execution,
+        };
+        onUpdate?.({ content: [{ type: "text", text: "Running..." }], details });
+      },
     };
     const outcome = await runner.run(request);
+    const details: SubagentDetails = {
+      label,
+      state: outcome.state,
+      model: request.model,
+      thinkingLevel: request.thinkingLevel,
+      usage: outcome.usage,
+      execution: outcome.execution,
+      report: outcome.report,
+      ...(outcome.failure === undefined ? {} : { failure: outcome.failure }),
+    };
     return {
       content: [{ type: "text" as const, text: outcome.report }],
-      details: { state: outcome.state, usage: outcome.usage },
+      details,
       usage: outcome.usage,
     };
   };
@@ -107,8 +152,10 @@ export function registerSubagents(pi: ExtensionAPI, dependencies: SubagentDepend
     description:
       "Run one self-contained task in a fresh Pi child using the parent model, thinking level, working directory, trust state, and ordinary active tools. The child loads skills but not context files and cannot delegate or hand off.",
     parameters: TASK_PARAMETERS,
-    execute: async (_id, params, signal, _onUpdate, context) =>
-      execute(params.task, undefined, signal, context),
+    execute: async (_id, params, signal, onUpdate, context) =>
+      execute(GENERIC_TOOL, params.task, undefined, signal, onUpdate, context),
+    renderResult: (result, options, theme) =>
+      renderExecution(result.details, options.expanded, theme, resultText(result.content)),
   });
 
   const publishRoles = (value: unknown): void => {
@@ -123,8 +170,17 @@ export function registerSubagents(pi: ExtensionAPI, dependencies: SubagentDepend
         label: labelFromToolName(role.toolName),
         description: role.description,
         parameters: TASK_PARAMETERS,
-        execute: async (_id, params, signal, _onUpdate, context) =>
-          execute(params.task, await role.loadSystemPrompt(), signal, context),
+        execute: async (_id, params, signal, onUpdate, context) =>
+          execute(
+            role.toolName,
+            params.task,
+            await role.loadSystemPrompt(),
+            signal,
+            onUpdate,
+            context,
+          ),
+        renderResult: (result, options, theme) =>
+          renderExecution(result.details, options.expanded, theme, resultText(result.content)),
       });
     }
   };

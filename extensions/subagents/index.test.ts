@@ -14,6 +14,14 @@ const usage = {
   cost: { input: 0.1, output: 0.2, cacheRead: 0.1, cacheWrite: 0.1, total: 0.5 },
 };
 
+const execution = {
+  prompt: "find the owner",
+  activity: [],
+  omittedActivity: 0,
+  elapsedMs: 12,
+  turns: 1,
+};
+
 function context() {
   return {
     cwd: "/project",
@@ -49,7 +57,7 @@ describe("subagent extension", () => {
     expect(harness.tools[0]?.parameters.required).toEqual(["task"]);
     expect(Object.keys(harness.tools[0]?.parameters.properties ?? {})).toEqual(["task"]);
     expect(harness.tools[0]).not.toHaveProperty("renderCall");
-    expect(harness.tools[0]).not.toHaveProperty("renderResult");
+    expect(harness.tools[0]?.renderResult).toBeTypeOf("function");
   });
 
   it.each(["roles before pi-tools", "pi-tools before roles"])(
@@ -89,7 +97,8 @@ describe("subagent extension", () => {
       runner: {
         async run(request) {
           requests.push(request);
-          return { state: "completed", report: "done", usage };
+          request.onUpdate?.({ state: "running", usage, execution });
+          return { state: "completed", report: "done", usage, execution };
         },
         shutdown: vi.fn(),
       },
@@ -97,23 +106,51 @@ describe("subagent extension", () => {
     const publishedRole = role();
     harness.bus.emit("agentic-skills:roles", [publishedRole]);
 
-    const result = await harness.execute("subagent_explore", { task: "find the owner" }, context());
+    const updates: unknown[] = [];
+    const result = await harness.execute(
+      "subagent_explore",
+      { task: "find the owner" },
+      context(),
+      undefined,
+      (update) => updates.push(update),
+    );
 
     expect(publishedRole.loadSystemPrompt).toHaveBeenCalledOnce();
-    expect(requests).toEqual([
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      cwd: "/project",
+      task: "find the owner",
+      systemPrompt: "# Explorer",
+      model: { provider: "provider", id: "model" },
+      thinkingLevel: "high",
+      tools: ["read"],
+      approved: true,
+    });
+    expect(requests[0]?.onUpdate).toBeTypeOf("function");
+    expect(updates).toEqual([
       {
-        cwd: "/project",
-        task: "find the owner",
-        systemPrompt: "# Explorer",
-        model: { provider: "provider", id: "model" },
-        thinkingLevel: "high",
-        tools: ["read"],
-        approved: true,
+        content: [{ type: "text", text: "Running..." }],
+        details: {
+          label: "subagent_explore",
+          state: "running",
+          model: { provider: "provider", id: "model" },
+          thinkingLevel: "high",
+          usage,
+          execution,
+        },
       },
     ]);
     expect(result).toEqual({
       content: [{ type: "text", text: "done" }],
-      details: { state: "completed", usage },
+      details: {
+        label: "subagent_explore",
+        state: "completed",
+        model: { provider: "provider", id: "model" },
+        thinkingLevel: "high",
+        usage,
+        execution,
+        report: "done",
+      },
       usage,
     });
   });
@@ -123,11 +160,34 @@ describe("subagent extension", () => {
       state: "completed" as const,
       report: "done",
       usage,
+      execution,
     }));
     const harness = createExtensionHarness({ activeTools: ["read"] });
     registerSubagents(harness.api, { runner: { run, shutdown: vi.fn() } });
     await harness.execute("subagent", { task: "inspect" }, context());
     expect(run.mock.calls[0]?.[0]).not.toHaveProperty("systemPrompt");
+  });
+
+  it("renders a complete failure result when no parent model is active", async () => {
+    const harness = createExtensionHarness();
+    registerSubagents(harness.api, { runner: { run: vi.fn(), shutdown: vi.fn() } });
+    const result = await harness.execute(
+      "subagent",
+      { task: "inspect" },
+      {
+        ...context(),
+        model: undefined,
+      },
+    );
+    expect(result).toMatchObject({
+      content: [{ type: "text", text: "Subagent requires an active parent model." }],
+      details: {
+        label: "subagent",
+        state: "failed",
+        model: { provider: "unknown", id: "unknown" },
+        failure: "Subagent requires an active parent model.",
+      },
+    });
   });
 
   it("returns early in marked children", () => {
@@ -148,6 +208,7 @@ describe("subagent extension", () => {
           report: "child failed",
           failure: "child failed",
           usage,
+          execution,
         })),
         shutdown: vi.fn(),
       },

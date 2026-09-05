@@ -151,6 +151,67 @@ describe("SubprocessRunner", () => {
     }
   });
 
+  it("streams bounded thinking, child tool status, usage, and elapsed execution facts", async () => {
+    const updates: unknown[] = [];
+    const { deps, result } = await launch(
+      dependencies(),
+      request({ onUpdate: (update) => updates.push(update) }),
+    );
+    event(deps.child, {
+      type: "message_update",
+      usage: { input: 7, output: 2, totalTokens: 9, cost: { total: 0.02 } },
+      assistantMessageEvent: { type: "thinking_delta", delta: "Inspecting files\n" },
+    });
+    event(deps.child, {
+      type: "tool_execution_start",
+      toolCallId: "child-call",
+      toolName: "read",
+      args: { path: "/project/file.ts", offset: 4, limit: 20 },
+    });
+    event(deps.child, {
+      type: "tool_execution_end",
+      toolCallId: "child-call",
+      toolName: "read",
+      isError: false,
+    });
+    event(
+      deps.child,
+      assistant("done", {
+        usage: { input: 7, output: 3, totalTokens: 10, cost: { total: 0.03 } },
+      }),
+    );
+    deps.child.emit("close", 0);
+
+    await expect(result).resolves.toMatchObject({
+      state: "completed",
+      execution: {
+        prompt: "inspect this",
+        turns: 1,
+        activity: [
+          { kind: "thinking", text: "Inspecting files" },
+          {
+            kind: "tool",
+            toolCallId: "child-call",
+            summary: "read /project/file.ts offset=4 limit=20",
+            state: "success",
+          },
+        ],
+        latestTurnUsage: { input: 7, output: 3 },
+      },
+    });
+    expect(updates.length).toBeGreaterThan(0);
+    expect(updates).toContainEqual(
+      expect.objectContaining({
+        state: "running",
+        execution: expect.objectContaining({
+          activity: expect.arrayContaining([
+            expect.objectContaining({ kind: "tool", state: "success" }),
+          ]),
+        }),
+      }),
+    );
+  });
+
   it("normalizes a successful blank assistant report", async () => {
     const { deps, result } = await launch();
     event(deps.child, assistant("  \n"));
@@ -186,11 +247,19 @@ describe("SubprocessRunner", () => {
     });
   });
 
-  it("terminates the POSIX process group with TERM then KILL on cancellation", async () => {
+  it("terminates the POSIX process group and retains partial-turn usage on cancellation", async () => {
     const controller = new AbortController();
     const { deps, result } = await launch(dependencies(), request({ signal: controller.signal }));
+    event(deps.child, {
+      type: "message_update",
+      usage: { input: 5, output: 2, totalTokens: 7, cost: { total: 0.04 } },
+    });
     controller.abort();
-    await expect(result).resolves.toMatchObject({ state: "cancelled" });
+    await expect(result).resolves.toMatchObject({
+      state: "cancelled",
+      usage: { input: 5, output: 2, totalTokens: 7, cost: { total: 0.04 } },
+      execution: { turns: 1, latestTurnUsage: { input: 5, output: 2 } },
+    });
     expect(deps.signalTree).toHaveBeenNthCalledWith(1, deps.child, "SIGTERM");
     expect(deps.signalTree).toHaveBeenNthCalledWith(2, deps.child, "SIGKILL");
   });

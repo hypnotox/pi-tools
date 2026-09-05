@@ -2,7 +2,7 @@
 - `extensions/timing/`: agent, turn, and tool timing plus handoff continuity.
 - `extensions/context-usage/`: source-backed context telemetry injected into model context.
 - `extensions/handoff/`: immediate persisted-session replacement and kickoff delivery.
-- `extensions/subagents/`: direct generic delegation, the private role bridge, and POSIX child execution.
+- `extensions/subagents/`: direct generic delegation, the private role bridge, POSIX child execution, and bounded live child-activity rendering.
 - `tests/`: small test-local fixtures and cross-entrypoint smoke coverage.
 - `.awf/`: authored workflow configuration and convention parts.
 - `.pi/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, and generated `docs/`: repository workflow surfaces, not package exports.
