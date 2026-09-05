@@ -6,19 +6,30 @@ description: Keep lightweight local continuity for an active effort.
 
 # AWF efforts
 
-Use the repository's documented AWF command with `effort new <slug>`, `effort list`, `effort show <slug>`, and `effort finish <slug>`. Keep the active outcome, current state, decisions, and next action in `.awf/efforts/<slug>/memory.md`. Finishing moves the whole resident to `.awf/effort-archive/<slug>` without replacing an existing archive.
+Use the repository's documented AWF command with `effort new <slug>`, `effort list`, `effort show <slug>`, and `effort finish <slug>`. Keep the outcome and success criteria, current state, next actions, artifact references, selected decision-relevant excerpts, and completion evidence in `.awf/efforts/<slug>/memory.md`. Attribute excerpts and distinguish quotations, summaries, agent proposals, and agreed decisions; do not reconstruct or retain complete sessions. Detailed criteria may live in an optional plan when memory points to it.
 
-AWF does not manage Git. When isolation helps, create a native worktree yourself from the primary checkout:
+Plans and decision records are independent, optional aids: complexity can warrant a plan, a material choice can warrant a decision record, and an effort can need either, both, or neither. Use `plan new <effort-slug>` to create `.awf/efforts/<effort-slug>/plan.md` in an existing effort and `adr new <slug>` to create `docs/decisions/<slug>.md`. The commands are create-only conveniences; edit the files directly, and author either file without a scaffold when preferred. AWF treats their contents as opaque. When installed, use `agentic-planning`, `agentic-implementing`, and `agentic-reviewing` for general methods.
+
+AWF does not manage Git or discover worktree topology. Without a worktree, the effort and implementation checkout coincide. With one, memory and plans remain in the primary checkout while the decision record and implementation belong to the implementation checkout. Record both locations in memory and handoffs. Run effort and plan commands from the primary checkout root; run ADR and implementation Git commands from the implementation checkout root. Run worktree creation, integration, removal, and branch cleanup from the primary checkout root. Read or edit known artifact paths directly; invoking a wrapper by absolute path does not change this working-directory rule.
+
+When isolation helps, create a native worktree yourself from the primary checkout:
 
 ```sh
 git worktree add -b awf/<slug> .awf/worktrees/<slug>
 ```
 
-The effort memory remains in the primary checkout. After integrating through the repository's normal Git workflow, clean up explicitly:
+A decision record has one working copy in `docs/decisions`; memory references it. Commit the chosen decision and rationale during the effort. After verifying the implemented result and incorporating the durable decision and useful rationale into applicable topics, remove the record in a later implementation/topic-update commit. Preserve both commits through the repository's ordinary non-squash integration. Retrieve it later with:
+
+```sh
+git log --full-history -- docs/decisions/<slug>.md
+git show <decision-commit>:docs/decisions/<slug>.md
+```
+
+Before closing an effort, compare the actual result with its success criteria, report unmet criteria and deviations, surface a changed goal rather than rewriting it as success, keep applicable topics accurate, and retire integrated decision records as above. `effort finish` enforces none of this meaning; it only moves the complete resident to `.awf/effort-archive/<slug>` without replacement.
+
+After non-squash integration, clean up an isolated worktree explicitly, then finish the effort:
 
 ```sh
 git worktree remove .awf/worktrees/<slug>
 git branch -d awf/<slug>
 ```
-
-Then finish the AWF effort.
