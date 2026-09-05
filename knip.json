@@ -2,7 +2,6 @@
   "$schema": "https://unpkg.com/knip/schema.json",
   "entry": [
     "extensions/timing/index.ts",
-    "extensions/subagents/index.ts",
     "extensions/context-usage/index.ts",
     "extensions/handoff/index.ts"
   ],

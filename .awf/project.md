@@ -4,7 +4,7 @@ format: 1
 
 ## Project
 
-Maintain `pi-tools` as the shared source for the owner's portable Pi resources. It is a public, pre-1.0 personal Pi package for timing, Pi-sourced estimated context telemetry, fresh-session handoff, and ephemeral subagent execution in the `@earendil-works/pi-coding-agent` ecosystem.
+Maintain `pi-tools` as the shared source for the owner's portable Pi resources. It is a public, pre-1.0 personal Pi package for timing, Pi-sourced estimated context telemetry, and fresh-session handoff in the `@earendil-works/pi-coding-agent` ecosystem.
 
 Keep package resources usable across systems, keep contributor guidance aligned with repository reality, and update user-facing documentation with every behavior change.
 
@@ -12,7 +12,7 @@ Keep package resources usable across systems, keep contributor guidance aligned 
 
 - **Current authority.** Keep durable applicable facts and useful rationale in `.awf/topics/` or ordinary documentation; retrieve retired decision records from Git history when needed.
 - **Docs travel with the change.** Update reality and its documentation together.
-- **Focused, portable resources.** Keep the four package capabilities focused and portable, and document user-facing behavior in `README.md`.
+- **Focused, portable resources.** Keep the three package capabilities focused and portable, and document user-facing behavior in `README.md`.
 - **No private machine state.** Never commit credentials, tokens, session data, or machine-specific absolute paths.
 - **Floating current dependencies.** Keep Pi core and TypeBox imports as wildcard peers, registry development dependencies as `*`, and installs lockfile-free.
 - **Pi authority first.** Read Pi's installed documentation and working examples before implementing or changing a resource.

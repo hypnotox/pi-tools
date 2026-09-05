@@ -1,16 +1,13 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 interface TestBus {
-  emissions: Array<[string, unknown]>;
   on(name: string, listener: (value: unknown) => void): () => void;
   emit(name: string, value?: unknown): void;
 }
 
-export function createTestBus(): TestBus {
+function createTestBus(): TestBus {
   const listeners = new Map<string, Array<(value: unknown) => void>>();
-  const emissions: Array<[string, unknown]> = [];
   return {
-    emissions,
     on(name, listener) {
       const current = listeners.get(name) ?? [];
       current.push(listener);
@@ -21,7 +18,6 @@ export function createTestBus(): TestBus {
       };
     },
     emit(name, value) {
-      emissions.push([name, value]);
       for (const listener of [...(listeners.get(name) ?? [])]) listener(value);
     },
   };
@@ -31,30 +27,21 @@ type TestHandler = (event: unknown, context: unknown) => unknown | Promise<unkno
 
 interface TestTool {
   name: string;
-  label: string;
-  description: string;
-  parameters: {
-    required?: readonly string[];
-    properties: Record<string, unknown>;
-  };
   execute(...args: unknown[]): Promise<Record<string, unknown>>;
-  renderCall?: unknown;
-  renderResult?: unknown;
 }
 
 interface TestCommand {
   handler(...args: unknown[]): unknown;
 }
 
-export function createExtensionHarness(options: { activeTools?: string[]; bus?: TestBus } = {}) {
+export function createExtensionHarness() {
   const handlers = new Map<string, TestHandler[]>();
   const tools: TestTool[] = [];
   const commands = new Map<string, TestCommand>();
   const entryRenderers = new Map<string, { renderer: unknown; options: unknown }>();
   const appendEntries: Array<[string, unknown]> = [];
   const queuedCommands: Array<[string, string | undefined]> = [];
-  const activeTools = [...(options.activeTools ?? [])];
-  const bus = options.bus ?? createTestBus();
+  const bus = createTestBus();
   const api = {
     on(name: string, handler: TestHandler) {
       handlers.set(name, [...(handlers.get(name) ?? []), handler]);
@@ -71,14 +58,7 @@ export function createExtensionHarness(options: { activeTools?: string[]; bus?: 
     appendEntry(type: string, data?: unknown) {
       appendEntries.push([type, data]);
     },
-    getActiveTools: () => [...activeTools],
-    getAllTools: () => [
-      ...activeTools.map((name) => ({ name })),
-      ...tools.map((tool) => ({ name: tool.name })),
-    ],
-    setActiveTools(names: string[]) {
-      activeTools.splice(0, activeTools.length, ...names);
-    },
+    getAllTools: () => tools.map((tool) => ({ name: tool.name })),
     queueCommand(name: string, args?: string) {
       queuedCommands.push([name, args]);
     },
@@ -108,7 +88,6 @@ export function createExtensionHarness(options: { activeTools?: string[]; bus?: 
     entryRenderers,
     appendEntries,
     queuedCommands,
-    activeTools,
     bus,
     invoke,
     execute,

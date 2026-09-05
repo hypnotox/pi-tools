@@ -18,7 +18,7 @@ For a nondeterministic race, stress or invariant evidence may be the strongest p
 
 Run `./awf check` and `npm run check` before every commit. The AWF check validates project guidance sources and their fixed generated projection. The npm gate verifies direct Biome formatting and linting, strict TypeScript, Knip dead-code and dependency analysis, and focused Vitest behavior. No local Git hook wiring is assumed.
 
-Hosted CI uses the current Node release, checks the AWF projection, performs `npm install --no-package-lock`, and runs the npm gate without dependency caching. Completion evidence also includes the isolated real-Pi loader smoke and the local-checkout cross-package role test when relevant.
+Hosted CI uses the current Node release, checks the AWF projection, performs `npm install --no-package-lock`, and runs the npm gate without dependency caching. Completion evidence also includes the isolated real-Pi loader smoke.
 
 ## Tiers and lanes
 
@@ -26,4 +26,4 @@ Focused Vitest files provide fast feedback. `npm run check` is the executable-re
 
 ## Layout and test shape
 
-Keep narrowly coupled tests beside each extension and tiny shared fixtures under `tests/`. Tests cover the four retained behaviors, the two-event role bridge, child process isolation and bounds, immediate handoff, model and thinking-level continuity, and timing continuity. The loader smoke uses the real current Pi CLI with isolated package, config, and session directories; it also installs the local package through settings and verifies native handoff prompt discovery and expansion.
+Keep narrowly coupled tests beside each extension and tiny shared fixtures under `tests/`. Tests cover context telemetry, immediate handoff, model and thinking-level continuity, and timing behavior and continuity. The loader smoke uses the real current Pi CLI with isolated package, config, and session directories; it also installs the local package through settings and verifies native handoff prompt discovery and expansion.

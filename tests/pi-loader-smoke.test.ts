@@ -7,7 +7,6 @@ import { describe, expect, it } from "vitest";
 const root = resolve(import.meta.dirname, "..");
 const entrypoints = [
   "extensions/timing/index.ts",
-  "extensions/subagents/index.ts",
   "extensions/context-usage/index.ts",
   "extensions/handoff/index.ts",
 ].map((path) => resolve(root, path));
