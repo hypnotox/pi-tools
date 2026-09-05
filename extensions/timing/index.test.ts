@@ -81,9 +81,9 @@ describe("timing extension", () => {
     expect(harness.setWorkingMessage).toHaveBeenLastCalledWith();
   });
 
-  it("uses native zero-spacing entry rendering", () => {
+  it("registers portable timing entry rendering", () => {
     const harness = createHarness();
-    expect(harness.entryRenderers.get("pi-tools-timing")?.options).toEqual({ spacingBefore: 0 });
+    expect(harness.entryRenderers.get("pi-tools-timing")?.options).toBeUndefined();
     expect(
       formatTimingEntry({
         kind: "tool",

@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "*",
-    "@earendil-works/pi-coding-agent": "https://github.com/hypnotox/pi/releases/latest/download/pi-coding-agent.tgz",
+    "@earendil-works/pi-coding-agent": "*",
     "@types/node": "*",
     "knip": "*",
     "typebox": "*",

@@ -90,16 +90,12 @@ export default function timingExtension(pi: ExtensionAPI): void {
     if (ctx.mode === "tui") pi.appendEntry(ENTRY_TYPE, completion);
   };
 
-  pi.registerEntryRenderer(
-    ENTRY_TYPE,
-    (entry, _options, theme) => {
-      if (!isTimingEntryData(entry.data)) {
-        return new Text(theme.fg("warning", "  ↳ invalid timing entry"), 0, 0);
-      }
-      return new Text(theme.fg("dim", formatTimingEntry(entry.data)), 0, 0);
-    },
-    { spacingBefore: 0 },
-  );
+  pi.registerEntryRenderer(ENTRY_TYPE, (entry, _options, theme) => {
+    if (!isTimingEntryData(entry.data)) {
+      return new Text(theme.fg("warning", "  ↳ invalid timing entry"), 0, 0);
+    }
+    return new Text(theme.fg("dim", formatTimingEntry(entry.data)), 0, 0);
+  });
 
   pi.events.on(HANDOFF_CONTINUITY_REQUEST, (value: unknown) => {
     if (!value || typeof value !== "object") return;

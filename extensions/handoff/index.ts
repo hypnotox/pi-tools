@@ -125,15 +125,20 @@ export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependenc
     }
   });
 
-  pi.on("session_shutdown", () => {
+  const invalidatePendingHandoff = (): void => {
     pending = undefined;
     suppressThresholdCompaction = false;
+  };
+  pi.on("session_tree", invalidatePendingHandoff);
+
+  pi.on("session_shutdown", () => {
+    invalidatePendingHandoff();
     ownsTool = false;
   });
 
-  const queueHandoff = (request: PendingHandoff): void => {
-    pi.queueCommand(COMMAND, request.id);
+  const dispatchHandoff = (request: PendingHandoff): void => {
     suppressThresholdCompaction = true;
+    pi.sendUserMessage(`/${COMMAND} ${request.id}`, { expandPromptTemplates: true });
   };
 
   pi.on("session_start", async (event, sessionContext) => {
@@ -147,11 +152,21 @@ export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependenc
       async handler(token, context) {
         const request = pending;
         if (!request || token !== request.id) return;
+        const originatingSession = context.sessionManager.getSessionFile();
+        if (!originatingSession) return;
+        const originatingRun = context.signal;
+        await context.waitForIdle();
+        if (pending !== request) return;
+        invalidatePendingHandoff();
+        // Accepted replacements abort the outgoing run before session_shutdown.
+        // Cancellable preflight events alone must not discard the handoff.
+        if (
+          originatingRun?.aborted ||
+          context.sessionManager.getSessionFile() !== originatingSession
+        )
+          return;
         const envelope = handoffEnvelope(request.kickoff);
         try {
-          if (pending !== request) return;
-          const parentSession = context.sessionManager.getSessionFile();
-          if (!parentSession) throw new Error("The active session is no longer persisted");
           const continuity: HandoffContinuity = context.model
             ? {
                 session: {
@@ -162,7 +177,7 @@ export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependenc
             : {};
           pi.events.emit(HANDOFF_CONTINUITY_REQUEST, continuity);
           const result = await context.newSession({
-            parentSession,
+            parentSession: originatingSession,
             async setup(sessionManager) {
               sessionManager.appendCustomEntry(HANDOFF_CONTINUITY_ENTRY, continuity);
             },
@@ -193,7 +208,7 @@ export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependenc
             );
           }
         } finally {
-          if (pending?.id === request.id) pending = undefined;
+          if (pending === request) pending = undefined;
           suppressThresholdCompaction = false;
         }
       },
@@ -213,7 +228,7 @@ export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependenc
         )
           throw new Error("handoff_session requires a persisted Pi session");
         if (pending) {
-          queueHandoff(pending);
+          dispatchHandoff(pending);
           return {
             content: [{ type: "text", text: "Fresh-session handoff already queued." }],
             details: {},
@@ -227,7 +242,7 @@ export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependenc
         const request = { id: dependencies.randomUUID(), kickoff: params.kickoff };
         pending = request;
         try {
-          queueHandoff(request);
+          dispatchHandoff(request);
         } catch (error) {
           if (pending === request) pending = undefined;
           suppressThresholdCompaction = false;

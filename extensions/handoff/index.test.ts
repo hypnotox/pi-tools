@@ -24,6 +24,8 @@ function createHarness(
     thinkingLevel?: string;
     modelAvailable?: boolean;
     modelAuthenticated?: boolean;
+    newSessionCancelled?: boolean;
+    signal?: AbortSignal;
   } = {},
 ) {
   const harness = createExtensionHarness();
@@ -41,7 +43,9 @@ function createHarness(
   const sent: unknown[][] = [];
   const editor: string[] = [];
   const notices: unknown[][] = [];
+  const waitForIdle = vi.fn(async () => {});
   const newSession = vi.fn(async (request: NewSessionRequest) => {
+    if (options.newSessionCancelled) return { cancelled: true };
     await request.setup?.({
       appendCustomEntry: (type: string, data: unknown) => setupEntries.push([type, data]),
     });
@@ -57,6 +61,7 @@ function createHarness(
     return { cancelled: false };
   });
   const context = {
+    signal: options.signal,
     mode: options.mode ?? "tui",
     model: options.model ?? { provider: "anthropic", id: "current-model" },
     thinkingLevel: options.thinkingLevel ?? "high",
@@ -74,6 +79,7 @@ function createHarness(
       notify: (...args: unknown[]) => notices.push(args),
       custom: vi.fn(),
     },
+    waitForIdle,
     newSession,
   };
   registerHandoff(harness.api, { randomUUID: () => "request-id" });
@@ -85,6 +91,7 @@ function createHarness(
     editor,
     notices,
     newSession,
+    waitForIdle,
     setModel,
     setThinkingLevel,
     start: (event: { reason?: string } = {}) => harness.invoke("session_start", event, context),
@@ -121,7 +128,10 @@ describe("fresh-session handoff", () => {
     });
     await harness.continue();
 
-    expect(harness.queuedCommands).toEqual([["handoff-session-continue", "request-id"]]);
+    expect(harness.sentUserMessages).toEqual([
+      ["/handoff-session-continue request-id", { expandPromptTemplates: true }],
+    ]);
+    expect(harness.waitForIdle).toHaveBeenCalledOnce();
     expect(harness.newSession).toHaveBeenCalledWith(
       expect.objectContaining({ parentSession: "parent.jsonl" }),
     );
@@ -136,6 +146,103 @@ describe("fresh-session handoff", () => {
       ],
     ]);
     expect(harness.context.ui.custom).not.toHaveBeenCalled();
+  });
+
+  it("restores recovery text when replacement is cancelled", async () => {
+    const harness = createHarness({ newSessionCancelled: true });
+    await harness.start();
+    await harness.execute("recover this");
+    await harness.continue();
+
+    expect(harness.setupEntries).toEqual([]);
+    expect(harness.sent).toEqual([]);
+    expect(harness.editor).toEqual([handoffEnvelope("recover this")]);
+    expect(harness.notices).toEqual([
+      ["Fresh-session handoff canceled; recovery text is in the editor.", "warning"],
+    ]);
+  });
+
+  it("drops a waiting handoff when its extension runtime shuts down", async () => {
+    const harness = createHarness();
+    let releaseIdle = () => {};
+    const idle = new Promise<void>((resolve) => {
+      releaseIdle = resolve;
+    });
+    harness.waitForIdle.mockImplementation(() => idle);
+    await harness.start();
+    await harness.execute();
+    const continuation = harness.continue();
+
+    await harness.invoke("session_shutdown", { reason: "reload" }, harness.context);
+    releaseIdle();
+    await continuation;
+
+    expect(harness.newSession).not.toHaveBeenCalled();
+  });
+
+  it.each(["session_before_switch", "session_before_fork", "session_before_tree"])(
+    "retains a waiting handoff after a cancelled %s preflight",
+    async (event) => {
+      const harness = createHarness();
+      let releaseIdle = () => {};
+      const idle = new Promise<void>((resolve) => {
+        releaseIdle = resolve;
+      });
+      harness.waitForIdle.mockImplementation(() => idle);
+      await harness.start();
+      await harness.execute();
+      const continuation = harness.continue();
+
+      // A later extension cancels: there is no abort, shutdown, or session_tree.
+      await harness.invoke(event, {}, harness.context);
+      releaseIdle();
+      await continuation;
+
+      expect(harness.newSession).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("drops a waiting handoff after completed tree navigation", async () => {
+    const harness = createHarness();
+    let releaseIdle = () => {};
+    const idle = new Promise<void>((resolve) => {
+      releaseIdle = resolve;
+    });
+    harness.waitForIdle.mockImplementation(() => idle);
+    await harness.start();
+    await harness.execute();
+    const continuation = harness.continue();
+
+    await harness.invoke("session_tree", {}, harness.context);
+    releaseIdle();
+    await continuation;
+
+    expect(harness.newSession).not.toHaveBeenCalled();
+  });
+
+  it("drops an aborted originating run before shutdown reaches the idle boundary", async () => {
+    const controller = new AbortController();
+    const harness = createHarness({ signal: controller.signal });
+    let releaseIdle = () => {};
+    const idle = new Promise<void>((resolve) => {
+      releaseIdle = resolve;
+    });
+    harness.waitForIdle.mockImplementation(() => idle);
+    await harness.start();
+    await harness.execute();
+    const continuation = harness.continue();
+
+    controller.abort();
+    releaseIdle();
+    await continuation;
+
+    expect(harness.newSession).not.toHaveBeenCalled();
+    expect(
+      await harness.invoke("session_before_compact", { reason: "threshold" }, harness.context),
+    ).toEqual([undefined]);
+    await expect(harness.execute("new request")).resolves.toMatchObject({
+      content: [{ text: "Fresh-session handoff queued." }],
+    });
   });
 
   it("persists timing continuity before replacement delivery", async () => {
@@ -286,13 +393,22 @@ describe("fresh-session handoff", () => {
     ).toMatchObject([{ block: true }]);
   });
 
-  it("uses the correlation token so stale commands cannot consume newer work", async () => {
+  it("uses the correlation token so stale and duplicate commands cannot consume work", async () => {
     const harness = createHarness();
+    let releaseIdle = () => {};
+    const idle = new Promise<void>((resolve) => {
+      releaseIdle = resolve;
+    });
+    harness.waitForIdle.mockImplementation(() => idle);
     await harness.start();
     await harness.execute("first");
     await harness.continue("stale");
     expect(harness.newSession).not.toHaveBeenCalled();
-    await harness.continue("request-id");
+
+    const first = harness.continue("request-id");
+    const duplicate = harness.continue("request-id");
+    releaseIdle();
+    await Promise.all([first, duplicate]);
     expect(harness.newSession).toHaveBeenCalledOnce();
   });
 

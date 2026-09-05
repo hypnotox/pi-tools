@@ -2,7 +2,7 @@
 
 ## Setup
 
-Use Git, Bash, the current Node release, npm, and the current personal Pi fork. Clone the repository, run `npm install --no-package-lock`, and open it in Pi; trust the project so Pi can load project-local workflow resources. No build step or environment variable is required.
+Use Git, Bash, the current Node release, npm, and upstream Pi. Clone the repository, run `npm install --no-package-lock`, and open it in Pi; trust the project so Pi can load project-local workflow resources. No build step or environment variable is required.
 
 The AWF wrapper uses its cached configured binary when available. First use on Linux or macOS requires network access to GitHub, `curl`, `tar`, and either `sha256sum` or `shasum`. Run `/reload` after changing a Pi resource during an active session.
 
@@ -23,4 +23,4 @@ Use the root `./awf` wrapper for contributor guidance:
 
 ## Dependencies
 
-Run `npm install --no-package-lock` to resolve current dependencies without creating a lockfile. Registry development dependencies use `*`; the current coding-agent fork resolves from `releases/latest/download/pi-coding-agent.tgz`. Pi core packages and TypeBox remain wildcard peers supplied by Pi at runtime.
+Run `npm install --no-package-lock` to resolve current dependencies without creating a lockfile. Registry development dependencies use `*`. Pi core packages and TypeBox remain wildcard peers supplied by Pi at runtime.

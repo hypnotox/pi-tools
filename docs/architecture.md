@@ -17,7 +17,9 @@
 
 ## Data flow
 
-Pi installs the repository, reads the three explicit extension paths and handoff prompt path in `package.json`, and loads them at startup or after `/reload`. Timing and context telemetry observe Pi events, `/handoff` expands to an agent instruction that uses the existing handoff tool, and handoff replaces a persisted session through a queued command. Before delivering the kickoff, the replacement session restores the parent session's active model and thinking level from the same private continuity entry used for timing; if that model is unavailable or unauthenticated, it warns and retains the replacement defaults.
+Pi installs the repository, reads the three explicit extension paths and handoff prompt path in `package.json`, and loads them at startup or after `/reload`. Timing and context telemetry observe Pi events, `/handoff` expands to an agent instruction that uses the existing handoff tool, and handoff opts an internal tokenized message into extension-command dispatch while the tool is running. That command waits for full agent settlement before replacing the persisted session. Before delivering the kickoff, the replacement session restores the parent session's active model and thinking level from the same private continuity entry used for timing; if that model is unavailable or unauthenticated, it warns and retains the replacement defaults.
+
+The pending token is claimed once after `waitForIdle()`. Shutdown and completed `session_tree` events invalidate pending work; the captured run signal also detects an accepted competing replacement's abort before shutdown reaches the idle boundary. Cancellable preflight events do not invalidate work. These guards do not serialize independent replacements after the handoff claims its token; that remains a host limitation.
 
 Maintainers edit package resources and ordinary documentation directly. After changing `.awf/project.md` or `.awf/topics/**/*.md`, run `./awf render` and `./awf check` to update and verify the fixed contributor surfaces. AWF owns contributor-guidance projection, topic routing, and ignored effort memory; it does not manage Git, hooks, provenance, or package gates. npm scripts and hosted CI remain repository-owned.
 
@@ -30,4 +32,4 @@ Maintainers edit package resources and ordinary documentation directly. After ch
 | AWF | Renders project guidance and path-routed topic entrypoints. |
 | TypeScript, Biome, Knip, and Vitest | Development-only type, format, lint, dead-code, dependency, and test checks. |
 
-Pi core packages and TypeBox are wildcard peers supplied by Pi. Registry development dependencies use `*`; the coding-agent development artifact resolves through its stable latest-release URL. Installs create no lockfile.
+Pi core packages and TypeBox are wildcard peers supplied by Pi. Registry development dependencies use `*`. Installs create no lockfile.

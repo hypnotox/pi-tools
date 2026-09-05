@@ -40,7 +40,7 @@ export function createExtensionHarness() {
   const commands = new Map<string, TestCommand>();
   const entryRenderers = new Map<string, { renderer: unknown; options: unknown }>();
   const appendEntries: Array<[string, unknown]> = [];
-  const queuedCommands: Array<[string, string | undefined]> = [];
+  const sentUserMessages: Array<[unknown, unknown]> = [];
   const bus = createTestBus();
   const api = {
     on(name: string, handler: TestHandler) {
@@ -59,8 +59,8 @@ export function createExtensionHarness() {
       appendEntries.push([type, data]);
     },
     getAllTools: () => tools.map((tool) => ({ name: tool.name })),
-    queueCommand(name: string, args?: string) {
-      queuedCommands.push([name, args]);
+    sendUserMessage(content: unknown, options?: unknown) {
+      sentUserMessages.push([content, options]);
     },
     events: bus,
   } as unknown as ExtensionAPI;
@@ -87,7 +87,7 @@ export function createExtensionHarness() {
     commands,
     entryRenderers,
     appendEntries,
-    queuedCommands,
+    sentUserMessages,
     bus,
     invoke,
     execute,
