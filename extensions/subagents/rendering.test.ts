@@ -1,4 +1,4 @@
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
 import type { SubagentDetails } from "./activity.js";
 import { renderExecution } from "./rendering.js";
@@ -61,25 +61,93 @@ describe("subagent rendering", () => {
     expect(lines.at(-1)).toContain("turns 1");
   });
 
-  it("retains activity and appends the final report after settlement", () => {
+  it("bounds busy running results by rendered lines while keeping recent activity", () => {
+    const value = details();
+    const execution = value.execution;
+    if (!execution) throw new Error("missing execution fixture");
+    execution.activity = Array.from({ length: 12 }, (_, index) => ({
+      kind: "thinking" as const,
+      text: `activity ${index} ${"wrapped ".repeat(8)}`,
+    }));
+    execution.omittedActivity = 3;
+    execution.unfinishedThinking = `old live thought ${"wrapped ".repeat(20)}newest marker`;
+
+    const lines = renderExecution(value, false, theme, "fallback").render(24);
+    const text = lines.join("\n");
+    expect(lines).toHaveLength(10);
+    expect(lines.every((line) => visibleWidth(line) <= 24)).toBe(true);
+    expect(stripTerminalSequences(text)).toContain("● subagent_review_cod");
+    expect(text).toContain("newest marker");
+    expect(text).toContain("details omitted");
+    expect(lines.at(-1)).toContain("turns 1");
+  });
+
+  it.each([
+    ["completed", "No findings after a detailed review."],
+    ["failed", "Child failed after a detailed investigation."],
+    ["cancelled", "Child was cancelled after a detailed investigation."],
+  ] as const)("prioritizes the %s outcome within the collapsed budget", (state, report) => {
+    const value = details(state);
+    const execution = value.execution;
+    if (!execution) throw new Error("missing execution fixture");
+    execution.activity = Array.from({ length: 20 }, (_, index) => ({
+      kind: "thinking" as const,
+      text: `old activity ${index}`,
+    }));
+    value.report = `${report} ${"More report detail. ".repeat(20)}`;
+    if (state === "failed") value.failure = value.report;
+    const before = structuredClone(value);
+
+    const lines = renderExecution(value, false, theme, "fallback").render(36);
+    const text = lines.join("\n");
+    expect(lines.length).toBeLessThanOrEqual(10);
+    expect(lines.every((line) => visibleWidth(line) <= 36)).toBe(true);
+    expect(text).toContain(report.slice(0, 20));
+    expect(text).toContain("details omitted");
+    expect(lines.at(-1)).toContain("turns 1");
+    expect(value).toEqual(before);
+  });
+
+  it("keeps retained activity and reports available when expanded", () => {
     const value = details("completed");
     const execution = value.execution;
     if (!execution) throw new Error("missing execution fixture");
-    const tool = execution.activity[1];
-    if (tool?.kind !== "tool") throw new Error("missing tool fixture");
-    execution.activity[1] = { ...tool, state: "success" };
-    value.report = "No findings.";
-    const text = renderExecution(value, false, theme, "fallback").render(80).join("\n");
-    expect(text).toContain("success:");
-    expect(text).toContain("No findings.");
+    execution.activity.unshift({ kind: "thinking", text: "earliest retained detail" });
+    value.report = `No findings. ${"Expanded report detail. ".repeat(20)}`;
+
+    const text = renderExecution(value, true, theme, "fallback").render(30).join(" ");
+    expect(text).toContain("earliest retained detail");
+    expect(text).toContain("Expanded report detail");
   });
 
-  it("falls back to result content for legacy details", () => {
-    expect(
-      renderExecution({ state: "completed" }, false, theme, "legacy report")
-        .render(80)[0]
-        ?.trimEnd(),
-    ).toBe("legacy report");
+  it("bounds failures produced before execution starts", () => {
+    const value = details("failed");
+    delete value.execution;
+    value.failure = `Subagent requires an active parent model. ${"More detail. ".repeat(100)}`;
+    const lines = renderExecution(value, false, theme, "fallback").render(24);
+    expect(lines).toHaveLength(10);
+    expect(lines.join("\n")).toContain("Subagent requires");
+    expect(lines.at(-1)).toContain("...");
+  });
+
+  it("bounds fallback result content when collapsed", () => {
+    const collapsed = renderExecution(
+      { state: "completed" },
+      false,
+      theme,
+      "legacy report ".repeat(100),
+    ).render(18);
+    expect(collapsed).toHaveLength(10);
+    expect(collapsed.every((line) => visibleWidth(line) <= 18)).toBe(true);
+    expect(collapsed.at(-1)).toContain("...");
+
+    const expanded = renderExecution(
+      { state: "completed" },
+      true,
+      theme,
+      "legacy report ".repeat(100),
+    ).render(18);
+    expect(expanded.length).toBeGreaterThan(10);
   });
 
   it("strips terminal controls from child-owned display text", () => {

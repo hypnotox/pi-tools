@@ -6,13 +6,15 @@ import {
   visibleWidth,
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
-import type { SubagentDetails } from "./activity.js";
+import type { ExecutionActivity, SubagentDetails } from "./activity.js";
 import type { ExecutionUsage } from "./runner.js";
 
 interface Theme {
   fg(color: string, text: string): string;
   bold(text: string): string;
 }
+
+const COLLAPSED_LINE_BUDGET = 10;
 
 function formatTokens(count: number): string {
   if (count < 1_000) return String(count);
@@ -58,12 +60,60 @@ function wrapped(text: string, width: number): string[] {
 }
 
 function preview(text: string, width: number, maxLines: number): string[] {
+  if (maxLines <= 0) return [];
   const lines = wrapped(text, width);
   if (lines.length <= maxLines) return lines;
   const result = lines.slice(0, maxLines);
   const last = result.at(-1) ?? "";
-  result[result.length - 1] = `${truncateToWidth(last, Math.max(0, width - 3), "")}...`;
+  const marker = truncateToWidth("...", width, "");
+  result[result.length - 1] = `${truncateToWidth(
+    last,
+    Math.max(0, width - visibleWidth(marker)),
+    "",
+  )}${marker}`;
   return result;
+}
+
+function activityLines(entry: ExecutionActivity, width: number, theme: Theme): string[] {
+  if (entry.kind === "thinking")
+    return wrapped(theme.fg("dim", `thought:  ${safeDisplay(entry.text)}`), width);
+  const color =
+    entry.state === "error" ? "error" : entry.state === "success" ? "success" : "warning";
+  const summary =
+    entry.kind === "retry"
+      ? `retry ${entry.attempt}/${entry.maxAttempts}`
+      : safeDisplay(entry.summary);
+  return [
+    theme.fg(color, activityLine(entry.state, summary, formatElapsed(entry.durationMs), width)),
+  ];
+}
+
+function tailPreview(lines: string[], width: number, maxLines: number): string[] {
+  if (maxLines <= 0) return [];
+  const result = lines.slice(-maxLines);
+  const first = result[0] ?? "";
+  const marker = truncateToWidth("...", width, "");
+  result[0] = `${marker}${truncateToWidth(first, Math.max(0, width - visibleWidth(marker)), "")}`;
+  return result;
+}
+
+function recentActivityLines(
+  entries: ExecutionActivity[],
+  width: number,
+  maxLines: number,
+  theme: Theme,
+): { lines: string[]; hidden: boolean } {
+  const chunks = entries.map((entry) => activityLines(entry, width, theme));
+  const totalLines = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  if (totalLines <= maxLines) return { lines: chunks.flat(), hidden: false };
+
+  const lines: string[] = [];
+  for (let index = chunks.length - 1; index >= 0 && lines.length < maxLines; index--) {
+    const chunk = chunks[index] ?? [];
+    const remaining = maxLines - lines.length;
+    lines.unshift(...(chunk.length <= remaining ? chunk : tailPreview(chunk, width, remaining)));
+  }
+  return { lines, hidden: true };
 }
 
 function activityLine(state: string, summary: string, duration: string, width: number): string {
@@ -148,26 +198,42 @@ class ExecutionView implements Component {
   invalidate(): void {}
 
   render(width: number): string[] {
-    const lines: string[] = [];
-    const add = (line: string): void => {
-      lines.push(truncateToWidth(withoutLineBreaks(line), width));
-    };
+    const oneLine = (line: string): string => truncateToWidth(withoutLineBreaks(line), width);
     const execution = this.details.execution;
-    add(
+    const header = oneLine(
       `${status(this.details.state)} ${this.theme.bold(safeDisplay(this.details.label))} · ${this.details.state} · ${safeDisplay(this.details.model.provider)}/${safeDisplay(this.details.model.id)} · ${safeDisplay(this.details.thinkingLevel)}${execution ? ` · ${formatElapsed(execution.elapsedMs)}` : ""}`,
     );
+    const footer = usageLine(this.details);
+    const result =
+      this.details.state !== "running" && (this.details.failure || this.details.report)
+        ? this.theme.fg(
+            this.details.failure ? "error" : "text",
+            safeDisplay(this.details.failure ?? this.details.report ?? ""),
+          )
+        : undefined;
 
-    if (execution) {
-      if (this.expanded) lines.push(...wrapped(`task: ${safeDisplay(execution.prompt)}`, width));
-      else add(`task: ${safeDisplay(execution.prompt).replace(/\s+/g, " ").trim()}`);
+    if (!execution) {
+      const resultLines = result
+        ? this.expanded
+          ? wrapped(result, width)
+          : preview(result, width, COLLAPSED_LINE_BUDGET - 1)
+        : [];
+      return [header, ...resultLines, ...(footer ? [oneLine(footer)] : [])].slice(
+        0,
+        this.expanded ? undefined : COLLAPSED_LINE_BUDGET,
+      );
+    }
 
-      const complete = [
-        ...execution.activity,
-        ...(execution.unfinishedThinking
-          ? [{ kind: "thinking" as const, text: execution.unfinishedThinking }]
-          : []),
-      ];
-      const visible = complete.slice(-(this.expanded ? 50 : 25));
+    const complete: ExecutionActivity[] = [
+      ...execution.activity,
+      ...(execution.unfinishedThinking
+        ? [{ kind: "thinking" as const, text: execution.unfinishedThinking }]
+        : []),
+    ];
+
+    if (this.expanded) {
+      const lines = [header, ...wrapped(`task: ${safeDisplay(execution.prompt)}`, width)];
+      const visible = complete.slice(-50);
       const hidden = complete.length - visible.length;
       const omission = [
         hidden > 0 ? `${hidden} ${hidden === 1 ? "row" : "rows"} omitted` : "",
@@ -177,39 +243,49 @@ class ExecutionView implements Component {
       ]
         .filter(Boolean)
         .join("; ");
-      if (omission) add(this.theme.fg("dim", omission));
-      for (const entry of visible) {
-        if (entry.kind === "thinking") {
-          lines.push(
-            ...wrapped(this.theme.fg("dim", `thought:  ${safeDisplay(entry.text)}`), width),
-          );
-          continue;
-        }
-        const color =
-          entry.state === "error" ? "error" : entry.state === "success" ? "success" : "warning";
-        const summary =
-          entry.kind === "retry"
-            ? `retry ${entry.attempt}/${entry.maxAttempts}`
-            : safeDisplay(entry.summary);
-        add(
-          this.theme.fg(
-            color,
-            activityLine(entry.state, summary, formatElapsed(entry.durationMs), width),
-          ),
-        );
-      }
+      if (omission) lines.push(oneLine(this.theme.fg("dim", omission)));
+      for (const entry of visible) lines.push(...activityLines(entry, width, this.theme));
+      if (result) lines.push(...wrapped(result, width));
+      if (footer) lines.push(oneLine(this.theme.fg("dim", footer)));
+      return lines;
     }
 
-    if (this.details.state !== "running" && (this.details.failure || this.details.report)) {
-      const result = this.theme.fg(
-        this.details.failure ? "error" : "text",
-        safeDisplay(this.details.failure ?? this.details.report ?? ""),
-      );
-      lines.push(...(this.expanded ? wrapped(result, width) : preview(result, width, 24)));
-    }
-    const footer = usageLine(this.details);
-    if (footer) add(this.theme.fg("dim", footer));
-    return lines;
+    const task = oneLine(`task: ${safeDisplay(execution.prompt).replace(/\s+/g, " ").trim()}`);
+    const fixedLines = 2 + (footer ? 1 : 0);
+    const available = Math.max(0, COLLAPSED_LINE_BUDGET - fixedLines);
+    const outcomeLines = result ? wrapped(result, width) : [];
+    const allActivityLines = complete.flatMap((entry) => activityLines(entry, width, this.theme));
+    const needsOmission =
+      execution.omittedActivity > 0 || allActivityLines.length + outcomeLines.length > available;
+    const contentBudget = Math.max(0, available - (needsOmission ? 1 : 0));
+    const visibleOutcome = preview(
+      result ?? "",
+      width,
+      Math.min(outcomeLines.length, contentBudget),
+    );
+    const activityBudget = contentBudget - visibleOutcome.length;
+    const activity = recentActivityLines(complete, width, activityBudget, this.theme);
+    const outcomeHidden = outcomeLines.length > visibleOutcome.length;
+    const omission =
+      needsOmission || activity.hidden || outcomeHidden
+        ? [
+            "details omitted; expand to view",
+            execution.omittedActivity > 0
+              ? `${execution.omittedActivity} ${execution.omittedActivity === 1 ? "row" : "rows"} discarded`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("; ")
+        : undefined;
+
+    return [
+      header,
+      task,
+      ...(omission ? [oneLine(this.theme.fg("dim", omission))] : []),
+      ...activity.lines,
+      ...visibleOutcome,
+      ...(footer ? [oneLine(this.theme.fg("dim", footer))] : []),
+    ].slice(0, COLLAPSED_LINE_BUDGET);
   }
 }
 
@@ -219,6 +295,13 @@ export function renderExecution(
   theme: Theme,
   fallback: string,
 ): Component {
-  if (!isDetails(value)) return new Text(theme.fg("text", safeDisplay(fallback)), 0, 0);
+  if (!isDetails(value)) {
+    const text = theme.fg("text", safeDisplay(fallback));
+    if (expanded) return new Text(text, 0, 0);
+    return {
+      invalidate() {},
+      render: (width) => preview(text, width, COLLAPSED_LINE_BUDGET),
+    };
+  }
   return new ExecutionView(value, expanded, theme);
 }

@@ -9,7 +9,7 @@ When installed, use `agentic-planning`, `agentic-implementing`, and `agentic-rev
 
 ## Project
 
-Maintain `pi-tools` as the shared source for the owner's portable Pi resources. It is a public, pre-1.0 personal Pi package for timing, exact context telemetry, fresh-session handoff, and ephemeral subagent execution in the `@earendil-works/pi-coding-agent` ecosystem.
+Maintain `pi-tools` as the shared source for the owner's portable Pi resources. It is a public, pre-1.0 personal Pi package for timing, Pi-sourced estimated context telemetry, fresh-session handoff, and ephemeral subagent execution in the `@earendil-works/pi-coding-agent` ecosystem.
 
 Keep package resources usable across systems, keep contributor guidance aligned with repository reality, and update user-facing documentation with every behavior change.
 

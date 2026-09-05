@@ -150,7 +150,7 @@ export function registerSubagents(pi: ExtensionAPI, dependencies: SubagentDepend
     name: GENERIC_TOOL,
     label: "Subagent",
     description:
-      "Run one self-contained task in a fresh Pi child using the parent model, thinking level, working directory, trust state, and ordinary active tools. The child loads skills but not context files and cannot delegate or hand off.",
+      "Run one self-contained task in a fresh Pi child using the parent model, thinking level, working directory, trust state, and ordinary active tools. A subagent has a fresh context, not an isolated working tree. The child loads skills but not context files and cannot delegate or hand off.",
     parameters: TASK_PARAMETERS,
     execute: async (_id, params, signal, onUpdate, context) =>
       execute(GENERIC_TOOL, params.task, undefined, signal, onUpdate, context),

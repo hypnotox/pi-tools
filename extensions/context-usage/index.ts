@@ -21,7 +21,7 @@ export function contextUsageLine(context: ContextUsageSource): string {
     return "[session context] unavailable";
   const remaining = contextWindow - tokens;
   const percentage = (tokens / contextWindow) * 100;
-  return `[session context] tokens=${tokens}; context-window=${contextWindow}; remaining=${remaining}; used=${percentage.toFixed(2)}%`;
+  return `[session context] tokens=~${tokens}; context-window=${contextWindow}; remaining=~${remaining}; used=~${percentage.toFixed(2)}%`;
 }
 
 export function registerContextUsage(pi: ExtensionAPI): void {

@@ -38,6 +38,9 @@
       "./extensions/subagents",
       "./extensions/context-usage",
       "./extensions/handoff"
+    ],
+    "prompts": [
+      "./prompts/handoff.md"
     ]
   }
 }

@@ -145,7 +145,7 @@ export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependenc
       name: TOOL,
       label: "Fresh Session Handoff",
       description:
-        "Continue work immediately in a fresh parent-linked persisted Pi session. Provide a self-contained kickoff with the objective, current state, next action, relevant files, decisions, constraints, completed work, verification, blockers, and unresolved questions that the replacement needs.",
+        "Continue work immediately in a fresh parent-linked Pi session. Call this tool alone, without sibling tool calls, from a persisted TUI or RPC session. Provide a nonempty self-contained kickoff of at most 16 KiB of UTF-8 data containing the objective, current state, next action, and the continuity the replacement needs.",
       parameters: Type.Object({ kickoff: Type.String() }, { additionalProperties: false }),
       async execute(_id, params, _signal, _update, context) {
         if (

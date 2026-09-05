@@ -8,7 +8,20 @@ describe("context usage extension", () => {
       contextUsageLine({
         getContextUsage: () => ({ tokens: 118_200, contextWindow: 272_000 }),
       }),
-    ).toBe("[session context] tokens=118200; context-window=272000; remaining=153800; used=43.46%");
+    ).toBe(
+      "[session context] tokens=~118200; context-window=272000; remaining=~153800; used=~43.46%",
+    );
+  });
+
+  it.each([
+    [0, 4_000, "[session context] tokens=~0; context-window=4000; remaining=~4000; used=~0.00%"],
+    [
+      5_000,
+      4_000,
+      "[session context] tokens=~5000; context-window=4000; remaining=~-1000; used=~125.00%",
+    ],
+  ])("marks valid estimated arithmetic for tokens=%s", (tokens, contextWindow, expected) => {
+    expect(contextUsageLine({ getContextUsage: () => ({ tokens, contextWindow }) })).toBe(expected);
   });
 
   it.each([
@@ -40,7 +53,7 @@ describe("context usage extension", () => {
           role: "custom",
           customType: "context-usage",
           content:
-            "[session context] tokens=2000; context-window=4000; remaining=2000; used=50.00%",
+            "[session context] tokens=~2000; context-window=4000; remaining=~2000; used=~50.00%",
           display: false,
         },
       ],

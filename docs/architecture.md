@@ -2,11 +2,12 @@
 
 ## Overview
 
-`pi-tools` is a personal Pi package and development workspace. Its manifest exposes only timing, context telemetry, handoff, and subagent extensions. Contributor guidance is repository-local and is not a package extension entry point.
+`pi-tools` is a personal Pi package and development workspace. Its manifest exposes timing, context telemetry, handoff, and subagent extensions plus a handoff prompt template. Contributor guidance is repository-local and is not a package resource.
 
 ## Components
 
-- `package.json`: package identity and the four Pi extension entry points.
+- `package.json`: package identity, four Pi extension entry points, and the handoff prompt export.
+- `prompts/handoff.md`: native `/handoff` initiation for the existing handoff capability.
 - `extensions/timing/`: agent, turn, and tool timing plus handoff continuity.
 - `extensions/context-usage/`: source-backed context telemetry injected into model context.
 - `extensions/handoff/`: immediate persisted-session replacement and kickoff delivery.
@@ -17,7 +18,7 @@
 
 ## Data flow
 
-Pi installs the repository, reads the four explicit extension paths in `package.json`, and loads them at startup or after `/reload`. Timing and context telemetry observe Pi events, handoff replaces a persisted session through a queued command, and subagent tools spawn fresh no-session Pi children and project their JSON event streams into bounded live tool updates. `agentic-skills` may publish specialized roles over Pi's event bus; `pi-tools` owns execution and child-activity presentation.
+Pi installs the repository, reads the four explicit extension paths and handoff prompt path in `package.json`, and loads them at startup or after `/reload`. Timing and context telemetry observe Pi events, `/handoff` expands to an agent instruction that uses the existing handoff tool, handoff replaces a persisted session through a queued command, and subagent tools spawn fresh no-session Pi children and project their JSON event streams into bounded live tool updates. `agentic-skills` may publish specialized roles over Pi's event bus; `pi-tools` owns execution and child-activity presentation.
 
 Maintainers edit package resources and ordinary documentation directly. After changing `.awf/project.md` or `.awf/topics/**/*.md`, run `./awf render` and `./awf check` to update and verify the fixed contributor surfaces. AWF owns contributor-guidance projection, topic routing, and ignored effort memory; it does not manage Git, hooks, provenance, or package gates. npm scripts and hosted CI remain repository-owned.
 
@@ -25,7 +26,7 @@ Maintainers edit package resources and ordinary documentation directly. After ch
 
 | Dependency | Role |
 |---|---|
-| Pi | Supplies runtime host modules and loads the four extension entry points. |
+| Pi | Supplies runtime host modules and loads the extension and prompt entry points. |
 | Current Node release | Runs development checks and POSIX child processes. |
 | AWF | Renders project guidance and path-routed topic entrypoints. |
 | TypeScript, Biome, Knip, and Vitest | Development-only type, format, lint, dead-code, dependency, and test checks. |
