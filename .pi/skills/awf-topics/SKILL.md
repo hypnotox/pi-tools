@@ -6,8 +6,4 @@ description: Find and maintain path-routed current project guidance.
 
 # AWF topics
 
-Topics are the only current-state knowledge layer. When repository context is needed, run the repository's documented AWF command with `resolve` for explicit global topics or `resolve <path>...` for globals plus topics matching any supplied path. Read every returned `.awf/topics/...md` source. Once the applicable current context is known, do not repeat the query before every edit.
-
-Keep affected topics accurate with the implementation. Incorporate durable decisions and useful rationale into the applicable topics; future agents read topics rather than historical decision records to learn what currently applies.
-
-A topic is ordinary Markdown with positive `paths` patterns in its frontmatter. The exact sole entry `paths: ['**']` declares an explicit global topic. AWF does not validate or otherwise interpret the body.
+When path-routed repository context becomes relevant, run the repository's AWF command with `docs topics`, read the guide, and follow it for the task. Reuse the guide during the task; do not reload it before every action.

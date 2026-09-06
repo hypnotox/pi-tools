@@ -3,42 +3,42 @@
 # Fetch a pinned AWF release, verify it, cache it, and print its binary path.
 set -euo pipefail
 
-AWF_VERSION="${AWF_VERSION:-0.52.0}"
+AWF_VERSION="${AWF_VERSION:-0.54.1}"
 repo="hypnotox/agentic-workflows"
 cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/awf/${AWF_VERSION}"
 binary="${cache_dir}/awf"
 
-if [ -x "$binary" ]; then
-  printf '%s\n' "$binary"
-  exit 0
+if [ ! -x "$binary" ]; then
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64) arch="amd64" ;;
+    arm64|aarch64) arch="arm64" ;;
+    *) echo "awf bootstrap: unsupported architecture: $arch" >&2; exit 1 ;;
+  esac
+  case "$os" in
+    linux|darwin) ;;
+    *) echo "awf bootstrap: unsupported operating system: $os" >&2; exit 1 ;;
+  esac
+
+  asset="awf_${AWF_VERSION}_${os}_${arch}.tar.gz"
+  base="https://github.com/${repo}/releases/download/v${AWF_VERSION}"
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' EXIT
+
+  curl -fsSL "${base}/${asset}" -o "${tmp}/${asset}"
+  curl -fsSL "${base}/checksums.txt" -o "${tmp}/checksums.txt"
+  if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$tmp" && grep " ${asset}$" checksums.txt | sha256sum -c - >&2)
+  else
+    (cd "$tmp" && grep " ${asset}$" checksums.txt | shasum -a 256 -c - >&2)
+  fi
+
+  tar -xzf "${tmp}/${asset}" -C "$tmp"
+  mkdir -p "$cache_dir"
+  install -m 0755 "${tmp}/awf" "$binary"
+  rm -rf "$tmp"
+  trap - EXIT
 fi
 
-os="$(uname -s | tr '[:upper:]' '[:lower:]')"
-arch="$(uname -m)"
-case "$arch" in
-  x86_64|amd64) arch="amd64" ;;
-  arm64|aarch64) arch="arm64" ;;
-  *) echo "awf bootstrap: unsupported architecture: $arch" >&2; exit 1 ;;
-esac
-case "$os" in
-  linux|darwin) ;;
-  *) echo "awf bootstrap: unsupported operating system: $os" >&2; exit 1 ;;
-esac
-
-asset="awf_${AWF_VERSION}_${os}_${arch}.tar.gz"
-base="https://github.com/${repo}/releases/download/v${AWF_VERSION}"
-tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
-
-curl -fsSL "${base}/${asset}" -o "${tmp}/${asset}"
-curl -fsSL "${base}/checksums.txt" -o "${tmp}/checksums.txt"
-if command -v sha256sum >/dev/null 2>&1; then
-  (cd "$tmp" && grep " ${asset}$" checksums.txt | sha256sum -c - >&2)
-else
-  (cd "$tmp" && grep " ${asset}$" checksums.txt | shasum -a 256 -c - >&2)
-fi
-
-tar -xzf "${tmp}/${asset}" -C "$tmp"
-mkdir -p "$cache_dir"
-install -m 0755 "${tmp}/awf" "$binary"
 printf '%s\n' "$binary"
