@@ -41,7 +41,7 @@ describe("timing extension", () => {
     await harness.invoke("turn_end", {}, harness.context);
     await harness.invoke("agent_settled", {}, harness.context);
 
-    expect(harness.appendEntries).toHaveLength(3);
+    expect(harness.appendEntries).toHaveLength(2);
     expect(harness.appendEntries[0]).toEqual([
       "pi-tools-timing",
       {
@@ -50,10 +50,10 @@ describe("timing extension", () => {
           expect.objectContaining({ label: "read", toolIndex: 1, durationMs: 884 }),
           expect.objectContaining({ label: "bash", toolIndex: 2, durationMs: 884 }),
         ],
+        turn: expect.objectContaining({ kind: "turn", durationMs: 884 }),
       },
     ]);
-    expect(harness.appendEntries[1]?.[1]).toMatchObject({ kind: "turn", durationMs: 884 });
-    expect(harness.appendEntries[2]?.[1]).toMatchObject({ kind: "agent", durationMs: 884 });
+    expect(harness.appendEntries[1]?.[1]).toMatchObject({ kind: "agent", durationMs: 884 });
   });
 
   it("restores timing continuity before the first replacement turn", async () => {
@@ -118,11 +118,19 @@ describe("timing extension", () => {
             durationMs: 1_768,
           },
         ],
+        turn: {
+          kind: "turn",
+          label: "turn 1",
+          startedAt: new Date(2026, 7, 14, 14, 32, 6, 411).getTime(),
+          endedAt: new Date(2026, 7, 14, 14, 32, 8, 200).getTime(),
+          durationMs: 1_789,
+        },
       }),
     ).toBe(
       [
         "  ↳ tool 1 · read · 14:32:06.411 → 14:32:07.295 · 884ms",
         "  ↳ tool 2 · bash · 14:32:06.411 → 14:32:08.179 · 1.77s",
+        "  ↳ turn 1 · 14:32:06.411 → 14:32:08.200 · 1.79s",
       ].join("\n"),
     );
   });

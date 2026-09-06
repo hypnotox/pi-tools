@@ -307,7 +307,11 @@ describe("handoff on the real Pi AgentSession runtime", () => {
           ),
         ).toEqual([
           expect.objectContaining({
-            data: expect.objectContaining({ kind: "turn", label: "turn 2" }),
+            data: expect.objectContaining({
+              kind: "tool-block",
+              tools: [],
+              turn: expect.objectContaining({ kind: "turn", label: "turn 2" }),
+            }),
           }),
           expect.objectContaining({ data: expect.objectContaining({ kind: "agent" }) }),
         ]);
@@ -325,8 +329,8 @@ describe("handoff on the real Pi AgentSession runtime", () => {
               expect.objectContaining({
                 kind: "tool-block",
                 tools: [expect.objectContaining({ kind: "tool", label: "handoff_session" })],
+                turn: expect.objectContaining({ kind: "turn", label: "turn 1" }),
               }),
-              expect.objectContaining({ kind: "turn", label: "turn 1" }),
               expect.objectContaining({ kind: "agent" }),
             ]
           : [],

@@ -22,6 +22,8 @@ type WorkingContext = Parameters<Parameters<ExtensionAPI["on"]>[1]>[1];
 export interface ToolTimingBlockData {
   kind: "tool-block";
   tools: TimingCompletion[];
+  /** Absent only on entries persisted before turn timings joined the block. */
+  turn?: TimingCompletion;
 }
 
 export type TimingEntryData = TimingCompletion | ToolTimingBlockData;
@@ -34,7 +36,9 @@ function formatCompletion(data: TimingCompletion): string {
 
 export function formatTimingEntry(data: TimingEntryData): string {
   return data.kind === "tool-block"
-    ? data.tools.map((completion) => formatCompletion(completion)).join("\n")
+    ? [...data.tools, ...(data.turn ? [data.turn] : [])]
+        .map((completion) => formatCompletion(completion))
+        .join("\n")
     : formatCompletion(data);
 }
 
@@ -71,8 +75,10 @@ function isTimingEntryData(value: unknown): value is TimingEntryData {
   return (
     record.kind === "tool-block" &&
     Array.isArray(record.tools) &&
-    record.tools.length > 0 &&
-    record.tools.every((tool) => isTimingCompletion(tool) && tool.kind === "tool")
+    record.tools.every((tool) => isTimingCompletion(tool) && tool.kind === "tool") &&
+    (record.turn === undefined ||
+      (isTimingCompletion(record.turn) && record.turn.kind === "turn")) &&
+    (record.tools.length > 0 || record.turn !== undefined)
   );
 }
 
@@ -114,13 +120,17 @@ export default function timingExtension(pi: ExtensionAPI): void {
     if (ctx.mode === "tui") pi.appendEntry(ENTRY_TYPE, completion);
   };
 
-  const appendToolBlock = (ctx: WorkingContext): void => {
+  const appendToolBlock = (turn: TimingCompletion | undefined, ctx: WorkingContext): void => {
     const tools = [...toolCompletions].sort(
       (left, right) => (left.toolIndex ?? 0) - (right.toolIndex ?? 0),
     );
     toolCompletions = [];
-    if (ctx.mode === "tui" && tools.length > 0) {
-      pi.appendEntry(ENTRY_TYPE, { kind: "tool-block", tools } satisfies ToolTimingBlockData);
+    if (ctx.mode === "tui" && (tools.length > 0 || turn)) {
+      pi.appendEntry(ENTRY_TYPE, {
+        kind: "tool-block",
+        tools,
+        ...(turn ? { turn } : {}),
+      } satisfies ToolTimingBlockData);
     }
   };
 
@@ -177,8 +187,7 @@ export default function timingExtension(pi: ExtensionAPI): void {
   pi.on("turn_end", (_event, ctx) => {
     const completion = state.endTurn();
     try {
-      appendToolBlock(ctx);
-      if (completion) appendCompletion(completion, ctx);
+      appendToolBlock(completion, ctx);
     } finally {
       restoreWorkingMessage(ctx);
     }
