@@ -22,7 +22,7 @@ Keep package resources usable across systems, keep contributor guidance aligned 
 - **Floating current dependencies.** Keep Pi core and TypeBox imports as wildcard peers, registry development dependencies as `*`, and installs lockfile-free.
 - **Pi authority first.** Read Pi's installed documentation and working examples before implementing or changing a resource.
 - **Bounded extension resources.** Truncate potentially large tool output and clean up long-lived resources on `session_shutdown`.
-- **Verified provenance.** Commits from `v0.1.0` onward use `Josua Müller <hypnotox@pm.me>` as author and committer and carry a verified signature from the owner's key listed in `docs/allowed-signers`. This is a contributor requirement, not an AWF-enforced policy.
+- **Signed commits.** Use ordinary local `git commit` and rely on the repository's existing Git identity and signing configuration. Do not inspect, override, or modify Git identity or signing settings, and do not manually verify signatures unless explicitly requested.
 
 ## Workflow
 
