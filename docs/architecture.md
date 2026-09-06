@@ -2,12 +2,13 @@
 
 ## Overview
 
-`pi-tools` is a personal Pi package and development workspace. Its manifest exposes timing, context telemetry, and handoff extensions plus a handoff prompt template. Contributor guidance is repository-local and is not a package resource.
+`pi-tools` is a personal Pi package and development workspace. Its manifest exposes working-title, timing, context telemetry, and handoff extensions plus a handoff prompt template. Contributor guidance is repository-local and is not a package resource.
 
 ## Components
 
-- `package.json`: package identity, three Pi extension entry points, and the handoff prompt export.
+- `package.json`: package identity, four Pi extension entry points, and the handoff prompt export.
 - `prompts/handoff.md`: native `/handoff` initiation for the existing handoff capability.
+- `extensions/working-title/`: animated terminal-title activity while the agent runs or Pi compacts.
 - `extensions/timing/`: agent, turn, and tool timing plus handoff continuity.
 - `extensions/context-usage/`: source-backed context telemetry injected into model context.
 - `extensions/handoff/`: immediate persisted-session replacement and kickoff delivery.
@@ -17,7 +18,7 @@
 
 ## Data flow
 
-Pi installs the repository, reads the three explicit extension paths and handoff prompt path in `package.json`, and loads them at startup or after `/reload`. Timing and context telemetry observe Pi events, `/handoff` expands to an agent instruction that uses the existing handoff tool, and handoff opts an internal tokenized message into extension-command dispatch while the tool is running. That command waits for full agent settlement before replacing the persisted session. Before delivering the kickoff, the replacement session restores the parent session's active model and thinking level from the same private continuity entry used for timing; if that model is unavailable or unauthenticated, it warns and retains the replacement defaults.
+Pi installs the repository, reads the four explicit extension paths and handoff prompt path in `package.json`, and loads them at startup or after `/reload`. Working title wraps the shared extension `setTitle` method so later title changes remain the undecorated base while its timer paints a transient activity prefix. Timing and context telemetry observe Pi events, `/handoff` expands to an agent instruction that uses the existing handoff tool, and handoff opts an internal tokenized message into extension-command dispatch while the tool is running. That command waits for full agent settlement before replacing the persisted session. Before delivering the kickoff, the replacement session restores the parent session's active model and thinking level from the same private continuity entry used for timing; if that model is unavailable or unauthenticated, it warns and retains the replacement defaults.
 
 The pending token is claimed once after `waitForIdle()`. Shutdown and completed `session_tree` events invalidate pending work; the captured run signal also detects an accepted competing replacement's abort before shutdown reaches the idle boundary. Cancellable preflight events do not invalidate work. These guards do not serialize independent replacements after the handoff claims its token; that remains a host limitation.
 

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "..");
 const entrypoints = [
+  "extensions/working-title/index.ts",
   "extensions/timing/index.ts",
   "extensions/context-usage/index.ts",
   "extensions/handoff/index.ts",

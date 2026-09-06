@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Personal timing, context telemetry, and handoff extensions for Pi.",
+  "description": "Personal working-title, timing, context telemetry, and handoff extensions for Pi.",
   "type": "module",
   "keywords": [
     "pi-package"
@@ -34,6 +34,7 @@
   },
   "pi": {
     "extensions": [
+      "./extensions/working-title",
       "./extensions/timing",
       "./extensions/context-usage",
       "./extensions/handoff"
