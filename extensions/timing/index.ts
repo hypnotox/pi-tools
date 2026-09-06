@@ -24,6 +24,8 @@ export interface ToolTimingBlockData {
   tools: TimingCompletion[];
   /** Absent only on entries persisted before turn timings joined the block. */
   turn?: TimingCompletion;
+  /** Present on the final turn block after the whole agent run settles. */
+  agent?: TimingCompletion;
 }
 
 export type TimingEntryData = TimingCompletion | ToolTimingBlockData;
@@ -36,7 +38,7 @@ function formatCompletion(data: TimingCompletion): string {
 
 export function formatTimingEntry(data: TimingEntryData): string {
   return data.kind === "tool-block"
-    ? [...data.tools, ...(data.turn ? [data.turn] : [])]
+    ? [...data.tools, ...(data.turn ? [data.turn] : []), ...(data.agent ? [data.agent] : [])]
         .map((completion) => formatCompletion(completion))
         .join("\n")
     : formatCompletion(data);
@@ -78,7 +80,9 @@ function isTimingEntryData(value: unknown): value is TimingEntryData {
     record.tools.every((tool) => isTimingCompletion(tool) && tool.kind === "tool") &&
     (record.turn === undefined ||
       (isTimingCompletion(record.turn) && record.turn.kind === "turn")) &&
-    (record.tools.length > 0 || record.turn !== undefined)
+    (record.agent === undefined ||
+      (isTimingCompletion(record.agent) && record.agent.kind === "agent")) &&
+    (record.tools.length > 0 || record.turn !== undefined || record.agent !== undefined)
   );
 }
 
@@ -87,6 +91,7 @@ export default function timingExtension(pi: ExtensionAPI): void {
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
   let workingContext: WorkingContext | undefined;
   let toolCompletions: TimingCompletion[] = [];
+  let pendingTurnBlock: ToolTimingBlockData | undefined;
 
   const restoreWorkingMessage = (fallbackContext?: WorkingContext): void => {
     const context = workingContext ?? fallbackContext;
@@ -120,18 +125,31 @@ export default function timingExtension(pi: ExtensionAPI): void {
     if (ctx.mode === "tui") pi.appendEntry(ENTRY_TYPE, completion);
   };
 
-  const appendToolBlock = (turn: TimingCompletion | undefined, ctx: WorkingContext): void => {
+  const finishTurnBlock = (turn: TimingCompletion | undefined): void => {
     const tools = [...toolCompletions].sort(
       (left, right) => (left.toolIndex ?? 0) - (right.toolIndex ?? 0),
     );
     toolCompletions = [];
-    if (ctx.mode === "tui" && (tools.length > 0 || turn)) {
+    pendingTurnBlock =
+      tools.length > 0 || turn
+        ? {
+            kind: "tool-block",
+            tools,
+            ...(turn ? { turn } : {}),
+          }
+        : undefined;
+  };
+
+  const appendPendingTurnBlock = (ctx: WorkingContext, agent?: TimingCompletion): boolean => {
+    if (!pendingTurnBlock) return false;
+    if (ctx.mode === "tui") {
       pi.appendEntry(ENTRY_TYPE, {
-        kind: "tool-block",
-        tools,
-        ...(turn ? { turn } : {}),
+        ...pendingTurnBlock,
+        ...(agent ? { agent } : {}),
       } satisfies ToolTimingBlockData);
     }
+    pendingTurnBlock = undefined;
+    return true;
   };
 
   pi.registerEntryRenderer(ENTRY_TYPE, (entry, _options, theme) => {
@@ -152,6 +170,7 @@ export default function timingExtension(pi: ExtensionAPI): void {
     } finally {
       state.reset();
       toolCompletions = [];
+      pendingTurnBlock = undefined;
     }
     if (event.reason !== "new") return;
     const entry = [...ctx.sessionManager.getEntries()]
@@ -170,6 +189,7 @@ export default function timingExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("turn_start", (event, ctx) => {
+    appendPendingTurnBlock(ctx);
     toolCompletions = [];
     state.startTurn(event.turnIndex, event.timestamp);
     beginWorkingMessage(ctx);
@@ -187,7 +207,7 @@ export default function timingExtension(pi: ExtensionAPI): void {
   pi.on("turn_end", (_event, ctx) => {
     const completion = state.endTurn();
     try {
-      appendToolBlock(completion, ctx);
+      finishTurnBlock(completion);
     } finally {
       restoreWorkingMessage(ctx);
     }
@@ -195,15 +215,18 @@ export default function timingExtension(pi: ExtensionAPI): void {
 
   pi.on("agent_settled", (_event, ctx) => {
     const completion = state.endAgent();
+    if (appendPendingTurnBlock(ctx, completion)) return;
     if (completion) appendCompletion(completion, ctx);
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
     try {
       restoreWorkingMessage(ctx);
+      appendPendingTurnBlock(ctx);
     } finally {
       state.reset();
       toolCompletions = [];
+      pendingTurnBlock = undefined;
     }
   });
 }

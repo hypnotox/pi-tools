@@ -41,19 +41,45 @@ describe("timing extension", () => {
     await harness.invoke("turn_end", {}, harness.context);
     await harness.invoke("agent_settled", {}, harness.context);
 
-    expect(harness.appendEntries).toHaveLength(2);
-    expect(harness.appendEntries[0]).toEqual([
-      "pi-tools-timing",
-      {
-        kind: "tool-block",
-        tools: [
-          expect.objectContaining({ label: "read", toolIndex: 1, durationMs: 884 }),
-          expect.objectContaining({ label: "bash", toolIndex: 2, durationMs: 884 }),
-        ],
-        turn: expect.objectContaining({ kind: "turn", durationMs: 884 }),
-      },
+    expect(harness.appendEntries).toEqual([
+      [
+        "pi-tools-timing",
+        {
+          kind: "tool-block",
+          tools: [
+            expect.objectContaining({ label: "read", toolIndex: 1, durationMs: 884 }),
+            expect.objectContaining({ label: "bash", toolIndex: 2, durationMs: 884 }),
+          ],
+          turn: expect.objectContaining({ kind: "turn", durationMs: 884 }),
+          agent: expect.objectContaining({ kind: "agent", durationMs: 884 }),
+        },
+      ],
     ]);
-    expect(harness.appendEntries[1]?.[1]).toMatchObject({ kind: "agent", durationMs: 884 });
+  });
+
+  it("flushes earlier turns separately and joins the agent duration only to the last turn", async () => {
+    const harness = createHarness();
+    await harness.invoke("agent_start", {}, harness.context);
+    await harness.invoke("turn_start", { turnIndex: 0, timestamp: Date.now() }, harness.context);
+    await vi.advanceTimersByTimeAsync(100);
+    await harness.invoke("turn_end", {}, harness.context);
+    expect(harness.appendEntries).toHaveLength(0);
+
+    await harness.invoke("turn_start", { turnIndex: 1, timestamp: Date.now() }, harness.context);
+    expect(harness.appendEntries[0]?.[1]).toMatchObject({
+      kind: "tool-block",
+      turn: { kind: "turn", label: "turn 1" },
+    });
+    expect(harness.appendEntries[0]?.[1]).not.toHaveProperty("agent");
+
+    await vi.advanceTimersByTimeAsync(200);
+    await harness.invoke("turn_end", {}, harness.context);
+    await harness.invoke("agent_settled", {}, harness.context);
+    expect(harness.appendEntries[1]?.[1]).toMatchObject({
+      kind: "tool-block",
+      turn: { kind: "turn", label: "turn 2" },
+      agent: { kind: "agent", durationMs: 300 },
+    });
   });
 
   it("restores timing continuity before the first replacement turn", async () => {
@@ -125,12 +151,20 @@ describe("timing extension", () => {
           endedAt: new Date(2026, 7, 14, 14, 32, 8, 200).getTime(),
           durationMs: 1_789,
         },
+        agent: {
+          kind: "agent",
+          label: "agent",
+          startedAt: new Date(2026, 7, 14, 14, 32, 6, 411).getTime(),
+          endedAt: new Date(2026, 7, 14, 14, 32, 8, 210).getTime(),
+          durationMs: 1_799,
+        },
       }),
     ).toBe(
       [
         "  ↳ tool 1 · read · 14:32:06.411 → 14:32:07.295 · 884ms",
         "  ↳ tool 2 · bash · 14:32:06.411 → 14:32:08.179 · 1.77s",
         "  ↳ turn 1 · 14:32:06.411 → 14:32:08.200 · 1.79s",
+        "  ↳ agent · 14:32:06.411 → 14:32:08.210 · 1.80s",
       ].join("\n"),
     );
   });
