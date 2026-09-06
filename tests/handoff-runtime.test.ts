@@ -322,7 +322,10 @@ describe("handoff on the real Pi AgentSession runtime", () => {
       ).toEqual(
         mode === "tui"
           ? [
-              expect.objectContaining({ kind: "tool", label: "handoff_session" }),
+              expect.objectContaining({
+                kind: "tool-block",
+                tools: [expect.objectContaining({ kind: "tool", label: "handoff_session" })],
+              }),
               expect.objectContaining({ kind: "turn", label: "turn 1" }),
               expect.objectContaining({ kind: "agent" }),
             ]

@@ -19,12 +19,23 @@ const REFRESH_INTERVAL_MS = 100;
 
 type WorkingContext = Parameters<Parameters<ExtensionAPI["on"]>[1]>[1];
 
-export interface TimingEntryData extends TimingCompletion {}
+export interface ToolTimingBlockData {
+  kind: "tool-block";
+  tools: TimingCompletion[];
+}
 
-export function formatTimingEntry(data: TimingEntryData): string {
+export type TimingEntryData = TimingCompletion | ToolTimingBlockData;
+
+function formatCompletion(data: TimingCompletion): string {
   const identity =
     data.kind === "tool" ? `tool ${data.toolIndex ?? "?"} · ${data.label}` : data.label;
   return `  ↳ ${identity} · ${formatTimestamp(data.startedAt)} → ${formatTimestamp(data.endedAt)} · ${formatCompletedDuration(data.durationMs)}`;
+}
+
+export function formatTimingEntry(data: TimingEntryData): string {
+  return data.kind === "tool-block"
+    ? data.tools.map((completion) => formatCompletion(completion)).join("\n")
+    : formatCompletion(data);
 }
 
 function isHandoffTimingContinuation(value: unknown): value is HandoffTimingContinuation {
@@ -40,7 +51,7 @@ function isHandoffTimingContinuation(value: unknown): value is HandoffTimingCont
   );
 }
 
-function isTimingEntryData(value: unknown): value is TimingEntryData {
+function isTimingCompletion(value: unknown): value is TimingCompletion {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
   return (
@@ -53,10 +64,23 @@ function isTimingEntryData(value: unknown): value is TimingEntryData {
   );
 }
 
+function isTimingEntryData(value: unknown): value is TimingEntryData {
+  if (isTimingCompletion(value)) return true;
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.kind === "tool-block" &&
+    Array.isArray(record.tools) &&
+    record.tools.length > 0 &&
+    record.tools.every((tool) => isTimingCompletion(tool) && tool.kind === "tool")
+  );
+}
+
 export default function timingExtension(pi: ExtensionAPI): void {
   const state = new TimingState();
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
   let workingContext: WorkingContext | undefined;
+  let toolCompletions: TimingCompletion[] = [];
 
   const restoreWorkingMessage = (fallbackContext?: WorkingContext): void => {
     const context = workingContext ?? fallbackContext;
@@ -90,6 +114,16 @@ export default function timingExtension(pi: ExtensionAPI): void {
     if (ctx.mode === "tui") pi.appendEntry(ENTRY_TYPE, completion);
   };
 
+  const appendToolBlock = (ctx: WorkingContext): void => {
+    const tools = [...toolCompletions].sort(
+      (left, right) => (left.toolIndex ?? 0) - (right.toolIndex ?? 0),
+    );
+    toolCompletions = [];
+    if (ctx.mode === "tui" && tools.length > 0) {
+      pi.appendEntry(ENTRY_TYPE, { kind: "tool-block", tools } satisfies ToolTimingBlockData);
+    }
+  };
+
   pi.registerEntryRenderer(ENTRY_TYPE, (entry, _options, theme) => {
     if (!isTimingEntryData(entry.data)) {
       return new Text(theme.fg("warning", "  ↳ invalid timing entry"), 0, 0);
@@ -107,6 +141,7 @@ export default function timingExtension(pi: ExtensionAPI): void {
       restoreWorkingMessage(ctx);
     } finally {
       state.reset();
+      toolCompletions = [];
     }
     if (event.reason !== "new") return;
     const entry = [...ctx.sessionManager.getEntries()]
@@ -125,6 +160,7 @@ export default function timingExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("turn_start", (event, ctx) => {
+    toolCompletions = [];
     state.startTurn(event.turnIndex, event.timestamp);
     beginWorkingMessage(ctx);
   });
@@ -133,14 +169,15 @@ export default function timingExtension(pi: ExtensionAPI): void {
     state.startTool(event.toolCallId, event.toolName);
   });
 
-  pi.on("tool_execution_end", (event, ctx) => {
+  pi.on("tool_execution_end", (event) => {
     const completion = state.endTool(event.toolCallId);
-    if (completion) appendCompletion(completion, ctx);
+    if (completion) toolCompletions.push(completion);
   });
 
   pi.on("turn_end", (_event, ctx) => {
     const completion = state.endTurn();
     try {
+      appendToolBlock(ctx);
       if (completion) appendCompletion(completion, ctx);
     } finally {
       restoreWorkingMessage(ctx);
@@ -157,6 +194,7 @@ export default function timingExtension(pi: ExtensionAPI): void {
       restoreWorkingMessage(ctx);
     } finally {
       state.reset();
+      toolCompletions = [];
     }
   });
 }

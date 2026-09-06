@@ -41,17 +41,19 @@ describe("timing extension", () => {
     await harness.invoke("turn_end", {}, harness.context);
     await harness.invoke("agent_settled", {}, harness.context);
 
-    expect(harness.appendEntries.slice(0, 2)).toEqual([
-      [
-        "pi-tools-timing",
-        expect.objectContaining({ label: "bash", toolIndex: 2, durationMs: 884 }),
-      ],
-      [
-        "pi-tools-timing",
-        expect.objectContaining({ label: "read", toolIndex: 1, durationMs: 884 }),
-      ],
+    expect(harness.appendEntries).toHaveLength(3);
+    expect(harness.appendEntries[0]).toEqual([
+      "pi-tools-timing",
+      {
+        kind: "tool-block",
+        tools: [
+          expect.objectContaining({ label: "read", toolIndex: 1, durationMs: 884 }),
+          expect.objectContaining({ label: "bash", toolIndex: 2, durationMs: 884 }),
+        ],
+      },
     ]);
-    expect(harness.appendEntries.at(-1)?.[1]).toMatchObject({ kind: "agent", durationMs: 884 });
+    expect(harness.appendEntries[1]?.[1]).toMatchObject({ kind: "turn", durationMs: 884 });
+    expect(harness.appendEntries[2]?.[1]).toMatchObject({ kind: "agent", durationMs: 884 });
   });
 
   it("restores timing continuity before the first replacement turn", async () => {
@@ -94,5 +96,34 @@ describe("timing extension", () => {
         durationMs: 3_730,
       }),
     ).toBe("  ↳ tool 2 · bash · 14:32:08.210 → 14:32:11.940 · 3.73s");
+
+    expect(
+      formatTimingEntry({
+        kind: "tool-block",
+        tools: [
+          {
+            kind: "tool",
+            label: "read",
+            toolIndex: 1,
+            startedAt: new Date(2026, 7, 14, 14, 32, 6, 411).getTime(),
+            endedAt: new Date(2026, 7, 14, 14, 32, 7, 295).getTime(),
+            durationMs: 884,
+          },
+          {
+            kind: "tool",
+            label: "bash",
+            toolIndex: 2,
+            startedAt: new Date(2026, 7, 14, 14, 32, 6, 411).getTime(),
+            endedAt: new Date(2026, 7, 14, 14, 32, 8, 179).getTime(),
+            durationMs: 1_768,
+          },
+        ],
+      }),
+    ).toBe(
+      [
+        "  ↳ tool 1 · read · 14:32:06.411 → 14:32:07.295 · 884ms",
+        "  ↳ tool 2 · bash · 14:32:06.411 → 14:32:08.179 · 1.77s",
+      ].join("\n"),
+    );
   });
 });
