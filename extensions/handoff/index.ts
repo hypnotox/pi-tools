@@ -99,6 +99,7 @@ export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependenc
   let suppressThresholdCompaction = false;
   let ownsTool = false;
   let registered = false;
+  let commandSourcePath: string | undefined;
 
   pi.on("tool_call", (event, context) => {
     if (!ownsTool) return;
@@ -137,8 +138,17 @@ export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependenc
   });
 
   const dispatchHandoff = (request: PendingHandoff): void => {
+    const command = pi
+      .getCommands()
+      .find(
+        (candidate) =>
+          candidate.source === "extension" &&
+          candidate.sourceInfo.path === commandSourcePath &&
+          (candidate.name === COMMAND || candidate.name.startsWith(`${COMMAND}:`)),
+      );
+    if (!command) throw new Error("Cannot resolve the handoff continuation command");
     suppressThresholdCompaction = true;
-    pi.sendUserMessage(`/${COMMAND} ${request.id}`, { expandPromptTemplates: true });
+    pi.sendUserMessage(`/${command.name} ${request.id}`, { expandPromptTemplates: true });
   };
 
   pi.on("session_start", async (event, sessionContext) => {
@@ -255,6 +265,7 @@ export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependenc
         };
       },
     });
+    commandSourcePath = pi.getAllTools().find((tool) => tool.name === TOOL)?.sourceInfo.path;
   });
 }
 

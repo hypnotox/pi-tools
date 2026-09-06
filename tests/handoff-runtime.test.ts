@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createProvider } from "@earendil-works/pi-ai";
@@ -19,7 +19,6 @@ const extensionPaths = [
   resolve(root, "extensions/timing/index.ts"),
   resolve(root, "extensions/handoff/index.ts"),
 ];
-
 function messageText(message: AgentSession["messages"][number]): string {
   if (!("content" in message)) return "";
   if (typeof message.content === "string") return message.content;
@@ -37,16 +36,29 @@ describe("handoff on the real Pi AgentSession runtime", () => {
   });
 
   it.each([
-    { mode: "tui", intervention: "none" },
-    { mode: "rpc", intervention: "none" },
-    { mode: "tui", intervention: "cancelled-switch" },
-    { mode: "rpc", intervention: "cancelled-switch" },
-    { mode: "tui", intervention: "replacement" },
-    { mode: "rpc", intervention: "replacement" },
+    { mode: "tui", intervention: "none", collision: "none" },
+    { mode: "rpc", intervention: "none", collision: "none" },
+    { mode: "tui", intervention: "cancelled-switch", collision: "none" },
+    { mode: "rpc", intervention: "cancelled-switch", collision: "none" },
+    { mode: "tui", intervention: "replacement", collision: "none" },
+    { mode: "rpc", intervention: "replacement", collision: "none" },
+    { mode: "tui", intervention: "none", collision: "before" },
+    { mode: "tui", intervention: "none", collision: "after" },
   ] as const)(
-    "settles a persisted $mode handoff with $intervention intervention",
-    async ({ mode, intervention }) => {
+    "settles a persisted $mode handoff with $intervention intervention and $collision collision",
+    async ({ mode, intervention, collision }) => {
       const tempDir = mkdtempSync(join(tmpdir(), `pi-tools-handoff-${mode}-`));
+      const collisionExtensionPath = join(tempDir, "handoff-command-collision.ts");
+      writeFileSync(
+        collisionExtensionPath,
+        'export default function (pi) { pi.registerCommand("handoff-session-continue", { description: "Test-only collision", async handler() {} }); }\n',
+      );
+      const runtimeExtensionPaths =
+        collision === "before"
+          ? [collisionExtensionPath, ...extensionPaths]
+          : collision === "after"
+            ? [...extensionPaths, collisionExtensionPath]
+            : extensionPaths;
       const sessions = join(tempDir, "sessions");
       mkdirSync(sessions);
       cleanups.push(() => rmSync(tempDir, { recursive: true, force: true }));
@@ -113,7 +125,7 @@ describe("handoff on the real Pi AgentSession runtime", () => {
           cwd,
           agentDir: tempDir,
           resourceLoaderOptions: {
-            additionalExtensionPaths: extensionPaths,
+            additionalExtensionPaths: runtimeExtensionPaths,
             extensionFactories: [
               (pi: ExtensionAPI) => {
                 pi.registerProvider(fauxProvider);
@@ -203,7 +215,7 @@ describe("handoff on the real Pi AgentSession runtime", () => {
       const loadedExtensions = runtime.services.resourceLoader.getExtensions();
       expect(loadedExtensions.errors).toEqual([]);
       expect(loadedExtensions.extensions.map((extension) => extension.resolvedPath)).toEqual(
-        expect.arrayContaining(extensionPaths),
+        expect.arrayContaining(runtimeExtensionPaths),
       );
       const runtimeEvents: unknown[] = [];
       runtime.session.subscribe((event) => runtimeEvents.push(event));

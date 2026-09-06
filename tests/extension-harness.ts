@@ -38,6 +38,13 @@ export function createExtensionHarness() {
   const handlers = new Map<string, TestHandler[]>();
   const tools: TestTool[] = [];
   const commands = new Map<string, TestCommand>();
+  const commandInvocations = new Map<string, string>();
+  const sourceInfo = {
+    path: "/test/extension.ts",
+    source: "test",
+    scope: "temporary",
+    origin: "top-level",
+  } as const;
   const entryRenderers = new Map<string, { renderer: unknown; options: unknown }>();
   const appendEntries: Array<[string, unknown]> = [];
   const sentUserMessages: Array<[unknown, unknown]> = [];
@@ -58,7 +65,13 @@ export function createExtensionHarness() {
     appendEntry(type: string, data?: unknown) {
       appendEntries.push([type, data]);
     },
-    getAllTools: () => tools.map((tool) => ({ name: tool.name })),
+    getAllTools: () => tools.map((tool) => ({ name: tool.name, sourceInfo })),
+    getCommands: () =>
+      [...commands.keys()].map((name) => ({
+        name: commandInvocations.get(name) ?? name,
+        source: "extension" as const,
+        sourceInfo,
+      })),
     sendUserMessage(content: unknown, options?: unknown) {
       sentUserMessages.push([content, options]);
     },
@@ -89,6 +102,9 @@ export function createExtensionHarness() {
     appendEntries,
     sentUserMessages,
     bus,
+    setCommandInvocation(name: string, invocationName: string) {
+      commandInvocations.set(name, invocationName);
+    },
     invoke,
     execute,
   };

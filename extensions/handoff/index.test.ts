@@ -148,6 +148,18 @@ describe("fresh-session handoff", () => {
     expect(harness.context.ui.custom).not.toHaveBeenCalled();
   });
 
+  it("dispatches the resolved command invocation name", async () => {
+    const harness = createHarness();
+    await harness.start();
+    harness.setCommandInvocation("handoff-session-continue", "handoff-session-continue:2");
+
+    await harness.execute();
+
+    expect(harness.sentUserMessages).toEqual([
+      ["/handoff-session-continue:2 request-id", { expandPromptTemplates: true }],
+    ]);
+  });
+
   it("restores recovery text when replacement is cancelled", async () => {
     const harness = createHarness({ newSessionCancelled: true });
     await harness.start();
