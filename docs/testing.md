@@ -47,3 +47,66 @@ npx vitest run extensions/boundary-edit tests/boundary-edit-runtime.test.ts test
 ```
 
 For completion, run `npm install --no-package-lock`, confirm `package-lock.json` is absent, then run `./awf check` and `npm run check`. Verify the staged package in a fresh isolated copy with a lockfile-free install and the same gates; the full test suite includes the isolated real-CLI loader smoke. These deterministic checks establish behavior, not improved model performance or token usage.
+
+## Context-management verification
+
+Run focused feedback with:
+
+```bash
+npx vitest run extensions/context-usage extensions/handoff extensions/compact tests/handoff-runtime.test.ts tests/compact-runtime.test.ts tests/pi-loader-smoke.test.ts
+```
+
+`tests/context-runtime-fixture.ts` creates real persisted TUI/RPC sessions with isolated resources and a deterministic faux provider. The existing real-Pi handoff regressions remain intact. `tests/compact-runtime.test.ts` loads both operation entry points through Pi's real loader (not a shared-import mock), exercises mixed batches in both orders, cross-entrypoint exclusion through terminal compaction, settlement, cancellation/failure/too-small/already-compacted outcomes, repeated calls, and abort/reload/tree/replacement races. It checks session object/identity/file continuity, absence of handoff continuity export, source instructions reaching ordinary native history summarization, and the rebuilt model context containing the native summary. High-usage runs retain native auto-compaction settings while exercising the bounded threshold guard.
+
+Ordering checks establish that Pi 0.85.1 emits `session_compact` before clearing manual compaction state and emitting `compaction_end`, then invokes extension `onComplete`. Native manual compaction never resumes itself. Tests cover an existing wake at `session_compact` or `compaction_end`, a genuine result arriving during summarization whose run finishes before the callback, and a native user prompt starting preflight at `compaction_end` (as the TUI queue does). The native-user-prompt race was observed red with a competing prompt error, then green using the supported `input` event for continuation arbitration when the prompt reaches compact's observer. A separate red/green dormant steering-queue test verifies that pending messages are not mistaken for an already scheduled continuation: successful compaction must resume and let Pi drain that queue. These cases require one continuation and retained incoming messages; they do not establish universal preflight visibility. A red/green late-cancellation regression aborts at `session_compact` after the checkpoint is saved: native Pi still completes, but the extension must not auto-resume. Separate tests retain ordinary native compaction behavior with the extensions loaded. Adapter tests cover late callbacks, duplicate commands, byte bounds, and bounded suppression without relying on timing sleeps.
+
+The **accepted host boundary** characterization in `tests/compact-runtime.test.ts` loads an earlier asynchronous `input` extension through the real loader and holds a genuine prompt there at `compaction_end`. Public event-bus and provider gates reproduce both an extra automatic turn with `followUp` (input retained) and a rejected plain prompt (input not stored), without sleeps, host patches, or private-state access. These two bounded tests run only on Pi 0.85.1 and explicitly skip other versions: recharacterize on upgrade rather than requiring the limitation forever. Users should let handoff/compaction finish before new input, as documented in the [operating boundary](../README.md#shared-lifecycle-and-handoff-recovery). This is characterization of an accepted limitation, not a desired-behavior regression repaired by this change.
+
+The current native split-turn **prefix** summarizer omits custom focus, including the prefix portion of mixed history/prefix compaction. A real provider-request assertion captures this Pi 0.85.1 limitation alongside ordinary instruction-transport coverage. Do not weaken native behavior or manufacture synthetic history to bypass it. Deterministic summarizer responses prove transport and reconstruction, **not real-model retention quality**.
+
+Pressure tests exercise immediately below/at/above every percentage and absolute threshold, independent OR triggers, highest-match precedence, display rounding, invalid values, fresh request assessment, and tool availability. Telemetry values and estimated markers remain separately asserted.
+
+### Unmodified live pi-subagents integration (opt-in)
+
+This lane needs an installed **npm-package** Pi (the regular development dependency suffices) and an unmodified pi-subagents package. It uses no real credentials or external model service. Point to the package directory, not its entrypoint:
+
+```bash
+PI_TOOLS_SUBAGENTS_PACKAGE="$SUBAGENTS_PACKAGE" \
+  npx vitest run tests/compact-subagents-live.test.ts
+```
+
+For a fresh optional dependency without modifying this package's manifest or installed user settings:
+
+```bash
+integration_deps=$(mktemp -d)
+npm install --prefix "$integration_deps" --no-package-lock pi-subagents
+PI_TOOLS_SUBAGENTS_PACKAGE="$integration_deps/node_modules/pi-subagents" \
+  npx vitest run tests/compact-subagents-live.test.ts
+rm -rf "$integration_deps"
+```
+
+The test launches an isolated real Pi RPC process with this manifest and the supplied unmodified package, an isolated HOME/config/session tree, and a loopback deterministic OpenAI SSE provider. A real detached sequential workflow starts its first child; the provider holds it live through native tool-requested compaction. Only after the parent's native compaction wake does that child finish and the second child start. Assertions require the same parent identity/file, one native compaction, one automatic wake, one final workflow delivery, and working subsequent user input and public subagent fleet-status control. It uses only public tools/RPC/settings and observes public messages; no dependency private-state or ownership probes, patches, or copied resources. Temporary process/config/provider resources are cleaned up. Tested with **Pi 0.85.1 and pi-subagents 0.66.0**; the passing command prints the actual versions.
+
+RPC `prompt` responses acknowledge preflight, not completion. The live fixture gates the history response until its acknowledgment arrives, then waits for the expected message and subsequent public `agent_settled` before each independent prompt; acknowledgment-only waits caused a reproduced fresh-install race.
+
+The normal gate skips this optional lane when the environment variable is absent. Report that skip honestly: faux-provider lifecycle unit tests alone are not live-work survival evidence. Run this lane explicitly for context-management completion or record the exact environmental blocker and unverified workflow behavior.
+
+### Fresh isolated completion copy
+
+After the local lockfile-free install and gates, verify the complete proposed package tree (including new, unstaged source files) rather than only `HEAD`. This recipe does not stage or commit anything and does not copy installed dependencies, ignored effort memory, or machine state:
+
+```bash
+fresh=$(mktemp -d)
+git ls-files -z --cached --others --exclude-standard | \
+  tar --null -T - -cf - | tar -xf - -C "$fresh"
+(
+  cd "$fresh"
+  npm install --no-package-lock
+  test ! -e package-lock.json
+  ./awf check
+  npm run check
+)
+rm -rf "$fresh"
+```
+
+The full suite in this copy includes real-CLI entrypoint loading and native handoff prompt discovery/expansion. Run the optional live integration against the same copy when its dependency is available, and record exact commands, versions, results, and any skips in completion evidence. Review/staging/committing remain separate from verification.

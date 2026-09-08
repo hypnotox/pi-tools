@@ -10,6 +10,7 @@ const entrypoints = [
   "extensions/timing/index.ts",
   "extensions/context-usage/index.ts",
   "extensions/handoff/index.ts",
+  "extensions/compact/index.ts",
   "extensions/boundary-edit/index.ts",
 ].map((path) => resolve(root, path));
 

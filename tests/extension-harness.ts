@@ -65,6 +65,7 @@ export function createExtensionHarness() {
     appendEntry(type: string, data?: unknown) {
       appendEntries.push([type, data]);
     },
+    getActiveTools: () => tools.map((tool) => tool.name),
     getAllTools: () => tools.map((tool) => ({ name: tool.name, sourceInfo })),
     getCommands: () =>
       [...commands.keys()].map((name) => ({

@@ -1,10 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-  ToolCallEvent,
-} from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { registerContextOperation } from "../context-lifecycle.js";
 import {
   HANDOFF_CONTINUITY_ENTRY,
   HANDOFF_CONTINUITY_REQUEST,
@@ -12,15 +8,7 @@ import {
   type HandoffSessionContinuation,
 } from "../handoff-continuity.js";
 
-const COMMAND = "handoff-session-continue";
-const TOOL = "handoff_session";
-const MAX_KICKOFF_BYTES = 16 * 1024;
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
-
-interface PendingHandoff {
-  id: string;
-  kickoff: string;
-}
 
 export interface HandoffDependencies {
   randomUUID(): string;
@@ -79,193 +67,63 @@ async function restoreSessionContinuation(
   pi.setThinkingLevel(thinkingLevel);
 }
 
-function toolCallsInCurrentBatch(context: ExtensionContext, event: ToolCallEvent) {
-  const leaf = context.sessionManager.getLeafEntry();
-  const content =
-    leaf?.type === "message" &&
-    leaf.message.role === "assistant" &&
-    Array.isArray(leaf.message.content)
-      ? leaf.message.content
-      : [];
-  const calls = content.filter((part) => part.type === "toolCall");
-  return {
-    calls,
-    correlated: calls.some((call) => call.id === event.toolCallId && call.name === event.toolName),
-  };
-}
-
 export function registerHandoff(pi: ExtensionAPI, dependencies: HandoffDependencies): void {
-  let pending: PendingHandoff | undefined;
-  let suppressThresholdCompaction = false;
-  let ownsTool = false;
-  let registered = false;
-  let commandSourcePath: string | undefined;
-
-  pi.on("tool_call", (event, context) => {
-    if (!ownsTool) return;
-    const { calls, correlated } = toolCallsInCurrentBatch(context, event);
-    if (!correlated)
-      return event.toolName === TOOL
+  pi.on("session_start", async (event, context) => {
+    if (event.reason === "new") await restoreSessionContinuation(pi, context);
+  });
+  registerContextOperation(pi, {
+    tool: "handoff_session",
+    command: "handoff-session-continue",
+    field: "kickoff",
+    label: "Fresh-session handoff",
+    description:
+      "Replace this session identity and runtime with a fresh parent-linked Pi session and continue immediately. The successor does not inherit conversation knowledge or session-bound resources. Call this tool alone, without sibling tool calls, from a persisted TUI or RPC session. Provide a nonempty self-contained kickoff of at most 16 KiB of UTF-8 data containing the objective, current state, next action, and the continuity the replacement needs.",
+    randomUUID: dependencies.randomUUID,
+    async run(kickoff, context) {
+      const originatingSession = context.sessionManager.getSessionFile();
+      if (!originatingSession) return;
+      const envelope = handoffEnvelope(kickoff);
+      const continuity: HandoffContinuity = context.model
         ? {
-            block: true,
-            reason: "Cannot verify the current tool batch; retry handoff_session alone.",
+            session: {
+              model: { provider: context.model.provider, id: context.model.id },
+              thinkingLevel: context.thinkingLevel ?? "off",
+            },
           }
-        : undefined;
-    if (calls.length > 1 && calls.some((call) => call.name === TOOL))
-      return {
-        block: true,
-        reason:
-          "A batch containing handoff_session cannot contain siblings; retry handoff_session alone.",
-      };
-  });
-
-  pi.on("session_before_compact", (event) => {
-    if (suppressThresholdCompaction && pending && event.reason === "threshold") {
-      suppressThresholdCompaction = false;
-      return { cancel: true };
-    }
-  });
-
-  const invalidatePendingHandoff = (): void => {
-    pending = undefined;
-    suppressThresholdCompaction = false;
-  };
-  pi.on("session_tree", invalidatePendingHandoff);
-
-  pi.on("session_shutdown", () => {
-    invalidatePendingHandoff();
-    ownsTool = false;
-  });
-
-  const dispatchHandoff = (request: PendingHandoff): void => {
-    const command = pi
-      .getCommands()
-      .find(
-        (candidate) =>
-          candidate.source === "extension" &&
-          candidate.sourceInfo.path === commandSourcePath &&
-          (candidate.name === COMMAND || candidate.name.startsWith(`${COMMAND}:`)),
-      );
-    if (!command) throw new Error("Cannot resolve the handoff continuation command");
-    suppressThresholdCompaction = true;
-    pi.sendUserMessage(`/${command.name} ${request.id}`, { expandPromptTemplates: true });
-  };
-
-  pi.on("session_start", async (event, sessionContext) => {
-    if (event.reason === "new") await restoreSessionContinuation(pi, sessionContext);
-    if (registered || !sessionContext.sessionManager.getSessionFile()) return;
-    if (pi.getAllTools().some((tool) => tool.name === TOOL)) return;
-    registered = true;
-
-    pi.registerCommand(COMMAND, {
-      description: "Continue a fresh-session handoff.",
-      async handler(token, context) {
-        const request = pending;
-        if (!request || token !== request.id) return;
-        const originatingSession = context.sessionManager.getSessionFile();
-        if (!originatingSession) return;
-        const originatingRun = context.signal;
-        await context.waitForIdle();
-        if (pending !== request) return;
-        invalidatePendingHandoff();
-        // Accepted replacements abort the outgoing run before session_shutdown.
-        // Cancellable preflight events alone must not discard the handoff.
-        if (
-          originatingRun?.aborted ||
-          context.sessionManager.getSessionFile() !== originatingSession
-        )
-          return;
-        const envelope = handoffEnvelope(request.kickoff);
-        try {
-          const continuity: HandoffContinuity = context.model
-            ? {
-                session: {
-                  model: { provider: context.model.provider, id: context.model.id },
-                  thinkingLevel: context.thinkingLevel ?? "off",
-                },
-              }
-            : {};
-          pi.events.emit(HANDOFF_CONTINUITY_REQUEST, continuity);
-          const result = await context.newSession({
-            parentSession: originatingSession,
-            async setup(sessionManager) {
-              sessionManager.appendCustomEntry(HANDOFF_CONTINUITY_ENTRY, continuity);
-            },
-            async withSession(replacement) {
-              try {
-                await replacement.sendMessage(
-                  { customType: "session-handoff", content: envelope, display: true },
-                  { triggerTurn: true },
-                );
-              } catch (deliveryError) {
-                try {
-                  replacement.ui.setEditorText(envelope);
-                } catch {
-                  throw deliveryError;
-                }
-                replacement.ui.notify(
-                  "Automatic kickoff failed; submit the prepared editor text.",
-                  "warning",
-                );
-              }
-            },
-          });
-          if (result.cancelled) {
-            context.ui.setEditorText(envelope);
-            context.ui.notify(
-              "Fresh-session handoff canceled; recovery text is in the editor.",
+        : {};
+      pi.events.emit(HANDOFF_CONTINUITY_REQUEST, continuity);
+      const result = await context.newSession({
+        parentSession: originatingSession,
+        async setup(sessionManager) {
+          sessionManager.appendCustomEntry(HANDOFF_CONTINUITY_ENTRY, continuity);
+        },
+        async withSession(replacement) {
+          try {
+            await replacement.sendMessage(
+              { customType: "session-handoff", content: envelope, display: true },
+              { triggerTurn: true },
+            );
+          } catch (deliveryError) {
+            try {
+              replacement.ui.setEditorText(envelope);
+            } catch {
+              throw deliveryError;
+            }
+            replacement.ui.notify(
+              "Automatic kickoff failed; submit the prepared editor text.",
               "warning",
             );
           }
-        } finally {
-          if (pending === request) pending = undefined;
-          suppressThresholdCompaction = false;
-        }
-      },
-    });
-
-    ownsTool = true;
-    pi.registerTool({
-      name: TOOL,
-      label: "Fresh Session Handoff",
-      description:
-        "Continue work immediately in a fresh parent-linked Pi session. Call this tool alone, without sibling tool calls, from a persisted TUI or RPC session. Provide a nonempty self-contained kickoff of at most 16 KiB of UTF-8 data containing the objective, current state, next action, and the continuity the replacement needs.",
-      parameters: Type.Object({ kickoff: Type.String() }, { additionalProperties: false }),
-      async execute(_id, params, _signal, _update, context) {
-        if (
-          (context.mode !== "tui" && context.mode !== "rpc") ||
-          !context.sessionManager.getSessionFile()
-        )
-          throw new Error("handoff_session requires a persisted Pi session");
-        if (pending) {
-          dispatchHandoff(pending);
-          return {
-            content: [{ type: "text", text: "Fresh-session handoff already queued." }],
-            details: {},
-            terminate: true,
-          };
-        }
-        if (!params.kickoff.trim()) throw new Error("kickoff must contain non-whitespace content");
-        if (new TextEncoder().encode(params.kickoff).byteLength > MAX_KICKOFF_BYTES)
-          throw new Error("kickoff must not exceed the 16 KiB UTF-8 limit");
-
-        const request = { id: dependencies.randomUUID(), kickoff: params.kickoff };
-        pending = request;
-        try {
-          dispatchHandoff(request);
-        } catch (error) {
-          if (pending === request) pending = undefined;
-          suppressThresholdCompaction = false;
-          throw error;
-        }
-        return {
-          content: [{ type: "text", text: "Fresh-session handoff queued." }],
-          details: {},
-          terminate: true,
-        };
-      },
-    });
-    commandSourcePath = pi.getAllTools().find((tool) => tool.name === TOOL)?.sourceInfo.path;
+        },
+      });
+      if (result.cancelled) {
+        context.ui.setEditorText(envelope);
+        context.ui.notify(
+          "Fresh-session handoff canceled; recovery text is in the editor.",
+          "warning",
+        );
+      }
+    },
   });
 }
 

@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Personal working-title, timing, context telemetry, handoff, and boundary editing extensions for Pi.",
+  "description": "Personal working-title, timing, context pressure, handoff, guided compaction, and boundary editing extensions for Pi.",
   "type": "module",
   "keywords": [
     "pi-package"
@@ -38,6 +38,7 @@
       "./extensions/timing",
       "./extensions/context-usage",
       "./extensions/handoff",
+      "./extensions/compact",
       "./extensions/boundary-edit"
     ],
     "prompts": [

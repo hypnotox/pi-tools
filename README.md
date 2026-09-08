@@ -4,9 +4,10 @@ Personal Pi extensions:
 
 1. **Working title** prefixes the interactive terminal tab title with an animated braille spinner while the agent is running, Pi is compacting, or linked pi-subagents work remains active. It preserves title changes made through Pi's extension UI API and restores the unchanged idle title when work settles.
 2. **Timing** records agent, turn, and tool durations and carries timing continuity into a handoff. Each turn's tool durations render in invocation order with the turn duration after them; the final turn block also includes the total agent duration last. Each block is one multiline entry without transcript spacing between its lines, while separate blocks use the host's default transcript spacing for upstream portability.
-3. **Context telemetry** adds Pi-sourced estimated token usage, known context-window size, estimated remaining tokens, and estimated percentage used to each model request. Estimated values carry a `~` prefix; unusable source values produce `unavailable`.
+3. **Context pressure guidance** adds Pi-sourced estimated token usage, context-window size, remaining tokens, percentage used, and a current pressure assessment to each model request without durable warnings. Estimated values carry a `~` prefix; unusable source values produce `unavailable`/`unknown`.
 4. **Fresh-session handoff** immediately replaces a persisted TUI or RPC session with a parent-linked session, preserves the active model and thinking level when that model remains available and authenticated, and delivers a self-contained kickoff. Otherwise, it warns and uses the replacement session's defaults. Invoke `/handoff` as an optional manual entry point.
-5. **Boundary editing** adds `boundary_edit` for replacing an inclusive whole-line block using exact start/end content instead of line numbers or the complete old region. Native `read`, `edit`, and `write` stay unchanged.
+5. **Guided compaction** exposes `compact_session({ instructions })` to invoke native summarization in the same session/runtime, with conditional continuation after success. Native `/compact [instructions]` stays unchanged.
+6. **Boundary editing** adds `boundary_edit` for replacing an inclusive whole-line block using exact start/end content instead of line numbers or the complete old region. Native `read`, `edit`, and `write` stay unchanged.
 
 ## Working title and subagents
 
@@ -54,11 +55,52 @@ Completed results follow native `edit`: a short confirmation in tool text, with 
 
 Selection uses the file read by this call: moved, intact unique anchors still work, but **changed content inside the selected block is deliberately overwritten**. This is not stale-content detection. The whole read–compute–write operation shares Pi's per-file mutation queue with participating native `edit` and `write` calls in the same runtime, including symlink aliases. Other processes, editors, and nonparticipating tools are not coordinated. Cancellation before writing leaves the file unchanged; I/O failure or cancellation during a write does not guarantee unchanged bytes or rollback.
 
-## Handoff lifecycle
+## Context management
 
-Handoff waits for the current run to settle before starting the replacement; its internal command is not sent to the model. Aborting the originating run, reloading extensions, or completing tree navigation discards a waiting handoff. A canceled competing session action alone does not discard it. If handoff's own replacement is canceled, the kickoff is prepared in the editor for recovery.
+**Does this live session need to survive?**
 
-Avoid overlapping session-changing actions once handoff starts: upstream Pi does not serialize independent replacement requests.
+- **Yes:** use `compact_session({ instructions })`. It retains the session identity, file, and runtime, so live session-bound work can survive. Native compaction hooks still run: extensions may react to compaction and change their own state.
+- **Replacement is safe and a fresh conversation is preferable:** use `handoff_session({ kickoff })`. It creates a fresh parent-linked session and runtime. The successor must not assume prior conversation knowledge or inheritance of session-bound resources. Model, thinking level, timing continuity, and the self-contained kickoff are explicitly carried; live subagent ownership is not transferred.
+
+Both operations require a persisted TUI or RPC session and must be **alone in their tool-call batch**; a mixed batch blocks all siblings, including when both tools appear together. They are not offered in print/JSON or child runtimes. Each required text argument must contain non-whitespace content and fit within 16 KiB of UTF-8 data. Neither operation is forced or force-enabled by pressure guidance.
+
+### Pressure policy
+
+Classification uses Pi's unrounded current estimated tokens and context window. Conditions are **inclusive alternatives (OR)**; the highest matching level wins, independently of Pi's native automatic-compaction settings.
+
+| Level | Condition | Guidance |
+|---|---|---|
+| Low | No higher condition matches | Continue normally; either operation remains discretionary. |
+| Medium | Used ≥ 70% **or** tokens ≥ 150,000 | Do not reduce context solely for this level. Continue when retained context helps; preserve important session-only knowledge. |
+| High | Used ≥ 80% **or** tokens ≥ 200,000 | Identify a safe checkpoint and prepare continuity before further substantial work. |
+| Critical | Used ≥ 90% **or** tokens ≥ 250,000 | Reduce context as soon as safely possible, choosing by live-session continuity. |
+| Unknown | Unusable current telemetry | Do not infer a pressure action. |
+
+The context extension reassesses every model request and names only active tools. Its warnings are advisory, not stored transcript messages: no automatic handoff, pressure-based tool embargo, or blanket disabling of native compaction.
+
+### Guided compaction
+
+```json
+{
+  "instructions": "Preserve the objective and constraints.\nKeep the decisions, completed work, important references, unresolved questions, and the next concrete action."
+}
+```
+
+Instructions are passed as Pi's native `customInstructions`: they guide summarization, **not an exact replacement summary or a verbatim-retention guarantee**. Pi 0.85.1 omits custom focus from its split-turn **prefix** summarization request (including the prefix portion of mixed history/prefix compaction). That portion remains subject to native summarization without the supplied focus; pi-tools does not replace the summarizer or alter cut points to work around it.
+
+The tool reports **queued**, not completed. After successful native compaction, a completion message resumes the parent unless another continuation is observable through Pi's supported events/state. Those observable continuations are deduplicated; pi-subagents' native compaction wake and result messages are not intercepted. Ordinary native manual/automatic compaction does not gain this tool-specific continuation.
+
+Cancellation, failure, and insufficient history remain recoverable without automatic retry or fallback to handoff. Cancellation after Pi has already saved the checkpoint prevents the automatic continuation but does not roll back that checkpoint. Pi currently exposes native error text rather than a stable terminal-outcome enum; pi-tools surfaces that text (for example, `Compaction cancelled`, `Nothing to compact (session too small)`, or `Already compacted`).
+
+### Shared lifecycle and handoff recovery
+
+Both tools queue a source-resolved internal command, terminate the originating tool run, and wait for full settlement before executing. Internal commands never become model input. Duplicate commands execute once, and the two owned operations cannot compete while one is pending or executing. At most one competing **threshold** compaction is suppressed per valid pending request; manual compaction and overflow recovery are not suppressed.
+
+Aborting the originating run, reloading/shutting down extensions, completing tree navigation, or accepting a competing replacement discards a waiting request. A canceled competing preflight alone does not discard it. Late callbacks cannot act on a replacement runtime. If handoff's own replacement is canceled, recovery text goes into the current editor; if automatic kickoff delivery fails, it goes into the replacement editor.
+
+**Allow handoff or compaction to finish before submitting new input.** This is an operating expectation, not an input embargo. In Pi 0.85.1, an earlier asynchronous `input` hook can hide a genuine incoming prompt from compact's observer: queued `followUp` input can incur an extra automatic turn, while a plain prompt can be rejected as already processing and not stored. This accepted host boundary is characterized in runtime tests, not a universal no-duplicate/no-loss guarantee.
+
+Avoid overlapping unrelated session-changing actions once an operation starts: this pair's coordination does not serialize every independent Pi replacement, manual compaction, or tree action. `/handoff` still expands the native prompt entry point, and `/compact [instructions]` still uses Pi's built-in command.
 
 ## Install and update
 

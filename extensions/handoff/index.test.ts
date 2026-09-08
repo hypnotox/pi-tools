@@ -25,6 +25,7 @@ function createHarness(
     modelAvailable?: boolean;
     modelAuthenticated?: boolean;
     newSessionCancelled?: boolean;
+    replacementDeliveryFails?: boolean;
     signal?: AbortSignal;
   } = {},
 ) {
@@ -51,6 +52,7 @@ function createHarness(
     });
     await request.withSession?.({
       sendMessage: async (...args: unknown[]) => {
+        if (options.replacementDeliveryFails) throw new Error("delivery failed");
         sent.push(args);
       },
       ui: {
@@ -172,6 +174,18 @@ describe("fresh-session handoff", () => {
     expect(harness.notices).toEqual([
       ["Fresh-session handoff canceled; recovery text is in the editor.", "warning"],
     ]);
+  });
+
+  it("prepares replacement editor recovery when automatic kickoff delivery fails", async () => {
+    const harness = createHarness({ replacementDeliveryFails: true });
+    await harness.start();
+    await harness.execute("Recover kickoff");
+    await harness.continue();
+    expect(harness.editor).toEqual([handoffEnvelope("Recover kickoff")]);
+    expect(harness.notices).toEqual([
+      ["Automatic kickoff failed; submit the prepared editor text.", "warning"],
+    ]);
+    expect(harness.newSession).toHaveBeenCalledOnce();
   });
 
   it("drops a waiting handoff when its extension runtime shuts down", async () => {
@@ -427,7 +441,8 @@ describe("fresh-session handoff", () => {
   it("validates mode, content, and UTF-8 size", async () => {
     const print = createHarness({ mode: "print" });
     await print.start();
-    await expect(print.execute()).rejects.toThrow("persisted Pi session");
+    expect(print.tools).toEqual([]);
+    expect(print.commands.size).toBe(0);
 
     const harness = createHarness();
     await harness.start();
