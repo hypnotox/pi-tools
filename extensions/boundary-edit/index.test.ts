@@ -1,10 +1,23 @@
 import { promises as fs } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
+import { stripVTControlCharacters } from "node:util";
+import {
+  createEditTool,
+  createEditToolDefinition,
+  initTheme,
+  ToolExecutionComponent,
+  withFileMutationQueue,
+} from "@earendil-works/pi-coding-agent";
+import type { TUI } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createExtensionHarness } from "../../tests/extension-harness.js";
 import boundaryEdit from "./index.js";
+
+type RenderableTool = NonNullable<ConstructorParameters<typeof ToolExecutionComponent>[4]> & {
+  name: string;
+};
+type RenderResult = Parameters<ToolExecutionComponent["updateResult"]>[0];
 
 describe("boundary_edit against real files", () => {
   let cwd: string;
@@ -41,8 +54,117 @@ describe("boundary_edit against real files", () => {
     const result = await execute();
     expect(await fs.readFile(path, "utf8")).toBe("prefix\nnew\nsuffix\n");
     expect(writes).toHaveBeenCalledTimes(1);
-    expect(result.details).toEqual({ changed: true, startLine: 2, endLine: 4, truncated: false });
-    expect(result.content).toEqual([{ type: "text", text: expect.stringContaining("+new") }]);
+    expect(result.details).toMatchObject({
+      changed: true,
+      startLine: 2,
+      endLine: 4,
+      truncated: false,
+      diff: expect.stringContaining("+2 new"),
+      patch: expect.stringContaining("+new"),
+      firstChangedLine: 2,
+    });
+    expect(result.content).toEqual([
+      { type: "text", text: "Successfully replaced 1 block(s) in target.txt." },
+    ]);
+  });
+
+  it("matches native edit's confirmation and diff details for the same change", async () => {
+    const result = await execute();
+    await fs.writeFile(path, original);
+    const native = await createEditTool(cwd).execute("native", {
+      path: "target.txt",
+      edits: [{ oldText: "START\nold\nEND\n", newText: "new\n" }],
+    });
+    expect(result.content).toEqual(native.content);
+    expect(result.details).toMatchObject(native.details);
+  });
+
+  function row(definition: RenderableTool, args: Record<string, unknown>) {
+    initTheme("dark", false);
+    return new ToolExecutionComponent(
+      definition.name,
+      "call",
+      args,
+      {},
+      definition,
+      { requestRender: vi.fn() } as unknown as TUI,
+      cwd,
+    );
+  }
+
+  function boundaryRow(args: Record<string, unknown> = { path: "target.txt", ...selectors }) {
+    return row(harness.tools[0] as unknown as RenderableTool, args);
+  }
+
+  it("renders the completed numbered diff like native edit, not raw JSON or a patch", async () => {
+    const result = await execute();
+    const rendered = boundaryRow();
+    const native = row(createEditToolDefinition(cwd), { path: "target.txt" });
+    const feedback = { ...result, isError: false } as RenderResult;
+    rendered.updateResult(feedback);
+    native.updateResult(feedback);
+    for (const expanded of [false, true]) {
+      rendered.setExpanded(expanded);
+      native.setExpanded(expanded);
+      for (const width of [30, 100]) {
+        const normalize = (lines: string[]) =>
+          lines.map((line) =>
+            stripVTControlCharacters(line).replace("boundary_edit", "edit").trimEnd(),
+          );
+        expect(normalize(rendered.render(width))).toEqual(normalize(native.render(width)));
+        // Diff rows also retain Pi's actual colors and intra-line styling.
+        expect(rendered.render(width).slice(4)).toEqual(native.render(width).slice(4));
+      }
+    }
+    initTheme("light", false);
+    rendered.invalidate();
+    native.invalidate();
+    expect(rendered.render(100).slice(4)).toEqual(native.render(100).slice(4));
+  });
+
+  it.each(["\n", "\r\n"])(
+    "matches native intra-line highlighting with %j endings",
+    async (ending) => {
+      const before = "const count = 1;";
+      const after = "const count = 2;";
+      await fs.writeFile(path, before + ending);
+      const result = await execute({ start: before, end: before, replacement: after });
+      expect(await fs.readFile(path, "utf8")).toBe(after + ending);
+      await fs.writeFile(path, before + ending);
+      const nativeResult = await createEditTool(cwd).execute("native", {
+        path: "target.txt",
+        edits: [{ oldText: before, newText: after }],
+      });
+      const rendered = boundaryRow();
+      const native = row(createEditToolDefinition(cwd), { path: "target.txt" });
+      rendered.updateResult({ ...result, isError: false } as RenderResult);
+      native.updateResult({ ...nativeResult, isError: false });
+      expect(rendered.render(100).slice(4)).toEqual(native.render(100).slice(4));
+    },
+  );
+
+  it("renders pending arguments, errors, no-ops, and legacy text-only results", async () => {
+    const rendered = boundaryRow({});
+    const output = () => stripVTControlCharacters(rendered.render(80).join("\n"));
+    expect(output()).toContain("boundary_edit ...");
+    rendered.updateArgs({ path: "target.txt", ...selectors });
+    rendered.updateResult({
+      content: [{ type: "text", text: "Start selector was not found exactly." }],
+      isError: true,
+    });
+    expect(output()).toContain("Start selector was not found exactly.");
+    const result = await execute({ replacement: "START\nold\nEND" });
+    rendered.updateResult({ ...result, isError: false } as RenderResult);
+    expect(output()).toContain('No change to "target.txt".');
+    rendered.updateResult({ content: [{ type: "text", text: "Legacy result" }], isError: false });
+    expect(output()).toContain("Legacy result");
+  });
+
+  it("keeps the truncation notice visible in the TUI", async () => {
+    const result = await execute({ replacement: "line\n".repeat(3000) });
+    const rendered = boundaryRow();
+    rendered.updateResult({ ...result, isError: false } as RenderResult);
+    expect(stripVTControlCharacters(rendered.render(100).join("\n"))).toContain("Output truncated");
   });
 
   it.each(["absolute", "at-prefix", "home"])("resolves %s paths", async (kind) => {
@@ -209,7 +331,13 @@ describe("boundary_edit against real files", () => {
       expect(Buffer.byteLength(text)).toBeLessThanOrEqual(8192);
       expect(text.split("\n").length).toBeLessThanOrEqual(200);
       expect(result.details).toMatchObject({ changed: true, truncated: true });
-      expect(JSON.stringify(result.details).length).toBeLessThan(200);
+      expect(text).toContain("Diff preview truncated");
+      const details = result.details as { diff: string; patch: string };
+      for (const preview of [details.diff, details.patch]) {
+        expect(Buffer.byteLength(preview)).toBeLessThanOrEqual(8192);
+        expect(preview.split("\n").length).toBeLessThanOrEqual(200);
+        expect(preview).toContain("Output truncated");
+      }
     },
   );
 });
