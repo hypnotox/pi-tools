@@ -8,7 +8,7 @@
 
 - `package.json`: package identity, explicit Pi extension entry points, and the handoff prompt export.
 - `prompts/handoff.md`: native `/handoff` initiation for the existing handoff capability.
-- `extensions/working-title/`: animated terminal-title activity while the agent runs or Pi compacts.
+- `extensions/working-title/`: animated terminal-title activity while the agent runs, Pi compacts, or the current session's pi-subagents fleet remains active. `subagent-activity.ts` isolates the optional public event-bus RPC adapter from title rendering.
 - `extensions/timing/`: agent, turn, and tool timing plus handoff continuity.
 - `extensions/context-usage/`: source-backed context telemetry injected into model context.
 - `extensions/handoff/`: immediate persisted-session replacement and kickoff delivery.
@@ -20,6 +20,8 @@
 ## Data flow
 
 Pi installs the repository, reads the explicit extension paths and handoff prompt path in `package.json`, and loads them at startup or after `/reload`. Working title wraps the shared extension `setTitle` method so later title changes remain the undecorated base while its timer paints a transient activity prefix. Timing buffers a completed turn until the next turn begins or the agent settles, allowing the final block to include the total agent duration without a transcript gap; context telemetry observes Pi events independently. `/handoff` expands to an agent instruction that uses the existing handoff tool, and handoff opts an internal tokenized message into extension-command dispatch while the tool is running. That command waits for full agent settlement before replacing the persisted session. Before delivering the kickoff, the replacement session restores the parent session's active model and thinking level from the same private continuity entry used for timing; if that model is unavailable or unauthenticated, it warns and retains the replacement defaults.
+
+Working title probes pi-subagents' public `subagents:rpc:v1` API for `fleetStatus` v1 support, then combines `fleet.totalActive > 0` with the local agent and compaction flags. Lifecycle events are refresh hints, not authority: only the owner's current-session snapshot changes subagent activity. Two-second polling reconciles missed events; requests are correlated, serialized, coalesced, and bounded by a five-second timeout. Replies predating a lifecycle hint are discarded. Missing or failed telemetry does not pin the spinner on. The adapter starts only in TUI sessions and disposes subscriptions and timers on shutdown; reload/resume creates a fresh subscription and status snapshot. There are no runtime imports from pi-subagents or filesystem/process discovery.
 
 The pending token is claimed once after `waitForIdle()`. Shutdown and completed `session_tree` events invalidate pending work; the captured run signal also detects an accepted competing replacement's abort before shutdown reaches the idle boundary. Cancellable preflight events do not invalidate work. These guards do not serialize independent replacements after the handoff claims its token; that remains a host limitation.
 

@@ -2,11 +2,19 @@
 
 Personal Pi extensions:
 
-1. **Working title** prefixes the interactive terminal tab title with an animated braille spinner while the agent is running or Pi is compacting. It preserves title changes made through Pi's extension UI API and restores the unchanged idle title when work settles.
+1. **Working title** prefixes the interactive terminal tab title with an animated braille spinner while the agent is running, Pi is compacting, or linked pi-subagents work remains active. It preserves title changes made through Pi's extension UI API and restores the unchanged idle title when work settles.
 2. **Timing** records agent, turn, and tool durations and carries timing continuity into a handoff. Each turn's tool durations render in invocation order with the turn duration after them; the final turn block also includes the total agent duration last. Each block is one multiline entry without transcript spacing between its lines, while separate blocks use the host's default transcript spacing for upstream portability.
 3. **Context telemetry** adds Pi-sourced estimated token usage, known context-window size, estimated remaining tokens, and estimated percentage used to each model request. Estimated values carry a `~` prefix; unusable source values produce `unavailable`.
 4. **Fresh-session handoff** immediately replaces a persisted TUI or RPC session with a parent-linked session, preserves the active model and thinking level when that model remains available and authenticated, and delivers a self-contained kickoff. Otherwise, it warns and uses the replacement session's defaults. Invoke `/handoff` as an optional manual entry point.
 5. **Boundary editing** adds `boundary_edit` for replacing an inclusive whole-line block using exact start/end content instead of line numbers or the complete old region. Native `read`, `edit`, and `write` stay unchanged.
+
+## Working title and subagents
+
+When a compatible [pi-subagents](https://github.com/nicobailon/pi-subagents) extension is loaded, the title keeps spinning even while the main session is idle, until its active fleet is empty. This follows pi-subagents' current-session accounting, including queued work and active workflows containing nested children; it does not scan unrelated sessions or processes. Work waiting for attention still counts as active while pi-subagents reports it that way.
+
+Integration is automatic and optional, using the public event-bus RPC with the `fleetStatus` v1 capability. Lifecycle events trigger status refreshes, with reconciliation every two seconds to recover missed events and work restored after reload/resume. Requests time out after five seconds; failed or invalid status replies clear the subagent contribution rather than leaving a stuck spinner, and later successful replies restore it. Parent activity and compaction remain independent.
+
+Without a compatible extension, only parent activity and compaction affect the title. This changes the terminal tab title, not Pi's built-in editor working indicator. No model calls or additional package dependencies are needed.
 
 ## Boundary editing
 

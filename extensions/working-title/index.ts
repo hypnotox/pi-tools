@@ -4,6 +4,7 @@ import type {
   ExtensionContext,
   ExtensionUIContext,
 } from "@earendil-works/pi-coding-agent";
+import { trackSubagentActivity } from "./subagent-activity.js";
 
 export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 export const SPINNER_INTERVAL_MS = 120;
@@ -26,10 +27,12 @@ export function registerWorkingTitle(pi: ExtensionAPI): void {
   let bound: BoundTitle | undefined;
   let agentWorking = false;
   let compacting = false;
+  let subagentsWorking = false;
+  let stopSubagentActivity: (() => void) | undefined;
   let spinnerTick = 0;
   let spinnerTimer: ReturnType<typeof setInterval> | undefined;
 
-  const isWorking = (): boolean => agentWorking || compacting;
+  const isWorking = (): boolean => agentWorking || compacting || subagentsWorking;
 
   const paint = (): void => {
     if (!bound) return;
@@ -98,7 +101,14 @@ export function registerWorkingTitle(pi: ExtensionAPI): void {
     refresh();
   };
 
-  pi.on("session_start", (_event, context) => bind(context));
+  pi.on("session_start", (_event, context) => {
+    bind(context);
+    if (!bound) return;
+    stopSubagentActivity = trackSubagentActivity(pi.events, (active) => {
+      subagentsWorking = active;
+      refresh();
+    });
+  });
   pi.on("session_info_changed", (_event, context) => {
     if (!bound || bound.customTitle) return;
     bound.baseTitle = defaultTitle(pi, context.cwd);
@@ -112,6 +122,8 @@ export function registerWorkingTitle(pi: ExtensionAPI): void {
   pi.on("session_compact", () => setCompacting(false));
   pi.on("session_compact_failed", () => setCompacting(false));
   pi.on("session_shutdown", () => {
+    stopSubagentActivity?.();
+    stopSubagentActivity = undefined;
     agentWorking = false;
     compacting = false;
     stopTimer();
