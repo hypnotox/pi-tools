@@ -7,29 +7,38 @@ import {
   generateDiffString,
   generateUnifiedPatch,
   renderDiff,
-  truncateHead,
-  truncateLine,
   withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
-import { replaceRange } from "./replace-range.js";
+import {
+  boundaryDiagnostic,
+  boundedOutput,
+  displayPath,
+  operationError,
+  selectionPreview,
+} from "./feedback.js";
+import { BoundaryError, blockStats, replaceRange, resolveRange } from "./replace-range.js";
 
-const parameters = Type.Object(
+const selectors = {
+  path: Type.String({
+    minLength: 1,
+    description: "Existing UTF-8 file, relative to cwd or absolute; supports ~/ and a leading @.",
+  }),
+  start: Type.String({
+    minLength: 1,
+    description: "Literal, globally unique start content. The containing whole line is selected.",
+  }),
+  end: Type.String({
+    minLength: 1,
+    description:
+      "Literal end content: exactly one eligible match from the starting line onward, ending at a complete LF/CRLF boundary or EOF and enclosing the full start.",
+  }),
+};
+const selectionParameters = Type.Object(selectors, { additionalProperties: false });
+const editParameters = Type.Object(
   {
-    path: Type.String({
-      minLength: 1,
-      description: "Existing UTF-8 file, relative to cwd or absolute; supports ~/ and a leading @.",
-    }),
-    start: Type.String({
-      minLength: 1,
-      description: "Literal, globally unique start content. The containing whole line is selected.",
-    }),
-    end: Type.String({
-      minLength: 1,
-      description:
-        "Literal end content: exactly one eligible match from the starting line onward, ending at a complete LF/CRLF boundary or EOF and enclosing the full start.",
-    }),
+    ...selectors,
     replacement: Type.String({
       description:
         "Multiline replacement for the inclusive whole-line range. Empty deletes it. Include any selected content to retain.",
@@ -38,40 +47,66 @@ const parameters = Type.Object(
   { additionalProperties: false },
 );
 
-export type BoundaryEditInput = Static<typeof parameters>;
+export type BoundarySelectInput = Static<typeof selectionParameters>;
+export type BoundaryEditInput = Static<typeof editParameters>;
 
-interface BoundaryEditDetails extends EditToolDetails {
-  changed: boolean;
+interface BoundarySelectDetails {
+  path: string;
   startLine: number;
   endLine: number;
+  selected: ReturnType<typeof blockStats>;
   truncated: boolean;
 }
 
-// Leave room for the truncation notice within the advertised 200-line / 8-KiB cap.
-const outputLimits = { maxLines: 198, maxBytes: 8 * 1024 - 128 };
-
-function boundedOutput(text: string) {
-  const output = truncateHead(text, outputLimits);
-  return {
-    text:
-      output.content +
-      (output.truncated ? "\n[Output truncated; use read to inspect the resulting file.]" : ""),
-    truncated: output.truncated,
-  };
+interface BoundaryEditDetails extends BoundarySelectDetails, EditToolDetails {
+  changed: boolean;
+  outcome: "replaced" | "deleted" | "unchanged";
+  replacement: ReturnType<typeof blockStats>;
+  summary: string;
 }
 
+function resolvePath(path: string, cwd: string) {
+  const local = path.startsWith("@") ? path.slice(1) : path;
+  if (!local) throw new Error("Path must be nonempty after removing the leading @.");
+  return resolve(
+    cwd,
+    local === "~" ? homedir() : local.startsWith("~/") ? resolve(homedir(), local.slice(2)) : local,
+  );
+}
+
+async function readCurrentFile(path: string, signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  const bytes = await fs.readFile(path);
+  signal?.throwIfAborted();
+  // Fatal decoding prevents a whole-file write from corrupting unsupported bytes.
+  const decoded = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+  const bom = decoded.startsWith("\uFEFF") ? "\uFEFF" : "";
+  return { bytes, bom, text: decoded.slice(bom.length) };
+}
+
+function diagnosticError(text: string, error: unknown) {
+  return error instanceof BoundaryError
+    ? new Error(boundaryDiagnostic(text, error), { cause: error })
+    : error;
+}
+
+const matchingDescription =
+  "Start must be globally unique; end must be uniquely eligible from the starting line onward and finish at a complete line boundary or EOF, enclosing the full start. Both anchor lines are included. Matching and line endings are literal.";
+const selectionGuidance =
+  "For early validation, call boundary_select and wait for its result before generating replacement text. Selection is optional and stateless: boundary_edit re-resolves anchors against the current file, with no reservation or snapshot-conflict detection.";
+
 export default function boundaryEdit(pi: ExtensionAPI): void {
-  pi.registerTool<typeof parameters, BoundaryEditDetails>({
+  pi.registerTool<typeof editParameters, BoundaryEditDetails>({
     name: "boundary_edit",
     label: "Boundary edit",
-    description:
-      "Replace one inclusive whole-line range in an existing UTF-8 file using exact start/end content. Start must be globally unique; end must be uniquely eligible from the starting line onward and finish at a complete line boundary or EOF. Both anchor lines are replaced. Empty replacement deletes them. Matching and supplied line endings are literal. If nonempty replacement lacks a final LF/CRLF, retain the selected final line's terminator. No snapshot-conflict detection: changed interior is overwritten. The confirmation and each diff preview are limited to 200 lines or 8 KiB.",
+    description: `Replace one inclusive whole-line range in an existing UTF-8 file using exact start/end content. ${matchingDescription} Empty replacement deletes the range. If nonempty replacement lacks a final LF/CRLF, retain the selected final line's terminator. Direct editing needs no boundary_select call. No snapshot-conflict detection: changed interior is overwritten. Feedback and each diff preview are limited to 200 lines or 8 KiB.`,
     promptSnippet: "Replace a whole-line block identified by exact, unique boundary content",
     promptGuidelines: [
       "Use boundary_edit for whole-block replacement when unique start/end content is simpler than copying the full old region; prefer edit for small substitutions or ambiguous boundaries.",
       "For boundary_edit, include both selected anchor lines in replacement if they should survive. Supply replacement as one multiline string, or an empty string for deletion.",
+      selectionGuidance,
     ],
-    parameters,
+    parameters: editParameters,
     renderCall(args, theme) {
       return new Text(
         `${theme.fg("toolTitle", theme.bold("boundary_edit"))} ${theme.fg("accent", args.path ?? "...")}`,
@@ -87,86 +122,140 @@ export default function boundaryEdit(pi: ExtensionAPI): void {
       const body = context.isError
         ? theme.fg("error", text)
         : result.details?.diff
-          ? renderDiff(result.details.diff.replace(/\r/g, ""), { filePath: context.args.path })
+          ? `${theme.fg("toolOutput", result.details.summary ?? text)}\n\n${renderDiff(result.details.diff.replace(/\r/g, ""), { filePath: context.args.path })}`
           : theme.fg("toolOutput", text);
       return new Text(body ? `\n${body}` : "", 0, 0);
     },
     async execute(_id, params, signal, _update, ctx) {
-      signal?.throwIfAborted();
-      const path = params.path.startsWith("@") ? params.path.slice(1) : params.path;
-      if (!path) throw new Error("Path must be nonempty after removing the leading @.");
-      const absolutePath = resolve(
-        ctx.cwd,
-        path === "~" ? homedir() : path.startsWith("~/") ? resolve(homedir(), path.slice(2)) : path,
-      );
-
-      return withFileMutationQueue(absolutePath, async () => {
+      let writeStarted = false;
+      let text = "";
+      try {
         signal?.throwIfAborted();
-        const bytes = await fs.readFile(absolutePath);
-        signal?.throwIfAborted();
-        // Fatal decoding prevents a whole-file write from corrupting unsupported bytes.
-        const decoded = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-        const bom = decoded.startsWith("\uFEFF") ? "\uFEFF" : "";
-        const text = decoded.slice(bom.length);
-        if (Buffer.from(params.replacement, "utf8").toString("utf8") !== params.replacement) {
-          throw new Error(
-            "Replacement must be losslessly representable as UTF-8 (no unpaired surrogates).",
+        const absolutePath = resolvePath(params.path, ctx.cwd);
+        return await withFileMutationQueue(absolutePath, async () => {
+          const current = await readCurrentFile(absolutePath, signal);
+          text = current.text;
+          if (Buffer.from(params.replacement, "utf8").toString("utf8") !== params.replacement) {
+            throw new Error(
+              "Replacement must be losslessly representable as UTF-8 (no unpaired surrogates).",
+            );
+          }
+          const result = replaceRange(text, params);
+          const next = Buffer.from(current.bom + result.text, "utf8");
+          const changed = !current.bytes.equals(next);
+          const outcome: BoundaryEditDetails["outcome"] = !changed
+            ? "unchanged"
+            : params.replacement === ""
+              ? "deleted"
+              : "replaced";
+          const diffResult = generateDiffString(text, result.text);
+          const diff = boundedOutput(diffResult.diff);
+          const patch = boundedOutput(
+            changed ? generateUnifiedPatch(params.path, text, result.text) : "",
           );
-        }
-        const result = replaceRange(text, params);
-        const next = Buffer.from(bom + result.text, "utf8");
-        const changed = !bytes.equals(next);
-        const summary = boundedOutput(
-          changed
-            ? `Successfully replaced 1 block(s) in ${params.path}.`
-            : `No change to ${JSON.stringify(params.path)}.`,
-        );
-        const diffResult = generateDiffString(text, result.text);
-        // Match Pi edit's result shape, but bound persisted previews as well as text.
-        const diff = boundedOutput(diffResult.diff);
-        const patch = boundedOutput(
-          changed ? generateUnifiedPatch(params.path, text, result.text) : "",
-        );
-        const feedback = {
-          content: [
-            {
-              type: "text" as const,
-              text:
-                summary.text +
-                (!summary.truncated && (diff.truncated || patch.truncated)
-                  ? "\n[Diff preview truncated; use read to inspect the resulting file.]"
-                  : ""),
+          const summary =
+            `${displayPath(params.path)} | ${outcome} | original lines ${result.startLine}–${result.endLine}\n` +
+            `${result.selected.lines} lines, ${result.selected.bytes} bytes → ${result.replacement.lines} lines, ${result.replacement.bytes} bytes` +
+            (diff.truncated || patch.truncated
+              ? "\n[Diff preview truncated; use read to inspect the resulting file.]"
+              : "");
+          const feedback = {
+            content: [
+              { type: "text" as const, text: summary + (diff.text ? `\n\n${diff.text}` : "") },
+            ],
+            details: {
+              path: absolutePath,
+              summary,
+              diff: diff.text,
+              patch: patch.text,
+              ...(diffResult.firstChangedLine === undefined
+                ? {}
+                : { firstChangedLine: diffResult.firstChangedLine }),
+              changed,
+              outcome,
+              startLine: result.startLine,
+              endLine: result.endLine,
+              selected: result.selected,
+              replacement: result.replacement,
+              truncated: diff.truncated || patch.truncated,
             },
-          ],
-          details: {
-            diff: diff.text,
-            patch: patch.text,
-            ...(diffResult.firstChangedLine === undefined
-              ? {}
-              : { firstChangedLine: diffResult.firstChangedLine }),
-            changed,
-            startLine: result.startLine,
-            endLine: result.endLine,
-            truncated: summary.truncated || diff.truncated || patch.truncated,
-          },
-        };
+          };
+          signal?.throwIfAborted();
+          // Keep the queue until I/O settles. Cancellation or I/O failure during a
+          // write does not guarantee unchanged bytes; do not race it against abort.
+          if (changed) {
+            writeStarted = true;
+            await fs.writeFile(absolutePath, next);
+          }
+          return feedback;
+        });
+      } catch (error) {
+        throw operationError(
+          "boundary_edit",
+          params.path,
+          diagnosticError(text, error),
+          writeStarted,
+        );
+      }
+    },
+  });
+
+  pi.registerTool<typeof selectionParameters, BoundarySelectDetails>({
+    name: "boundary_select",
+    label: "Boundary select",
+    description: `Inspect one inclusive whole-line range in an existing UTF-8 file without modifying it. ${matchingDescription} Returns the inclusive line range, line/UTF-8 byte counts, and a bounded numbered preview with beginning/end excerpts when large. Optional and stateless: no selection IDs, stored snapshots, or reservations. Wait for this result before generating replacement text for boundary_edit. Feedback is limited to 200 lines or 8 KiB.`,
+    promptSnippet: "Validate and preview exact whole-line boundaries without modifying a file",
+    promptGuidelines: [selectionGuidance],
+    parameters: selectionParameters,
+    renderCall(args, theme) {
+      return new Text(
+        `${theme.fg("toolTitle", theme.bold("boundary_select"))} ${theme.fg("accent", args.path ?? "...")}`,
+        0,
+        0,
+      );
+    },
+    renderResult(result, _options, theme, context) {
+      const text = result.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n");
+      return new Text(`\n${theme.fg(context.isError ? "error" : "toolOutput", text)}`, 0, 0);
+    },
+    async execute(_id, params, signal, _update, ctx) {
+      let text = "";
+      try {
         signal?.throwIfAborted();
-        // Keep the queue until I/O settles. Cancellation or I/O failure during a write
-        // does not guarantee unchanged bytes; do not race the write against an abort.
-        if (changed) await fs.writeFile(absolutePath, next);
-        return feedback;
-      }).catch((error: unknown) => {
-        // Filesystem errors can echo arbitrarily long user paths. Keep failures
-        // failures, preserving ordinary host errors unchanged when already bounded.
-        const message = error instanceof Error ? error.message : String(error);
-        const output = truncateHead(message, outputLimits);
-        if (!output.truncated) throw error;
-        // truncateHead drops an oversized first line entirely; retain its reason.
-        const content = output.firstLineExceedsLimit
-          ? truncateLine(message, 1000).text
-          : output.content;
-        throw new Error(`${content}\n[Error truncated.]`);
-      });
+        const absolutePath = resolvePath(params.path, ctx.cwd);
+        // A queued read avoids observing an in-progress participating mutation.
+        // The queue ends with this call; nothing is reserved for a later edit.
+        return await withFileMutationQueue(absolutePath, async () => {
+          text = (await readCurrentFile(absolutePath, signal)).text;
+          const range = resolveRange(text, params);
+          const selectedText = text.slice(range.from, range.to);
+          const selected = blockStats(selectedText);
+          const preview = selectionPreview(selectedText, range.startLine);
+          signal?.throwIfAborted();
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text:
+                  `${displayPath(params.path)} | selected | lines ${range.startLine}–${range.endLine}\n` +
+                  `${selected.lines} lines, ${selected.bytes} bytes | read-only\n\n${preview.text}`,
+              },
+            ],
+            details: {
+              path: absolutePath,
+              startLine: range.startLine,
+              endLine: range.endLine,
+              selected,
+              truncated: preview.truncated,
+            },
+          };
+        });
+      } catch (error) {
+        throw operationError("boundary_select", params.path, diagnosticError(text, error), false);
+      }
     },
   });
 }

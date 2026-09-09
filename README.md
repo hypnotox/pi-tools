@@ -89,7 +89,7 @@ Both tools:
 
 ### Boundary editing
 
-Adds `boundary_edit` for replacing a whole-line block identified by exact start/end content. Use it when boundaries are simpler than copying the entire old block; prefer ordinary `edit` for small substitutions.
+Adds `boundary_edit` for replacing a whole-line block identified by exact start/end content, plus read-only `boundary_select` for optional early validation. Use boundary editing when boundaries are simpler than copying the entire old block; prefer ordinary `edit` for small substitutions.
 
 ```json
 {
@@ -100,7 +100,9 @@ Adds `boundary_edit` for replacing a whole-line block identified by exact start/
 }
 ```
 
-Each call edits one range in one existing UTF-8 file. Paths may be relative to the working directory or absolute; `~/` and a leading `@` are supported.
+Each call operates on one range in one existing UTF-8 file. Paths may be relative to the working directory or absolute; `~/` and a leading `@` are supported.
+
+For early feedback before generating a large replacement, call `boundary_select` with the same `path`, `start`, and `end`, without `replacement`. **Wait for the selection result before generating replacement text.** Selection returns the inclusive line range, line/UTF-8 byte counts, and a line-numbered preview. Small selections appear in full; large selections show beginning/end excerpts with explicit omission markers. Selection does not write files, store snapshots, or reserve a range. Both tools are registered; using selection is optional, and direct editing remains supported.
 
 - `start` must be globally unique. Selection begins at the start of its containing line.
 - `end` must have exactly one eligible match from that starting line onward. It must finish at a complete LF/CRLF boundary or EOF and enclose the whole start anchor.
@@ -108,9 +110,20 @@ Each call edits one range in one existing UTF-8 file. Paths may be relative to t
 - Matching is literal and case-sensitive, including whitespace and line endings. Missing or ambiguous anchors fail before writing.
 - A nonempty replacement without a final LF/CRLF retains the selected final line's terminator. Untouched content remains byte-for-byte unchanged.
 
-Results include a native-style colored diff. The confirmation and each diff preview are capped at 200 lines or 8 KiB; use `read` to inspect changes beyond a truncated preview.
+Edit results show a diffstat-style summary alongside a native-style colored diff, with the same summary and bounded diff in model-facing text:
 
-**This is not stale-content detection:** changed content inside the selected block is overwritten. Edits share Pi's per-file mutation queue with participating native `edit` and `write` calls in the same runtime, not other processes or editors. Cancellation during a write does not guarantee rollback.
+```text
+"src/report.ts" | replaced | original lines 12–28
+17 lines, 642 bytes → 9 lines, 318 bytes
+```
+
+The outcome is `replaced`, `deleted`, or `unchanged`. Counts describe the selected block → effective inserted block, not diff additions/deletions. UTF-8 byte counts include selected or inserted line terminators, including a retained final terminator, but exclude the preserved file BOM. Empty replacement has zero lines/bytes; a trailing newline adds no phantom line. An identical effective replacement reports `unchanged` without writing.
+
+Boundary failures identify the selector and cause, suggest a concrete correction, and show bounded candidate locations and surrounding context when matches exist. End failures include the resolved start and explain ineligible matches. Candidate examples are bounded; counts distinguish exact totals from explicit lower bounds when an ambiguous search stops early. Suggestions never choose an anchor or relax literal matching. Other failures identify the operation, path, and reason; write failures warn that the file may be partially modified rather than promising no changes.
+
+Feedback and each stored diff preview are capped at 200 lines or 8 KiB. Long lines may be excerpted; use `read` to inspect omitted content. A truncated patch is not apply-ready.
+
+**This is not stale-content detection:** editing re-resolves anchors against the current file, even after successful selection, and changed content inside the selected block is overwritten. Both tools use Pi's per-file mutation queue to avoid reading during participating native `edit` and `write` calls in the same runtime. Selection releases the queue when it returns; nothing is reserved for a later edit. The queue does not cover other processes or editors. Cancellation during a write does not guarantee rollback.
 
 Native `read`, `edit`, and `write` stay unchanged. This is an additional local-filesystem tool; remote or sandbox tool routing must configure it separately.
 

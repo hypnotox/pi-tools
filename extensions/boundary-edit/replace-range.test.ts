@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { replaceRange } from "./replace-range.js";
+import { BoundaryError, blockStats, replaceRange, resolveRange } from "./replace-range.js";
 
 describe("content-anchored whole-line replacement", () => {
   it.each([
@@ -228,7 +228,14 @@ describe("content-anchored whole-line replacement", () => {
       expected: "prefix\nold\nsuffix",
     },
   ])("$name", ({ text, start, end, replacement, expected }) => {
-    expect(replaceRange(text, { start, end, replacement }).text).toBe(expected);
+    const selected = resolveRange(text, { start, end });
+    const edited = replaceRange(text, { start, end, replacement });
+    expect(edited.text).toBe(expected);
+    expect(edited).toMatchObject(selected);
+    expect(edited.selected).toEqual(blockStats(text.slice(selected.from, selected.to)));
+    expect(edited.selected.lines).toBe(selected.endLine - selected.startLine + 1);
+    const inserted = expected.slice(selected.from, expected.length - (text.length - selected.to));
+    expect(edited.replacement).toEqual(blockStats(inserted));
   });
 
   it.each([
@@ -260,7 +267,8 @@ describe("content-anchored whole-line replacement", () => {
     { name: "empty start", text: "old", start: "", end: "old" },
     { name: "empty end", text: "old", start: "old", end: "" },
   ])("rejects $name", ({ text, start, end }) => {
-    expect(() => replaceRange(text, { start, end, replacement: "new" })).toThrow();
+    expect(() => resolveRange(text, { start, end })).toThrow(BoundaryError);
+    expect(() => replaceRange(text, { start, end, replacement: "new" })).toThrow(BoundaryError);
   });
 
   it("reports selected whole lines without counting a phantom EOF line", () => {
@@ -270,7 +278,7 @@ describe("content-anchored whole-line replacement", () => {
         end: "end\r\n",
         replacement: "new",
       }),
-    ).toEqual({ text: "prefix\r\nnew\r\n", startLine: 2, endLine: 3 });
+    ).toMatchObject({ text: "prefix\r\nnew\r\n", startLine: 2, endLine: 3 });
   });
 
   it("resolves moved anchors against current content and replaces changed interior", () => {

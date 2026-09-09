@@ -88,7 +88,7 @@ describe("boundary_edit through Pi's real package loader and runtime", () => {
     const { cwd, session, faux } = await load();
     const configured = session.getAllTools();
     expect(session.getActiveToolNames()).toEqual(
-      expect.arrayContaining(["boundary_edit", "read", "edit", "write"]),
+      expect.arrayContaining(["boundary_edit", "boundary_select", "read", "edit", "write"]),
     );
     for (const native of [createReadTool(cwd), createEditTool(cwd), createWriteTool(cwd)]) {
       expect(configured.find((tool) => tool.name === native.name)).toMatchObject({
@@ -124,6 +124,36 @@ describe("boundary_edit through Pi's real package loader and runtime", () => {
     );
   });
 
+  it("executes read-only selection and reports its failures through Pi", async () => {
+    const { cwd, session, faux } = await load();
+    const path = join(cwd, "target.txt");
+    const original = Buffer.from("prefix\nSTART\nold\nEND\nsuffix\n");
+    await fs.writeFile(path, original);
+    const input = { path: "target.txt", start: "START", end: "END" };
+    faux.setResponses([
+      fauxAssistantMessage(fauxToolCall("boundary_select", input), { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [
+          fauxToolCall("boundary_select", { ...input, end: "EN" }),
+          fauxToolCall("boundary_select", { ...input, replacement: "not allowed" }),
+        ],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage("done"),
+    ]);
+    await session.prompt("Inspect the range and exercise failures.");
+    expect(await fs.readFile(path)).toEqual(original);
+    const results = session.messages.filter((message) => message.role === "toolResult");
+    expect(results).toHaveLength(3);
+    expect(results[0]).toMatchObject({
+      toolName: "boundary_select",
+      isError: false,
+      details: { startLine: 2, endLine: 4, selected: { lines: 3, bytes: 14 } },
+    });
+    for (const result of results.slice(1))
+      expect(result).toMatchObject({ toolName: "boundary_select", isError: true });
+  });
+
   it("reports schema and selection failures to Pi as errors, not successful text", async () => {
     const { cwd, session, faux } = await load();
     const path = join(cwd, "target.txt");
@@ -154,9 +184,14 @@ describe("boundary_edit through Pi's real package loader and runtime", () => {
     expect(await fs.readFile(path)).toEqual(bytes);
   });
 
-  it.each([false, true])(
-    "shares the complete read-modify-write queue with native edit (symlink=%s)",
-    async (alias) => {
+  it.each([
+    { alias: false, toolName: "boundary_edit" },
+    { alias: true, toolName: "boundary_edit" },
+    { alias: false, toolName: "boundary_select" },
+    { alias: true, toolName: "boundary_select" },
+  ])(
+    "$toolName reads only after native edit settles (symlink=$alias)",
+    async ({ alias, toolName }) => {
       const { cwd, session } = await load();
       const path = join(cwd, "target.txt");
       const aliasPath = join(cwd, "alias.txt");
@@ -184,7 +219,7 @@ describe("boundary_edit through Pi's real package loader and runtime", () => {
           writeFile: (file, text) => fs.writeFile(file, text, "utf8"),
         },
       });
-      const boundary = session.agent.state.tools.find((tool) => tool.name === "boundary_edit");
+      const boundary = session.agent.state.tools.find((tool) => tool.name === toolName);
       if (!boundary) throw new Error("Missing loaded tool");
       const nativeEdit = native.execute("native", {
         path,
@@ -200,7 +235,7 @@ describe("boundary_edit through Pi's real package loader and runtime", () => {
         path: alias ? aliasPath : path,
         start: "START",
         end: "END",
-        replacement: "new",
+        ...(toolName === "boundary_edit" ? { replacement: "new" } : {}),
       });
       try {
         // A different-file queue entry drains earlier registrations without waiting
@@ -211,7 +246,13 @@ describe("boundary_edit through Pi's real package loader and runtime", () => {
         release();
         await Promise.all([nativeEdit, boundaryEdit]);
       }
-      expect(await fs.readFile(path, "utf8")).toBe("native prefix\nnew\nsuffix\n");
+      expect(await fs.readFile(path, "utf8")).toBe(
+        toolName === "boundary_edit"
+          ? "native prefix\nnew\nsuffix\n"
+          : "native prefix\nSTART\nold\nEND\nsuffix\n",
+      );
+      if (toolName === "boundary_select")
+        expect((await boundaryEdit).details).toMatchObject({ startLine: 2, endLine: 4 });
     },
   );
 });

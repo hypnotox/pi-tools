@@ -47,8 +47,20 @@ describe("boundary_edit against real files", () => {
       signal,
     );
 
-  it("registers only the additional tool and executes without a UI", async () => {
-    expect(harness.tools.map((tool) => tool.name)).toEqual(["boundary_edit"]);
+  const select = (params: Record<string, unknown> = {}, signal?: AbortSignal) =>
+    harness.execute(
+      "boundary_select",
+      { path: "target.txt", start: "START", end: "END", ...params },
+      { cwd, hasUI: false },
+      signal,
+    );
+
+  function resultText(result: Record<string, unknown>) {
+    return (result.content as Array<{ text: string }>).map((part) => part.text).join("\n");
+  }
+
+  it("registers both additional tools and executes without a UI", async () => {
+    expect(harness.tools.map((tool) => tool.name)).toEqual(["boundary_edit", "boundary_select"]);
     expect(harness.handlers.size).toBe(0);
     const writes = vi.spyOn(fs, "writeFile");
     const result = await execute();
@@ -63,19 +75,24 @@ describe("boundary_edit against real files", () => {
       patch: expect.stringContaining("+new"),
       firstChangedLine: 2,
     });
-    expect(result.content).toEqual([
-      { type: "text", text: "Successfully replaced 1 block(s) in target.txt." },
-    ]);
+    expect(result.details).toMatchObject({
+      path,
+      outcome: "replaced",
+      selected: { lines: 3, bytes: 14 },
+      replacement: { lines: 1, bytes: 4 },
+    });
+    expect(resultText(result)).toContain("replaced");
+    expect(resultText(result)).toContain("3 lines, 14 bytes → 1 lines, 4 bytes");
+    expect(resultText(result)).toContain("+2 new");
   });
 
-  it("matches native edit's confirmation and diff details for the same change", async () => {
+  it("matches native edit's diff details for the same change", async () => {
     const result = await execute();
     await fs.writeFile(path, original);
     const native = await createEditTool(cwd).execute("native", {
       path: "target.txt",
       edits: [{ oldText: "START\nold\nEND\n", newText: "new\n" }],
     });
-    expect(result.content).toEqual(native.content);
     expect(result.details).toMatchObject(native.details);
   });
 
@@ -96,7 +113,16 @@ describe("boundary_edit against real files", () => {
     return row(harness.tools[0] as unknown as RenderableTool, args);
   }
 
-  it("renders the completed numbered diff like native edit, not raw JSON or a patch", async () => {
+  function expectNativeDiff(
+    rendered: ToolExecutionComponent,
+    native: ToolExecutionComponent,
+    width = 100,
+  ) {
+    const expected = native.render(width).slice(4);
+    expect(rendered.render(width).slice(-expected.length)).toEqual(expected);
+  }
+
+  it("keeps the summary alongside Pi's numbered colored diff", async () => {
     const result = await execute();
     const rendered = boundaryRow();
     const native = row(createEditToolDefinition(cwd), { path: "target.txt" });
@@ -107,19 +133,17 @@ describe("boundary_edit against real files", () => {
       rendered.setExpanded(expanded);
       native.setExpanded(expanded);
       for (const width of [30, 100]) {
-        const normalize = (lines: string[]) =>
-          lines.map((line) =>
-            stripVTControlCharacters(line).replace("boundary_edit", "edit").trimEnd(),
-          );
-        expect(normalize(rendered.render(width))).toEqual(normalize(native.render(width)));
-        // Diff rows also retain Pi's actual colors and intra-line styling.
-        expect(rendered.render(width).slice(4)).toEqual(native.render(width).slice(4));
+        const output = stripVTControlCharacters(rendered.render(width).join("\n"));
+        expect(output).toContain("replaced");
+        expect(output).toContain("14 bytes");
+        // Only the summary differs; Pi still owns diff colors and intra-line styling.
+        expectNativeDiff(rendered, native, width);
       }
     }
     initTheme("light", false);
     rendered.invalidate();
     native.invalidate();
-    expect(rendered.render(100).slice(4)).toEqual(native.render(100).slice(4));
+    expectNativeDiff(rendered, native);
   });
 
   it.each(["\n", "\r\n"])(
@@ -139,7 +163,7 @@ describe("boundary_edit against real files", () => {
       const native = row(createEditToolDefinition(cwd), { path: "target.txt" });
       rendered.updateResult({ ...result, isError: false } as RenderResult);
       native.updateResult({ ...nativeResult, isError: false });
-      expect(rendered.render(100).slice(4)).toEqual(native.render(100).slice(4));
+      expectNativeDiff(rendered, native);
     },
   );
 
@@ -155,7 +179,7 @@ describe("boundary_edit against real files", () => {
     expect(output()).toContain("Start selector was not found exactly.");
     const result = await execute({ replacement: "START\nold\nEND" });
     rendered.updateResult({ ...result, isError: false } as RenderResult);
-    expect(output()).toContain('No change to "target.txt".');
+    expect(output()).toContain("unchanged");
     rendered.updateResult({ content: [{ type: "text", text: "Legacy result" }], isError: false });
     expect(output()).toContain("Legacy result");
   });
@@ -203,6 +227,141 @@ describe("boundary_edit against real files", () => {
     expect((error as Error).message).toContain("ENAMETOOLONG");
     expect(Buffer.byteLength((error as Error).message)).toBeLessThanOrEqual(8192);
     expect(await fs.readFile(path, "utf8")).toBe(original);
+  });
+
+  it("selects the same inclusive range without writing, with complete small previews", async () => {
+    const before = await fs.readFile(path);
+    const writes = vi.spyOn(fs, "writeFile");
+    const selection = await select();
+    expect(selection.details).toMatchObject({
+      path,
+      startLine: 2,
+      endLine: 4,
+      selected: { lines: 3, bytes: 14 },
+      truncated: false,
+    });
+    expect(resultText(selection)).toContain("2 | START\n3 | old\n4 | END");
+    expect(resultText(selection)).not.toContain("prefix");
+    expect(resultText(selection)).not.toContain("suffix");
+    expect(writes).not.toHaveBeenCalled();
+    expect(await fs.readFile(path)).toEqual(before);
+    const selectionRow = row(harness.tools[1] as unknown as RenderableTool, { path: "target.txt" });
+    selectionRow.updateResult({ ...selection, isError: false } as RenderResult);
+    expect(stripVTControlCharacters(selectionRow.render(100).join("\n"))).toContain("3 | old");
+    const edit = await execute();
+    expect(edit.details).toMatchObject(selection.details as object);
+  });
+
+  it("does not reserve a selected range or require a previous selection", async () => {
+    await select();
+    await fs.writeFile(path, `earlier\n${original.replace("old", "changed interior")}`);
+    const result = await execute();
+    expect(result.details).toMatchObject({ startLine: 3, endLine: 5 });
+    expect(await fs.readFile(path, "utf8")).toBe("earlier\nprefix\nnew\nsuffix\n");
+    await fs.writeFile(path, original);
+    await select();
+    await fs.writeFile(path, original.replace("START", "removed"));
+    await expect(execute()).rejects.toThrow(/start/i);
+    expect(await fs.readFile(path, "utf8")).toContain("removed");
+  });
+
+  it.each([
+    { replacement: "新", expected: "新\r\n", outcome: "replaced", lines: 1 },
+    { replacement: "新\n", expected: "新\n", outcome: "replaced", lines: 1 },
+    { replacement: "新\r", expected: "新\r\r\n", outcome: "replaced", lines: 1 },
+    { replacement: "", expected: "", outcome: "deleted", lines: 0 },
+    { replacement: "\n", expected: "\n", outcome: "replaced", lines: 1 },
+    { replacement: "START\r\nEND", expected: "START\r\nEND\r\n", outcome: "unchanged", lines: 2 },
+  ])(
+    "reports effective UTF-8 block statistics: $outcome ($replacement)",
+    async ({ replacement, expected, outcome, lines }) => {
+      const before = "START\r\nEND\r\n";
+      await fs.writeFile(path, `\uFEFF${before}`);
+      const selection = await select();
+      expect(selection.details).toMatchObject({
+        selected: { lines: 2, bytes: Buffer.byteLength(before) },
+      });
+      const writes = vi.spyOn(fs, "writeFile");
+      const result = await execute({ replacement });
+      expect(result.details).toMatchObject({
+        outcome,
+        selected: { lines: 2, bytes: Buffer.byteLength(before) },
+        replacement: { lines, bytes: Buffer.byteLength(expected) },
+      });
+      expect(writes).toHaveBeenCalledTimes(outcome === "unchanged" ? 0 : 1);
+      expect(await fs.readFile(path)).toEqual(Buffer.from(`\uFEFF${expected}`));
+      expect(resultText(result)).toContain(outcome);
+      if (outcome === "unchanged")
+        expect(result.details).toMatchObject({ diff: "", patch: "", changed: false });
+    },
+  );
+
+  it.each(["line\n".repeat(3000), "🙂".repeat(20_000)])(
+    "bounds selection while preserving both ends (%#)",
+    async (middle) => {
+      await fs.writeFile(path, `START\n${middle}\nEND\n`);
+      const writes = vi.spyOn(fs, "writeFile");
+      const result = await select();
+      const text = resultText(result);
+      expect(text).toContain("1 | START");
+      expect(text).toMatch(/\d+ \| END/);
+      expect(text).toMatch(/omitted|truncated/);
+      expect(Buffer.byteLength(text)).toBeLessThanOrEqual(8192);
+      expect(text.split("\n").length).toBeLessThanOrEqual(200);
+      expect(result.details).toMatchObject({ truncated: true });
+      expect(writes).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { start: "missing" },
+    { end: "missing" },
+    { end: "EN" },
+    { start: "\n" },
+    { end: "\n" },
+  ])("shares actionable boundary diagnostics between selection and edit: %j", async (params) => {
+    const writes = vi.spyOn(fs, "writeFile");
+    const selected = await select(params).catch((error: Error) => error);
+    const edited = await execute(params).catch((error: Error) => error);
+    expect(selected).toBeInstanceOf(Error);
+    expect(edited).toBeInstanceOf(Error);
+    const selectMessage = (selected as Error).message;
+    const editMessage = (edited as Error).message;
+    expect(selectMessage.replace("boundary_select", "boundary_edit")).toBe(editMessage);
+    expect(selectMessage).toContain("target.txt");
+    expect(selectMessage).toMatch(/reread|distinctive|include/i);
+    expect(selectMessage).toMatch(/no changes/i);
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it("reports selection read/decoding/cancellation failures without writes", async () => {
+    const writes = vi.spyOn(fs, "writeFile");
+    await expect(select({ path: "missing.txt" })).rejects.toMatchObject({
+      code: "ENOENT",
+      message: expect.stringContaining("boundary_select"),
+    });
+    await expect(select({}, AbortSignal.abort())).rejects.toThrow(/boundary_select/);
+    expect(writes).not.toHaveBeenCalled();
+    await fs.writeFile(path, Buffer.from([0xff]));
+    writes.mockClear();
+    await expect(select()).rejects.toThrow(/UTF-8|encoding/i);
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it("warns about possible partial modification after a failed write", async () => {
+    const writeFile = fs.writeFile.bind(fs);
+    vi.spyOn(fs, "writeFile").mockImplementationOnce(async () => {
+      await writeFile(path, "partial");
+      throw new Error("fixture partial write");
+    });
+    const error = await execute().catch((error: Error) => error);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("boundary_edit");
+    expect((error as Error).message).toContain("target.txt");
+    expect((error as Error).message).toContain("fixture partial write");
+    expect((error as Error).message).toMatch(/partially modified/);
+    expect((error as Error).message).not.toMatch(/no changes/i);
+    expect(await fs.readFile(path, "utf8")).toBe("partial");
   });
 
   it("resolves the latest file contents rather than a previous read", async () => {
@@ -303,7 +462,10 @@ describe("boundary_edit against real files", () => {
   it("propagates write failures as failures", async () => {
     const error = new Error("fixture write failure");
     vi.spyOn(fs, "writeFile").mockRejectedValueOnce(error);
-    await expect(execute()).rejects.toBe(error);
+    await expect(execute()).rejects.toMatchObject({
+      cause: error,
+      message: expect.stringContaining("Writing began"),
+    });
     expect(await fs.readFile(path, "utf8")).toBe(original);
   });
 
