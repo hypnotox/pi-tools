@@ -1,5 +1,5 @@
 import { truncateHead } from "@earendil-works/pi-coding-agent";
-import { type BoundaryError, lineNumber } from "./replace-range.js";
+import { type BoundaryError, blockStats, location, type resolveRanges } from "./replace-range.js";
 
 // Reserve room for operation summaries and notices within 200 lines / 8 KiB.
 const previewLimits = { maxLines: 190, maxBytes: 6 * 1024 };
@@ -59,58 +59,119 @@ function physicalLines(text: string) {
   return lines;
 }
 
-/** A small selection is complete; a large one retains both ends under one budget. */
-export function selectionPreview(text: string, startLine: number) {
-  const lines = physicalLines(text);
-  const row = (index: number) => `${startLine + index} | ${lines[index]?.replace(/\r$/, "") ?? ""}`;
-  if (lines.length <= previewLimits.maxLines) {
-    const full = lines.map((_, index) => row(index)).join("\n");
-    if (Buffer.byteLength(full, "utf8") <= previewLimits.maxBytes) {
-      return { text: full, truncated: false };
-    }
+/** Content is literal, including CRLF. Only omission markers are synthetic. */
+export function rangePreview(text: string, maxLines: number | "all" = 40, maxBytes = 6144) {
+  const lines = text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+  const budget = maxLines === "all" ? lines.length : maxLines;
+  if (lines.length <= budget && Buffer.byteLength(text) <= maxBytes) {
+    return { text, truncated: false };
   }
-
   const head: string[] = [];
   const tail: string[] = [];
   let bytes = 0;
-  // Alternate ends, leaving room for omission/truncation notices. Long lines get
-  // excerpts, but cannot prevent either boundary from appearing in the preview.
-  while (head.length + tail.length < Math.min(lines.length, previewLimits.maxLines - 3)) {
+  while (head.length + tail.length < Math.min(lines.length, budget)) {
     const takeHead = head.length <= tail.length;
     const index = takeHead ? head.length : lines.length - tail.length - 1;
-    const next = clipLine(row(index), 1000);
-    if (bytes + Buffer.byteLength(next, "utf8") + 1 > previewLimits.maxBytes - 256) break;
-    bytes += Buffer.byteLength(next, "utf8") + 1;
+    const source = lines[index] ?? "";
+    // Share the remaining byte budget between both ends. A huge line must
+    // not consume the entire preview or hide the last selected content.
+    const allowance = Math.min(2048, Math.floor((maxBytes - 128 - bytes) / 2));
+    if (allowance < 64) break;
+    const next = clipLine(source, allowance);
+    bytes += Buffer.byteLength(next);
     if (takeHead) head.push(next);
     else tail.unshift(next);
   }
   const omitted = lines.length - head.length - tail.length;
   return {
-    text: [
-      ...head,
-      ...(omitted ? [`[${omitted} lines omitted]`] : []),
-      ...tail,
-      "[Preview truncated; use read to inspect the full selection.]",
-    ].join("\n"),
+    text: head.join("") + (omitted ? `\n[${omitted} content lines omitted]\n` : "") + tail.join(""),
     truncated: true,
   };
 }
 
-function location(text: string, at: number) {
-  const from = at === 0 ? 0 : text.lastIndexOf("\n", at - 1) + 1;
+export function span(range: {
+  start: { line: number; column: number };
+  end: { line: number; column: number };
+}) {
+  return `[${range.start.line}:${range.start.column}, ${range.end.line}:${range.end.column})`;
+}
+
+function readSection(
+  text: string,
+  result: ReturnType<typeof resolveRanges>[number],
+  index: number,
+  maxLines: number | "all" | undefined,
+  maxBytes: number,
+) {
+  if (result.error) {
+    const diagnostic = boundaryDiagnostic(text, result.error);
+    const message = clip(diagnostic, Math.min(maxBytes - 64, 2048));
+    return {
+      text: `\nRange ${index + 1} | ERROR\n${message}\n`,
+      details: { index, truncated: message !== diagnostic, error: result.error.kind },
+    };
+  }
+  const range = result.range;
+  const selectedText = text.slice(range.from, range.to);
+  const selected = blockStats(selectedText);
+  const header = `\nRange ${index + 1} | ${span(range)} | ${selected.lines} lines, ${selected.bytes} bytes`;
+  const preview = rangePreview(
+    selectedText,
+    maxLines,
+    maxBytes - Buffer.byteLength(`${header} | complete\n\n`),
+  );
   return {
-    line: lineNumber(text, at),
-    column: [...text.slice(from, at)].length + 1,
-    offset: at - from,
+    text: `${header} | ${preview.truncated ? "truncated" : "complete"}\n${preview.text}\n`,
+    details: { index, span: span(range), selected, truncated: preview.truncated },
   };
 }
 
-const rejectionText = {
-  "before-start": "before the resolved starting line; not eligible",
-  "incomplete-line":
-    "ends mid-line or splits CRLF; include content through a complete line boundary or EOF",
-  "excludes-start": "does not enclose the full start anchor; choose a later end",
-};
+/** Bound the entire multi-range response, including headers and diagnostics. */
+export function readFeedback(
+  path: string,
+  text: string,
+  results: ReturnType<typeof resolveRanges>,
+  maxLines?: number | "all",
+) {
+  const ceiling = 8192;
+  const failedCount = results.filter((result) => result.error).length;
+  let output = `${displayPath(path)} | ${results.length} ranges | read-only${failedCount ? ` | ${failedCount} invalid ranges` : ""}\n`;
+  const sections = results.map((result, index) =>
+    readSection(text, result, index, maxLines, ceiling),
+  );
+  // Do not impose a per-range byte limit when all requested output fits.
+  const fits =
+    Buffer.byteLength(output) +
+      sections.reduce((bytes, section) => bytes + Buffer.byteLength(section.text), 0) <=
+    ceiling;
+  const ranges: ReturnType<typeof readSection>["details"][] = [];
+  for (const [index, section] of sections.entries()) {
+    const remaining = ceiling - Buffer.byteLength(output) - (fits ? 0 : 128);
+    if (!fits && remaining < 512) {
+      output += `\n[Output ceiling reached; ranges ${index + 1}–${results.length} omitted. Request fewer ranges.]`;
+      break;
+    }
+    // Share constrained output so a large first range does not hide later
+    // results/diagnostics. Unused space remains available to subsequent ranges.
+    const allowance = fits
+      ? remaining
+      : Math.max(512, Math.floor(remaining / (results.length - index)));
+    const result = results[index];
+    if (!result) throw new Error("Missing range result");
+    const shown =
+      Buffer.byteLength(section.text) <= allowance
+        ? section
+        : readSection(text, result, index, maxLines, allowance);
+    output += shown.text;
+    ranges.push(shown.details);
+  }
+  return {
+    text: output,
+    ranges,
+    truncated: ranges.length < results.length || ranges.some((range) => range.truncated),
+    failed: failedCount > 0,
+  };
+}
 
 export function boundaryDiagnostic(text: string, error: BoundaryError) {
   const label = error.selector === "start" ? "Start" : "End";
@@ -125,22 +186,21 @@ export function boundaryDiagnostic(text: string, error: BoundaryError) {
     );
   } else if (error.kind === "ambiguous") {
     lines.push(
-      `${error.countExact ? "" : "At least "}${error.matchCount} ${error.selector === "end" ? "eligible " : ""}matches (${error.countExact ? "exact total" : "search stopped"}); showing ${error.candidates.length}.`,
+      `${error.countExact ? "" : "At least "}${error.matchCount} matches (${error.countExact ? "exact total" : "search stopped"}); showing ${error.candidates.length}.`,
       `Use a more distinctive ${error.selector} anchor, including adjacent literal content if needed.`,
+    );
+  } else if (error.kind === "invalid UTF-8") {
+    lines.push(
+      "Use complete Unicode characters in anchors, not unpaired surrogates; reread and copy the exact content.",
+    );
+  } else if (error.kind === "reversed") {
+    lines.push(
+      "End position is before start. Choose a later end or correct the before/after sides; positions do not snap to lines.",
     );
   } else {
     lines.push(
       "Matching is literal and case-sensitive, including whitespace and LF/CRLF. Reread the relevant content and copy the exact anchor.",
     );
-    if (error.selector === "end") {
-      lines.push(
-        "End must begin on or after the resolved starting line, finish at a complete LF/CRLF boundary or EOF, and enclose the entire start anchor.",
-      );
-    }
-    if (error.matchCount)
-      lines.push(
-        `${error.matchCount} literal matches (exact total), none eligible; showing ${error.candidates.length} examples.`,
-      );
   }
 
   // Merge overlapping three-line windows, including the finishing line of a
@@ -163,7 +223,7 @@ export function boundaryDiagnostic(text: string, error: BoundaryError) {
     const at = addContext(candidate.at);
     const finish = addContext(candidate.at + error.anchor.length - 1);
     lines.push(
-      `Candidate line ${at.line}, column ${at.column}${finish.line !== at.line ? `, through line ${finish.line}` : ""}${candidate.reason ? `: ${rejectionText[candidate.reason]}` : ""}.`,
+      `Candidate line ${at.line}, column ${at.column}${finish.line !== at.line ? `, through line ${finish.line}` : ""}.`,
     );
   }
   // Even a missing end can provide useful context at the successfully resolved start.

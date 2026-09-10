@@ -1,293 +1,205 @@
 import { describe, expect, it } from "vitest";
-import { BoundaryError, blockStats, replaceRange, resolveRange } from "./replace-range.js";
+import {
+  BoundaryError,
+  type Endpoint,
+  replaceRanges,
+  resolveRange,
+  resolveRanges,
+} from "./replace-range.js";
 
-describe("content-anchored whole-line replacement", () => {
+const beforeText = (text: string): Endpoint => ({ text, side: "before" });
+const afterText = (text: string): Endpoint => ({ text, side: "after" });
+const range = (start: Endpoint, end: Endpoint) => ({ start, end });
+const edit = (start: Endpoint, end: Endpoint, replacement: string) => ({ start, end, replacement });
+
+function replaced(text: string, edits: Parameters<typeof replaceRanges>[1]) {
+  const result = replaceRanges(text, edits);
+  expect(result.errors).toBeUndefined();
+  return result.text;
+}
+
+describe("exact boundary model", () => {
   it.each([
-    {
-      name: "inclusive lines and untouched surroundings",
-      text: "prefix\n  start here\nold\nend here\nsuffix\n",
-      start: "start",
-      end: "end here",
-      replacement: "new",
-      expected: "prefix\nnew\nsuffix\n",
-    },
-    {
-      name: "multiline anchors",
-      text: "prefix\nstart\npart\nold\nlast\nend\nsuffix",
-      start: "start\npart",
-      end: "last\nend",
-      replacement: "one\ntwo\nthree",
-      expected: "prefix\none\ntwo\nthree\nsuffix",
-    },
-    {
-      name: "end before start on the same line",
-      text: "prefix END START\nsuffix",
-      start: "START",
-      end: "prefix END START",
-      replacement: "new",
-      expected: "new\nsuffix",
-    },
-    {
-      name: "overlapping anchors",
-      text: "prefix abcdef\nsuffix",
-      start: "abcd",
-      end: "cdef",
-      replacement: "new",
-      expected: "new\nsuffix",
-    },
-    {
-      name: "identical anchors on one line",
-      text: "old\n",
-      start: "old",
-      end: "old",
-      replacement: "new",
-      expected: "new\n",
-    },
-    {
-      name: "end before the starting line does not count",
-      text: "END\nstart\nEND\n",
-      start: "start",
-      end: "END",
-      replacement: "new",
-      expected: "END\nnew\n",
-    },
-    {
-      name: "mid-line end occurrences do not count",
-      text: "start END middle\nEND\nsuffix",
-      start: "start",
-      end: "END",
-      replacement: "new",
-      expected: "new\nsuffix",
-    },
-    {
-      name: "end that would truncate multiline start does not count",
-      text: "start END\npart\nEND\n",
-      start: "start END\npart",
-      end: "END",
-      replacement: "new",
-      expected: "new\n",
-    },
-    {
-      name: "start includes the selected terminator",
-      text: "start\nsuffix",
-      start: "start\n",
-      end: "start",
-      replacement: "new",
-      expected: "new\nsuffix",
-    },
-    {
-      name: "end includes LF",
-      text: "old\nsuffix",
-      start: "old",
-      end: "old\n",
-      replacement: "new",
-      expected: "new\nsuffix",
-    },
-    {
-      name: "end includes CRLF",
-      text: "old\r\nsuffix",
-      start: "old",
-      end: "old\r\n",
-      replacement: "new",
-      expected: "new\r\nsuffix",
-    },
-    {
-      name: "end excludes CRLF",
-      text: "old\r\nsuffix",
-      start: "old",
-      end: "old",
-      replacement: "new",
-      expected: "new\r\nsuffix",
-    },
-    {
-      name: "deletion",
-      text: "prefix\nold\nsuffix",
-      start: "old",
-      end: "old",
-      replacement: "",
-      expected: "prefix\nsuffix",
-    },
-    {
-      name: "blank replacement line",
-      text: "prefix\nold\nsuffix",
-      start: "old",
-      end: "old",
-      replacement: "\n",
-      expected: "prefix\n\nsuffix",
-    },
-    {
-      name: "extra trailing newlines",
-      text: "old\nsuffix",
-      start: "old",
-      end: "old",
-      replacement: "new\n\n",
-      expected: "new\n\nsuffix",
-    },
-    {
-      name: "supplied indentation and blank lines",
-      text: "old\n",
-      start: "old",
-      end: "old",
-      replacement: "  new\n\n    more\n",
-      expected: "  new\n\n    more\n",
-    },
-    {
-      name: "unterminated EOF",
-      text: "prefix\nold",
-      start: "old",
-      end: "old",
-      replacement: "new",
-      expected: "prefix\nnew",
-    },
-    {
-      name: "explicit EOF termination",
-      text: "old",
-      start: "old",
-      end: "old",
-      replacement: "new\r\n",
-      expected: "new\r\n",
-    },
-    {
-      name: "deleting entire file",
-      text: "old\n",
-      start: "old",
-      end: "old\n",
-      replacement: "",
-      expected: "",
-    },
-    {
-      name: "final blank line is real, not phantom",
-      text: "start\n\n",
-      start: "start",
-      end: "start\n\n",
-      replacement: "new",
-      expected: "new\n",
-    },
-    {
-      name: "leading newline anchor selects its preceding empty line",
-      text: "\nother",
-      start: "\n",
-      end: "\n",
-      replacement: "new",
-      expected: "new\nother",
-    },
-    {
-      name: "bare CR is not a terminal newline",
-      text: "old\r\nsuffix",
-      start: "old",
-      end: "old",
-      replacement: "new\r",
-      expected: "new\r\r\nsuffix",
-    },
-    {
-      name: "bare CR in file is content",
-      text: "old\rmore\nsuffix",
-      start: "old",
-      end: "more",
-      replacement: "new",
-      expected: "new\nsuffix",
-    },
-    {
-      name: "mixed endings stay literal",
-      text: "prefix\r\nold\nend\r\nsuffix\n",
-      start: "old\nend",
-      end: "end",
-      replacement: "new\n\r\nmore",
-      expected: "prefix\r\nnew\n\r\nmore\r\nsuffix\n",
-    },
-    {
-      name: "supplied LF is not converted to CRLF",
-      text: "old\r\nsuffix",
-      start: "old",
-      end: "old",
-      replacement: "new\n",
-      expected: "new\nsuffix",
-    },
-    {
-      name: "Unicode is literal",
-      text: "前\n  🙂 café é\n後",
-      start: "🙂",
-      end: "é",
-      replacement: "  新 🙂",
-      expected: "前\n  新 🙂\n後",
-    },
-    {
-      name: "whitespace-only anchors remain valid",
-      text: "x \nsuffix",
-      start: " ",
-      end: " ",
-      replacement: "new",
-      expected: "new\nsuffix",
-    },
-    {
-      name: "no-op",
-      text: "prefix\nold\nsuffix",
-      start: "old",
-      end: "old",
-      replacement: "old",
-      expected: "prefix\nold\nsuffix",
-    },
-  ])("$name", ({ text, start, end, replacement, expected }) => {
-    const selected = resolveRange(text, { start, end });
-    const edited = replaceRange(text, { start, end, replacement });
-    expect(edited.text).toBe(expected);
-    expect(edited).toMatchObject(selected);
-    expect(edited.selected).toEqual(blockStats(text.slice(selected.from, selected.to)));
-    expect(edited.selected.lines).toBe(selected.endLine - selected.startLine + 1);
-    const inserted = expected.slice(selected.from, expected.length - (text.length - selected.to));
-    expect(edited.replacement).toEqual(blockStats(inserted));
+    ["before", "before", "LEFTmiddle"],
+    ["before", "after", "LEFTmiddleRIGHT"],
+    ["after", "before", "middle"],
+    ["after", "after", "middleRIGHT"],
+  ] as const)("resolves %s/%s without snapping", (startSide, endSide, selected) => {
+    const text = "prefix LEFTmiddleRIGHT suffix";
+    const selectors = range({ text: "LEFT", side: startSide }, { text: "RIGHT", side: endSide });
+    const result = resolveRange(text, selectors);
+    expect(text.slice(result.from, result.to)).toBe(selected);
+    expect(replaced(text, [{ ...selectors, replacement: "X" }])).toBe(text.replace(selected, "X"));
   });
 
-  it.each([
-    { name: "missing start", text: "old\n", start: "missing", end: "old" },
-    { name: "ambiguous start", text: "start\nstart\nEND", start: "start", end: "END" },
-    { name: "overlapping start occurrences", text: "aaa END", start: "aa", end: "END" },
-    { name: "missing end", text: "start\n", start: "start", end: "END" },
-    { name: "ambiguous eligible ends", text: "start\nEND\nEND", start: "start", end: "END" },
-    { name: "overlapping eligible ends", text: "start\n\n\n", start: "start", end: "\n\n" },
-    { name: "end only before the starting line", text: "END\nstart\n", start: "start", end: "END" },
-    { name: "end only mid-line", text: "start END middle\n", start: "start", end: "END" },
-    {
-      name: "range truncates start",
-      text: "start END\npart\n",
-      start: "start END\npart",
-      end: "END",
-    },
-    { name: "end splits CRLF", text: "start\r\nsuffix", start: "start", end: "start\r" },
-    {
-      name: "bare CR is not a line boundary",
-      text: "start\rmiddle\n",
-      start: "start",
-      end: "start",
-    },
-    { name: "no LF normalization", text: "start\r\nend\r\n", start: "start\nend", end: "end" },
-    { name: "no Unicode normalization", text: "café\n", start: "café", end: "café" },
-    { name: "case sensitive", text: "start\n", start: "START", end: "start" },
-    { name: "empty file has no selectable line", text: "", start: "x", end: "x" },
-    { name: "empty start", text: "old", start: "", end: "old" },
-    { name: "empty end", text: "old", start: "old", end: "" },
-  ])("rejects $name", ({ text, start, end }) => {
-    expect(() => resolveRange(text, { start, end })).toThrow(BoundaryError);
-    expect(() => replaceRange(text, { start, end, replacement: "new" })).toThrow(BoundaryError);
-  });
-
-  it("reports selected whole lines without counting a phantom EOF line", () => {
+  it("replaces the handoff's inline example", () => {
     expect(
-      replaceRange("prefix\r\nstart\nend\r\n", {
-        start: "start",
-        end: "end\r\n",
-        replacement: "new",
-      }),
-    ).toMatchObject({ text: "prefix\r\nnew\r\n", startLine: 2, endLine: 3 });
+      replaced("The result is acceptable, provided retries are enabled.", [
+        edit(afterText("The result is "), beforeText(", provided"), "reliable"),
+      ]),
+    ).toBe("The result is reliable, provided retries are enabled.");
   });
 
-  it("resolves moved anchors against current content and replaces changed interior", () => {
-    const selectors = { start: "START", end: "END", replacement: "new" };
-    const original = "START\nold\nEND\nsuffix";
-    expect(replaceRange(original, selectors).text).toBe("new\nsuffix");
-    const current = `new prefix\n${original.replace("old", "changed interior")}`;
-    expect(replaceRange(current, selectors).text).toBe("new prefix\nnew\nsuffix");
-    expect(() => replaceRange(current.replace("START", "removed"), selectors)).toThrow();
-    expect(() => replaceRange(`START\n${current}`, selectors)).toThrow();
+  it("uses multiline context outside the replaced region", () => {
+    const text = "function first() {\r\n  old();\r\n}\r\n\r\nfunction next() {\n}\n";
+    const selectors = range(
+      beforeText("function first() {\r\n"),
+      beforeText("function next() {\n"),
+    );
+    expect(replaced(text, [{ ...selectors, replacement: "function first() {}\n" }])).toBe(
+      "function first() {}\nfunction next() {\n}\n",
+    );
+  });
+
+  it.each(["", "new", "new\r", "new\n", "新\r\n🙂", "$&$1"])(
+    "inserts exactly %j, preserving mixed endings, lone CR and Unicode outside",
+    (replacement) => {
+      const text = "前\r\nSTART\nold\rEND\r\n後";
+      const selectors = range(beforeText("START"), afterText("END\r"));
+      expect(replaced(text, [{ ...selectors, replacement }])).toBe(`前\r\n${replacement}\n後`);
+    },
+  );
+
+  it("reports half-open line/column positions including EOF and Unicode", () => {
+    expect(resolveRange("🙂a\r\nb", range(afterText("🙂"), afterText("b")))).toMatchObject({
+      from: 2,
+      to: 6,
+      start: { line: 1, column: 2 },
+      end: { line: 2, column: 2 },
+    });
+  });
+
+  it("permits zero-length spans and exact insertion, including EOF", () => {
+    for (const endpoint of [beforeText("body"), afterText("body")]) {
+      const selectors = range(endpoint, endpoint);
+      const result = resolveRange("body", selectors);
+      expect(result.from).toBe(result.to);
+      expect(replaced("body", [{ ...selectors, replacement: "!" }])).toBe(
+        endpoint.side === "before" ? "!body" : "body!",
+      );
+    }
+  });
+
+  it.each([
+    [beforeText(""), afterText("END"), "empty"],
+    [beforeText("start"), afterText("END"), "missing"],
+    [beforeText("START"), afterText("END\r\n"), "missing"],
+    [afterText("END"), beforeText("START"), "reversed"],
+    [afterText("START"), beforeText("START"), "reversed"],
+  ])("rejects literal selector or range errors", (start, end, kind) => {
+    expect(() => resolveRange("START\nEND\n", range(start as Endpoint, end as Endpoint))).toThrow(
+      BoundaryError,
+    );
+    expect(
+      resolveRanges("START\nEND\n", [range(start as Endpoint, end as Endpoint)])[0]?.error?.kind,
+    ).toBe(kind);
+  });
+
+  it("requires globally unique anchors, including overlapping occurrences and ends before start", () => {
+    for (const selectors of [
+      range(beforeText("aa"), afterText("END")),
+      range(beforeText("aaa"), afterText("END")),
+    ]) {
+      const result = resolveRanges("END aaa END", [selectors])[0];
+      expect(result?.error?.kind).toBe("ambiguous");
+    }
+  });
+});
+
+describe("original-file batching", () => {
+  const text = "A one B two C three D";
+  it("resolves all edits against the original, independent of array order and changed anchors", () => {
+    const edits = [
+      edit(afterText("A "), beforeText(" B"), "C"),
+      edit(afterText("C "), beforeText(" D"), "one"),
+    ];
+    for (const batch of [edits, [...edits].reverse()]) {
+      expect(replaced(text, batch)).toBe("A C B two C one D");
+    }
+    expect(
+      replaced(text, [
+        edit(beforeText("A"), afterText("B"), "X"),
+        edit(afterText("B"), beforeText("D"), "Y"),
+      ]),
+    ).toBe("XYD");
+  });
+
+  it("allows shared and overlapping context anchors when replacement regions are disjoint", () => {
+    expect(
+      replaced(text, [
+        edit(afterText("A"), beforeText("B two C"), "!"),
+        edit(afterText("B two C"), beforeText("D"), "?"),
+      ]),
+    ).toBe("A!B two C?D");
+  });
+
+  it("rejects overlaps, nested regions and duplicate insertion points with entry references", () => {
+    for (const edits of [
+      [edit(beforeText("A"), afterText("C"), ""), edit(beforeText("B"), afterText("D"), "")],
+      [edit(beforeText("A"), afterText("D"), ""), edit(beforeText("B"), afterText("C"), "")],
+      [edit(beforeText("B"), afterText("C"), ""), edit(afterText("two"), afterText("two"), "!")],
+      [edit(beforeText("A"), beforeText("A"), "!"), edit(beforeText("A"), beforeText("A"), "?")],
+    ]) {
+      const result = replaceRanges(text, edits);
+      expect(result.text).toBeUndefined();
+      expect(result.errors?.[0]?.error.message).toMatch(/overlaps edit 1/);
+      expect(result.errors?.[0]?.index).toBe(1);
+    }
+  });
+
+  it("rejects duplicate insertions at a preceding replacement's end", () => {
+    const result = replaceRanges(text, [
+      edit(beforeText("A"), beforeText("B"), "X"),
+      edit(beforeText("B"), beforeText("B"), "!"),
+      edit(beforeText("B"), beforeText("B"), "?"),
+    ]);
+    expect(result.text).toBeUndefined();
+    expect(result.errors?.[0]).toMatchObject({
+      index: 2,
+      error: { message: expect.stringContaining("edit 2") },
+    });
+  });
+
+  it("rejects anchors that split Unicode characters rather than corrupting untouched bytes", () => {
+    for (const anchor of ["\uD83D", "\uDE42"]) {
+      const result = replaceRanges("START🙂END", [
+        edit(beforeText("START"), afterText(anchor), "X"),
+      ]);
+      expect(result.text).toBeUndefined();
+      expect(result.errors?.[0]?.error.message).toMatch(/UTF-8/);
+      expect(
+        resolveRanges("START🙂END", [range(beforeText("START"), afterText(anchor))])[0]?.error,
+      ).toBeDefined();
+    }
+  });
+
+  it("allows adjacency and insertions at region edges without order-dependent output", () => {
+    const edits = [
+      edit(beforeText("B"), beforeText("C"), "X"),
+      edit(beforeText("B"), beforeText("B"), "!"),
+      edit(beforeText("C"), beforeText("C"), "?"),
+    ];
+    for (const batch of [edits, [...edits].reverse()])
+      expect(replaced(text, batch)).toBe("A one !X?C three D");
+  });
+
+  it("collects invalid selectors and replacements before producing any result", () => {
+    const result = replaceRanges(text, [
+      edit(beforeText("missing"), afterText("D"), "x"),
+      edit(beforeText("A"), afterText("absent"), "y"),
+      edit(beforeText("B"), afterText("C"), "\uD800"),
+    ]);
+    expect(result.text).toBeUndefined();
+    expect(result.errors?.map(({ index }) => index)).toEqual([0, 1, 2]);
+    const reads = resolveRanges(text, [
+      range(beforeText("missing"), afterText("D")),
+      range(beforeText("B"), afterText("C")),
+      range(beforeText("A"), afterText("absent")),
+    ]);
+    expect(reads.map((result) => result.error?.kind ?? "resolved")).toEqual([
+      "missing",
+      "resolved",
+      "missing",
+    ]);
   });
 });

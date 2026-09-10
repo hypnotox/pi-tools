@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { StringEnum } from "@earendil-works/pi-ai";
 import {
   type EditToolDetails,
   type ExtensionAPI,
@@ -16,52 +17,71 @@ import {
   boundedOutput,
   displayPath,
   operationError,
-  selectionPreview,
+  readFeedback,
+  span,
 } from "./feedback.js";
-import { BoundaryError, blockStats, replaceRange, resolveRange } from "./replace-range.js";
+import { BoundaryError, replaceRanges, resolveRanges } from "./replace-range.js";
 
-const selectors = {
-  path: Type.String({
-    minLength: 1,
-    description: "Existing UTF-8 file, relative to cwd or absolute; supports ~/ and a leading @.",
-  }),
-  start: Type.String({
-    minLength: 1,
-    description: "Literal, globally unique start content. The containing whole line is selected.",
-  }),
-  end: Type.String({
-    minLength: 1,
-    description:
-      "Literal end content: exactly one eligible match from the starting line onward, ending at a complete LF/CRLF boundary or EOF and enclosing the full start.",
-  }),
-};
-const selectionParameters = Type.Object(selectors, { additionalProperties: false });
-const editParameters = Type.Object(
+const pathParameter = Type.String({
+  minLength: 1,
+  description: "Existing UTF-8 file, relative to cwd or absolute; supports ~/ and a leading @.",
+});
+const endpoint = Type.Object(
   {
-    ...selectors,
-    replacement: Type.String({
+    text: Type.String({
+      minLength: 1,
       description:
-        "Multiline replacement for the inclusive whole-line range. Empty deletes it. Include any selected content to retain.",
+        "Globally unique literal content, inline or multiline, including exact whitespace and line endings.",
+    }),
+    side: StringEnum(["before", "after"] as const, {
+      description:
+        "Position immediately before or after the entire matched text; no line snapping.",
     }),
   },
   { additionalProperties: false },
 );
+const selectors = { start: endpoint, end: endpoint };
+const readParameters = Type.Object(
+  {
+    path: pathParameter,
+    ranges: Type.Array(Type.Object(selectors, { additionalProperties: false }), { minItems: 1 }),
+    maxLines: Type.Optional(
+      Type.Union([Type.Integer({ minimum: 1 }), StringEnum(["all"] as const)], {
+        description:
+          "Output only: total content-line budget per range (default 40), or all selected content; always subject to the overall 8 KiB ceiling.",
+      }),
+    ),
+  },
+  { additionalProperties: false },
+);
+const editParameters = Type.Object(
+  {
+    path: pathParameter,
+    edits: Type.Array(
+      Type.Object(
+        {
+          ...selectors,
+          replacement: Type.String({
+            description:
+              "Exact replacement; empty deletes. No spaces or line terminators are inferred or preserved inside the selected span.",
+          }),
+        },
+        { additionalProperties: false },
+      ),
+      { minItems: 1 },
+    ),
+  },
+  { additionalProperties: false },
+);
 
-export type BoundarySelectInput = Static<typeof selectionParameters>;
+export type BoundaryReadInput = Static<typeof readParameters>;
 export type BoundaryEditInput = Static<typeof editParameters>;
 
-interface BoundarySelectDetails {
+interface BoundaryEditDetails extends EditToolDetails {
   path: string;
-  startLine: number;
-  endLine: number;
-  selected: ReturnType<typeof blockStats>;
-  truncated: boolean;
-}
-
-interface BoundaryEditDetails extends BoundarySelectDetails, EditToolDetails {
   changed: boolean;
-  outcome: "replaced" | "deleted" | "unchanged";
-  replacement: ReturnType<typeof blockStats>;
+  entries: NonNullable<ReturnType<typeof replaceRanges>["entries"]>;
+  truncated: boolean;
   summary: string;
 }
 
@@ -91,20 +111,19 @@ function diagnosticError(text: string, error: unknown) {
 }
 
 const matchingDescription =
-  "Start must be globally unique; end must be uniquely eligible from the starting line onward and finish at a complete line boundary or EOF, enclosing the full start. Both anchor lines are included. Matching and line endings are literal.";
-const selectionGuidance =
-  "For early validation, call boundary_select and wait for its result before generating replacement text. Selection is optional and stateless: boundary_edit re-resolves anchors against the current file, with no reservation or snapshot-conflict detection.";
+  "Both endpoints use globally unique literal text and a before/after side. Positions are exact, without line snapping; the selected span is half-open. Matching is case-sensitive, including whitespace and line endings.";
+const readGuidance =
+  "Use boundary_read when known start/end content identifies the region you want to inspect. It can also validate uncertain boundaries before generating a substantial replacement for boundary_edit; reading first is optional.";
 
 export default function boundaryEdit(pi: ExtensionAPI): void {
   pi.registerTool<typeof editParameters, BoundaryEditDetails>({
     name: "boundary_edit",
     label: "Boundary edit",
-    description: `Replace one inclusive whole-line range in an existing UTF-8 file using exact start/end content. ${matchingDescription} Empty replacement deletes the range. If nonempty replacement lacks a final LF/CRLF, retain the selected final line's terminator. Direct editing needs no boundary_select call. No snapshot-conflict detection: changed interior is overwritten. Feedback and each diff preview are limited to 200 lines or 8 KiB.`,
-    promptSnippet: "Replace a whole-line block identified by exact, unique boundary content",
+    description: `Replace or delete multiple exact content-anchored regions in one existing UTF-8 file. ${matchingDescription} Resolve all edits against the same original content and validate the whole batch before writing. Overlapping regions and duplicate insertion points are rejected; shared context anchors are allowed. Replacement is literal: no inferred whitespace or retained terminators. No preflight or snapshot protection; current interior is overwritten. Validation failures leave the file unchanged, not a rollback promise after I/O failure. Feedback and each diff preview are bounded to 200 lines / 8 KiB.`,
+    promptSnippet: "Replace or delete multiple exact content-anchored regions in one file",
     promptGuidelines: [
-      "Use boundary_edit for whole-block replacement when unique start/end content is simpler than copying the full old region; prefer edit for small substitutions or ambiguous boundaries.",
-      "For boundary_edit, include both selected anchor lines in replacement if they should survive. Supply replacement as one multiline string, or an empty string for deletion.",
-      selectionGuidance,
+      "Prefer boundary editing with boundary_edit for replacing or deleting substantial regions when expressing their boundaries is simpler than reproducing their old contents. Use ordinary editing for small, exact substitutions.",
+      "For boundary_edit, use one edits array per file; all endpoints resolve against the original content. Supply exactly the replacement wanted, including any whitespace or terminators inside the selected span. Context anchors outside that span remain untouched.",
     ],
     parameters: editParameters,
     renderCall(args, theme) {
@@ -135,34 +154,42 @@ export default function boundaryEdit(pi: ExtensionAPI): void {
         return await withFileMutationQueue(absolutePath, async () => {
           const current = await readCurrentFile(absolutePath, signal);
           text = current.text;
-          if (Buffer.from(params.replacement, "utf8").toString("utf8") !== params.replacement) {
+          const result = replaceRanges(text, params.edits);
+          if (result.errors) {
             throw new Error(
-              "Replacement must be losslessly representable as UTF-8 (no unpaired surrogates).",
+              boundedOutput(
+                result.errors
+                  .map(
+                    ({ index, error }) =>
+                      `Edit ${index + 1}: ${String((diagnosticError(text, error) as Error).message)}`,
+                  )
+                  .join("\n\n"),
+              ).text,
             );
           }
-          const result = replaceRange(text, params);
           const next = Buffer.from(current.bom + result.text, "utf8");
           const changed = !current.bytes.equals(next);
-          const outcome: BoundaryEditDetails["outcome"] = !changed
-            ? "unchanged"
-            : params.replacement === ""
-              ? "deleted"
-              : "replaced";
           const diffResult = generateDiffString(text, result.text);
           const diff = boundedOutput(diffResult.diff);
           const patch = boundedOutput(
             changed ? generateUnifiedPatch(params.path, text, result.text) : "",
           );
-          const summary =
-            `${displayPath(params.path)} | ${outcome} | original lines ${result.startLine}–${result.endLine}\n` +
-            `${result.selected.lines} lines, ${result.selected.bytes} bytes → ${result.replacement.lines} lines, ${result.replacement.bytes} bytes` +
-            (diff.truncated || patch.truncated
-              ? "\n[Diff preview truncated; use read to inspect the resulting file.]"
-              : "");
+          const summaryResult = boundedOutput(
+            `${displayPath(params.path)} | ${result.entries.length} edits | ${changed ? "changed" : "unchanged"}\n` +
+              result.entries
+                .map(
+                  (entry) =>
+                    `Edit ${entry.index + 1}: ${entry.outcome} | original ${span(entry)} | ${entry.selected.lines} lines, ${entry.selected.bytes} bytes → ${entry.replacement.lines} lines, ${entry.replacement.bytes} bytes`,
+                )
+                .join("\n") +
+              (diff.truncated || patch.truncated
+                ? "\n[Diff preview truncated; use read to inspect the resulting file.]"
+                : ""),
+          );
+          const summary = summaryResult.text;
+          const output = boundedOutput(summary + (diff.text ? `\n\n${diff.text}` : ""));
           const feedback = {
-            content: [
-              { type: "text" as const, text: summary + (diff.text ? `\n\n${diff.text}` : "") },
-            ],
+            content: [{ type: "text" as const, text: output.text }],
             details: {
               path: absolutePath,
               summary,
@@ -172,12 +199,9 @@ export default function boundaryEdit(pi: ExtensionAPI): void {
                 ? {}
                 : { firstChangedLine: diffResult.firstChangedLine }),
               changed,
-              outcome,
-              startLine: result.startLine,
-              endLine: result.endLine,
-              selected: result.selected,
-              replacement: result.replacement,
-              truncated: diff.truncated || patch.truncated,
+              entries: result.entries,
+              truncated:
+                summaryResult.truncated || diff.truncated || patch.truncated || output.truncated,
             },
           };
           signal?.throwIfAborted();
@@ -200,16 +224,16 @@ export default function boundaryEdit(pi: ExtensionAPI): void {
     },
   });
 
-  pi.registerTool<typeof selectionParameters, BoundarySelectDetails>({
-    name: "boundary_select",
-    label: "Boundary select",
-    description: `Inspect one inclusive whole-line range in an existing UTF-8 file without modifying it. ${matchingDescription} Returns the inclusive line range, line/UTF-8 byte counts, and a bounded numbered preview with beginning/end excerpts when large. Optional and stateless: no selection IDs, stored snapshots, or reservations. Wait for this result before generating replacement text for boundary_edit. Feedback is limited to 200 lines or 8 KiB.`,
-    promptSnippet: "Validate and preview exact whole-line boundaries without modifying a file",
-    promptGuidelines: [selectionGuidance],
-    parameters: selectionParameters,
+  pi.registerTool({
+    name: "boundary_read",
+    label: "Boundary read",
+    description: `Read multiple content-anchored ranges in one existing UTF-8 file without modifying it. ${matchingDescription} Returns actual content, exact line:column spans and sizes per range. maxLines is output-only: default 40 content lines per range, a positive integer budget, or all. Larger ranges show beginning/end excerpts with omission markers; the entire response is capped at 8 KiB, including long lines and multiple ranges. Reports each range's success or diagnostic within that ceiling. Stateless: no snapshots, selection IDs or reservations; editing re-resolves current content.`,
+    promptSnippet: "Read exact content-anchored ranges in one file",
+    promptGuidelines: [readGuidance],
+    parameters: readParameters,
     renderCall(args, theme) {
       return new Text(
-        `${theme.fg("toolTitle", theme.bold("boundary_select"))} ${theme.fg("accent", args.path ?? "...")}`,
+        `${theme.fg("toolTitle", theme.bold("boundary_read"))} ${theme.fg("accent", args.path ?? "...")}`,
         0,
         0,
       );
@@ -222,40 +246,29 @@ export default function boundaryEdit(pi: ExtensionAPI): void {
       return new Text(`\n${theme.fg(context.isError ? "error" : "toolOutput", text)}`, 0, 0);
     },
     async execute(_id, params, signal, _update, ctx) {
-      let text = "";
+      let report: ReturnType<typeof readFeedback>;
+      let absolutePath: string;
       try {
         signal?.throwIfAborted();
-        const absolutePath = resolvePath(params.path, ctx.cwd);
-        // A queued read avoids observing an in-progress participating mutation.
-        // The queue ends with this call; nothing is reserved for a later edit.
-        return await withFileMutationQueue(absolutePath, async () => {
-          text = (await readCurrentFile(absolutePath, signal)).text;
-          const range = resolveRange(text, params);
-          const selectedText = text.slice(range.from, range.to);
-          const selected = blockStats(selectedText);
-          const preview = selectionPreview(selectedText, range.startLine);
+        absolutePath = resolvePath(params.path, ctx.cwd);
+        // Queue only this read: no reservation persists for a later edit.
+        report = await withFileMutationQueue(absolutePath, async () => {
+          const { text } = await readCurrentFile(absolutePath, signal);
+          const results = resolveRanges(text, params.ranges);
+          const feedback = readFeedback(params.path, text, results, params.maxLines);
           signal?.throwIfAborted();
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text:
-                  `${displayPath(params.path)} | selected | lines ${range.startLine}–${range.endLine}\n` +
-                  `${selected.lines} lines, ${selected.bytes} bytes | read-only\n\n${preview.text}`,
-              },
-            ],
-            details: {
-              path: absolutePath,
-              startLine: range.startLine,
-              endLine: range.endLine,
-              selected,
-              truncated: preview.truncated,
-            },
-          };
+          return feedback;
         });
       } catch (error) {
-        throw operationError("boundary_select", params.path, diagnosticError(text, error), false);
+        throw operationError("boundary_read", params.path, error, false);
       }
+      // Pi requires throwing to set isError. Keep successful content alongside
+      // all available diagnostics, without re-truncating complete read sections.
+      if (report.failed) throw new Error(report.text);
+      return {
+        content: [{ type: "text" as const, text: report.text }],
+        details: { path: absolutePath, ranges: report.ranges, truncated: report.truncated },
+      };
     },
   });
 }

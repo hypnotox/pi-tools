@@ -89,43 +89,69 @@ Both tools:
 
 ### Boundary editing
 
-Adds `boundary_edit` for replacing a whole-line block identified by exact start/end content, plus read-only `boundary_select` for optional early validation. Use boundary editing when boundaries are simpler than copying the entire old block; prefer ordinary `edit` for small substitutions.
+Use `boundary_edit` to replace or delete substantial regions when expressing their boundaries is simpler than reproducing their old contents. Use ordinary `edit` for small, exact substitutions. Use `boundary_read` independently when known start/end content identifies what you want to inspect; it can also validate uncertain boundaries before generating a substantial replacement. Reading first is optional.
+
+Both tools accept one existing UTF-8 file and arrays of ranges using the same explicit endpoints: `{ "text": "...", "side": "before" | "after" }`. Each anchor must occur **exactly once in the entire file**, counting overlapping matches. Matching is literal and case-sensitive, including whitespace and line endings. `before` is immediately before the entire matched text; `after` is immediately after it. Positions do not snap to lines. Anchors may be inline or multiline, overlap, or identify context outside the selected content.
+
+#### Editing
 
 ```json
 {
-  "path": "src/report.ts",
-  "start": "export function buildReport(",
-  "end": "  return { rows, totals };\n}",
-  "replacement": "export function buildReport(items: Item[]): Report {\n  return assembleReport(items);\n}"
+  "path": "notes.md",
+  "edits": [
+    {
+      "start": { "text": "The result is ", "side": "after" },
+      "end": { "text": ", provided", "side": "before" },
+      "replacement": "reliable"
+    }
+  ]
 }
 ```
 
-Each call operates on one range in one existing UTF-8 file. Paths may be relative to the working directory or absolute; `~/` and a leading `@` are supported.
+For `The result is acceptable, provided retries are enabled.`, this replaces only `acceptable`. The region is the half-open interval from start to end: replace exactly that content with exactly `replacement`. Empty replacement deletes it. **No spaces or line terminators are inferred, appended, or automatically retained inside the selected span.** Content outside it remains byte-for-byte unchanged. To replace a function without including the next one, use the next function's signature with `side: "before"` as the end.
 
-For early feedback before generating a large replacement, call `boundary_select` with the same `path`, `start`, and `end`, without `replacement`. **Wait for the selection result before generating replacement text.** Selection returns the inclusive line range, line/UTF-8 byte counts, and a line-numbered preview. Small selections appear in full; large selections show beginning/end excerpts with explicit omission markers. Selection does not write files, store snapshots, or reserve a range. Both tools are registered; using selection is optional, and direct editing remains supported.
+Every entry resolves against the **same original file**, not earlier entries' results. The whole batch is validated before writing. Missing/ambiguous anchors, reversed positions, invalid UTF-8 strings, or overlapping replacement regions leave the file unchanged. Shared or overlapping context anchors are fine if the actual regions are disjoint. Adjacent regions are allowed. Equal start/end positions select an empty region for insertion; duplicate insertions at the same position and insertions strictly inside another replacement are rejected. There are no cross-file transactions or rollback promises after an I/O failure.
 
-- `start` must be globally unique. Selection begins at the start of its containing line.
-- `end` must have exactly one eligible match from that starting line onward. It must finish at a complete LF/CRLF boundary or EOF and enclose the whole start anchor.
-- **Both anchor lines are replaced.** Include their content in `replacement` if you want to keep it. Empty replacement deletes the selected lines.
-- Matching is literal and case-sensitive, including whitespace and line endings. Missing or ambiguous anchors fail before writing.
-- A nonempty replacement without a final LF/CRLF retains the selected final line's terminator. Untouched content remains byte-for-byte unchanged.
+Results give an overall summary, per-entry `replaced`/`deleted`/`unchanged` outcomes and original spans, selected → replacement line/UTF-8 byte counts, and a bounded native-style diff. Counts describe the actual selected and supplied content, not diff additions/deletions. A trailing newline adds no phantom content line. Byte-identical results skip writing. Edit feedback and each stored diff/patch preview are capped at 200 lines / 8 KiB; a truncated patch is not apply-ready.
 
-Edit results show a diffstat-style summary alongside a native-style colored diff, with the same summary and bounded diff in model-facing text:
+#### Reading
 
-```text
-"src/report.ts" | replaced | original lines 12–28
-17 lines, 642 bytes → 9 lines, 318 bytes
+```json
+{
+  "path": "README.md",
+  "ranges": [
+    {
+      "start": { "text": "## Installation", "side": "before" },
+      "end": { "text": "## Configuration", "side": "before" }
+    }
+  ],
+  "maxLines": 40
+}
 ```
 
-The outcome is `replaced`, `deleted`, or `unchanged`. Counts describe the selected block → effective inserted block, not diff additions/deletions. UTF-8 byte counts include selected or inserted line terminators, including a retained final terminator, but exclude the preserved file BOM. Empty replacement has zero lines/bytes; a trailing newline adds no phantom line. An identical effective replacement reports `unchanged` without writing.
+In a document with these unique headings, this reads the installation section without the configuration heading. `ranges` can contain several independent or overlapping regions. A compact header identifies the file, each exact half-open `[line:column, line:column)` span, total content lines/UTF-8 bytes, and whether its content is complete. Positions are one-based; columns count Unicode code points. Content appears without line-number decoration and retains literal line endings.
 
-Boundary failures identify the selector and cause, suggest a concrete correction, and show bounded candidate locations and surrounding context when matches exist. End failures include the resolved start and explain ineligible matches. Candidate examples are bounded; counts distinguish exact totals from explicit lower bounds when an ambiguous search stops early. Suggestions never choose an anchor or relax literal matching. Other failures identify the operation, path, and reason; write failures warn that the file may be partially modified rather than promising no changes.
+| `maxLines` | Content returned per range |
+|---|---|
+| Omitted | Compact preview, up to 40 content lines |
+| Positive integer `N` | A total budget of N content lines |
+| `"all"` | Complete selected content, subject to the output ceiling |
 
-Feedback and each stored diff preview are capped at 200 lines or 8 KiB. Long lines may be excerpted; use `read` to inspect omitted content. A truncated patch is not apply-ready.
+`maxLines` controls output only; it never changes the selected span. Large ranges use beginning/end excerpts (with a one-line budget, only one content line fits) and explicit omission/truncation markers. The **entire read response is capped at 8 KiB**, including headers, long lines, diagnostics, and multiple ranges. Truncated content is never marked complete. When the ceiling is tight, preview space is shared so a large first range does not hide later results or diagnostics. If later ranges cannot fit, the response identifies the omitted range numbers; request fewer or narrower ranges, or use native `read` to inspect omitted content.
 
-**This is not stale-content detection:** editing re-resolves anchors against the current file, even after successful selection, and changed content inside the selected block is overwritten. Both tools use Pi's per-file mutation queue to avoid reading during participating native `edit` and `write` calls in the same runtime. Selection releases the queue when it returns; nothing is reserved for a later edit. The queue does not cover other processes or editors. Cancellation during a write does not guarantee rollback.
+Each range is resolved independently so a bad range does not hide the other results. A call with any invalid range is flagged as an error by Pi, with successful content and available per-range diagnostics retained in the error text. There are no selection IDs, stored snapshots, or reservations.
 
-Native `read`, `edit`, and `write` stay unchanged. This is an additional local-filesystem tool; remote or sandbox tool routing must configure it separately.
+#### File handling and limitations
+
+Paths may be relative to the working directory or absolute; `~/` and a leading `@` are supported. One initial UTF-8 BOM is preserved separately and excluded from editable content and counts. Malformed UTF-8 files and unpaired surrogates in anchors or replacements are rejected. LF, CRLF, lone CR, indentation, and Unicode are not normalized.
+
+Failures identify the entry, selector and cause, suggest corrections, and show bounded candidate locations/context when available. Ambiguous searches stop after six matches and distinguish that lower bound from exact totals. Corrections never guess an anchor or relax matching. I/O failures identify the operation/path/reason; once writing begins, failures warn that the file may be partially modified.
+
+**Reading is not stale-content protection:** editing re-resolves anchors against current content, and changed interiors are deliberately overwritten. Both tools use Pi's per-file mutation queue, including symlink aliases, to avoid reading during participating native `edit`/`write` calls in the same runtime. Reading releases the queue when it returns. Other processes, editors, and nonparticipating tools are not covered; cancellation during writing does not guarantee rollback.
+
+`boundary_read` replaces `boundary_select`; the old tool name and single-range string-selector API are not retained. Reload resources and update any explicit tool allowlists or callers. Content anchors are the only addressing model: no numerical selectors, hashline addressing, occurrence selectors, regex/fuzzy matching, or structural parsing.
+
+Native `read`, `edit`, and `write` stay unchanged. These are additional local-filesystem tools; remote or sandbox tool routing must configure them separately. Registration tests establish availability and guidance transport, not spontaneous model adoption or improved token usage.
 
 ## Development
 

@@ -1,27 +1,25 @@
+export interface Endpoint {
+  text: string;
+  side: "before" | "after";
+}
+
 interface RangeSelectors {
-  start: string;
-  end: string;
+  start: Endpoint;
+  end: Endpoint;
 }
 
 interface RangeReplacement extends RangeSelectors {
   replacement: string;
 }
 
-type Rejection = "before-start" | "incomplete-line" | "excludes-start";
-
-interface Candidate {
-  at: number;
-  reason?: Rejection;
-}
-
 /** Diagnostics retain bounded locations and label counts from stopped searches. */
 export class BoundaryError extends Error {
   constructor(
     readonly selector: "start" | "end",
-    readonly kind: "empty" | "missing" | "ambiguous" | "ineligible",
+    readonly kind: "empty" | "missing" | "ambiguous" | "reversed" | "invalid UTF-8",
     readonly anchor: string,
     readonly matchCount = 0,
-    readonly candidates: Candidate[] = [],
+    readonly candidates: { at: number }[] = [],
     readonly startAt?: number,
     readonly countExact = true,
   ) {
@@ -29,37 +27,26 @@ export class BoundaryError extends Error {
   }
 }
 
-function* occurrences(text: string, anchor: string, from = 0): Generator<number, void> {
-  for (let at = text.indexOf(anchor, from); at !== -1; at = text.indexOf(anchor, at + 1)) {
-    yield at;
-  }
+function* occurrences(text: string, anchor: string): Generator<number, void> {
+  for (let at = text.indexOf(anchor); at !== -1; at = text.indexOf(anchor, at + 1)) yield at;
 }
 
-/** A match must end before a complete terminator, after one, or at EOF. */
-function endingAt(text: string, afterMatch: number) {
-  if (text[afterMatch - 1] === "\n") {
-    return {
-      to: afterMatch,
-      terminator: text[afterMatch - 2] === "\r" ? "\r\n" : "\n",
-    };
-  }
-  if (text.startsWith("\r\n", afterMatch)) {
-    return { to: afterMatch + 2, terminator: "\r\n" };
-  }
-  if (text[afterMatch] === "\n" && text[afterMatch - 1] !== "\r") {
-    return { to: afterMatch + 1, terminator: "\n" };
-  }
-  if (afterMatch === text.length) return { to: afterMatch, terminator: "" };
-  return undefined;
-}
-
-export function lineNumber(text: string, offset: number): number {
+function lineNumber(text: string, offset: number): number {
   let line = 1;
   for (const at of occurrences(text, "\n")) {
     if (at >= offset) break;
     line++;
   }
   return line;
+}
+
+export function location(text: string, at: number) {
+  const from = at === 0 ? 0 : text.lastIndexOf("\n", at - 1) + 1;
+  return {
+    line: lineNumber(text, at),
+    column: [...text.slice(from, at)].length + 1,
+    offset: at - from,
+  };
 }
 
 export function blockStats(text: string) {
@@ -69,106 +56,123 @@ export function blockStats(text: string) {
   };
 }
 
-/** Resolve literal selectors against current editable text (the adapter owns the BOM). */
-export function resolveRange(text: string, { start, end }: RangeSelectors) {
-  if (!start.length) throw new BoundaryError("start", "empty", start);
-
-  const starts: Candidate[] = [];
-  let startCount = 0;
-  for (const at of occurrences(text, start)) {
-    startCount++;
-    if (starts.length < 5) starts.push({ at });
+function resolveEndpoint(
+  text: string,
+  endpoint: Endpoint,
+  selector: "start" | "end",
+  startAt?: number,
+) {
+  const anchor = endpoint.text;
+  if (!anchor.length) throw new BoundaryError(selector, "empty", anchor, 0, [], startAt);
+  if (Buffer.from(anchor, "utf8").toString("utf8") !== anchor) {
+    throw new BoundaryError(selector, "invalid UTF-8", anchor, 0, [], startAt);
+  }
+  const candidates: { at: number }[] = [];
+  let count = 0;
+  for (const at of occurrences(text, anchor)) {
+    count++;
+    if (candidates.length < 5) candidates.push({ at });
     else break;
   }
-  const startAt = starts[0]?.at;
-  if (startAt === undefined) throw new BoundaryError("start", "missing", start);
-  if (startCount > 1) {
-    throw new BoundaryError(
-      "start",
-      "ambiguous",
-      start,
-      startCount,
-      starts,
-      undefined,
-      startCount <= 5,
-    );
+  const at = candidates[0]?.at;
+  if (at === undefined) throw new BoundaryError(selector, "missing", anchor, 0, [], startAt);
+  if (count > 1) {
+    throw new BoundaryError(selector, "ambiguous", anchor, count, candidates, startAt, count <= 5);
   }
-  if (!end.length) throw new BoundaryError("end", "empty", end, 0, [], startAt);
-  const from = startAt === 0 ? 0 : text.lastIndexOf("\n", startAt - 1) + 1;
-
-  let selectedEnd: ReturnType<typeof endingAt>;
-  let eligibleCount = 0;
-  let literalCount = 0;
-  const eligible: Candidate[] = [];
-  const rejected: Record<Rejection, Candidate[]> = {
-    "before-start": [],
-    "incomplete-line": [],
-    "excludes-start": [],
-  };
-  for (const endAt of occurrences(text, end)) {
-    literalCount++;
-    const candidate = endingAt(text, endAt + end.length);
-    const reason =
-      endAt < from
-        ? "before-start"
-        : !candidate
-          ? "incomplete-line"
-          : candidate.to < startAt + start.length
-            ? "excludes-start"
-            : undefined;
-    if (reason) {
-      // Preserve examples of every rejection kind rather than letting earlier
-      // occurrences hide a different eligibility problem later in the file.
-      if (rejected[reason].length < 2) rejected[reason].push({ at: endAt, reason });
-      continue;
-    }
-    eligibleCount++;
-    if (eligible.length < 5) eligible.push({ at: endAt });
-    else break;
-    selectedEnd = candidate;
-  }
-  if (eligibleCount > 1) {
-    throw new BoundaryError(
-      "end",
-      "ambiguous",
-      end,
-      eligibleCount,
-      eligible,
-      startAt,
-      eligibleCount <= 5,
-    );
-  }
-  if (!selectedEnd) {
-    throw new BoundaryError(
-      "end",
-      literalCount ? "ineligible" : "missing",
-      end,
-      literalCount,
-      Object.values(rejected)
-        .flat()
-        .sort((a, b) => a.at - b.at),
-      startAt,
-    );
-  }
-
-  const { to, terminator } = selectedEnd;
-  return {
-    from,
-    to,
-    terminator,
-    startLine: lineNumber(text, from),
-    endLine: lineNumber(text, to - terminator.length),
-  };
+  return at + (endpoint.side === "after" ? anchor.length : 0);
 }
 
-export function replaceRange(text: string, { replacement, ...selectors }: RangeReplacement) {
-  const range = resolveRange(text, selectors);
-  const inserted =
-    replacement && !replacement.endsWith("\n") ? replacement + range.terminator : replacement;
+/** Resolve exact half-open positions in editable text (the adapter owns the BOM). */
+export function resolveRange(text: string, { start, end }: RangeSelectors) {
+  const from = resolveEndpoint(text, start, "start");
+  const to = resolveEndpoint(text, end, "end", from);
+  if (to < from) {
+    throw new BoundaryError(
+      "end",
+      "reversed",
+      end.text,
+      1,
+      [{ at: to - (end.side === "after" ? end.text.length : 0) }],
+      from,
+    );
+  }
+  return { from, to, start: location(text, from), end: location(text, to) };
+}
+
+/** Resolve each selector independently so one bad range does not hide the others. */
+export function resolveRanges(text: string, ranges: RangeSelectors[]) {
+  return ranges.map((selectors) => {
+    try {
+      return { range: resolveRange(text, selectors) };
+    } catch (error) {
+      if (!(error instanceof BoundaryError)) throw error;
+      return { error };
+    }
+  });
+}
+
+/** Validate the entire original-file batch before building the replacement text. */
+export function replaceRanges(text: string, edits: RangeReplacement[]) {
+  const resolved = resolveRanges(text, edits);
+  const errors: { index: number; error: Error }[] = [];
+  const entries = resolved.flatMap((result, index) => {
+    const edit = edits[index];
+    if (!edit) throw new Error("Missing edit");
+    if (result.error) errors.push({ index, error: result.error });
+    if (Buffer.from(edit.replacement, "utf8").toString("utf8") !== edit.replacement) {
+      errors.push({
+        index,
+        error: new Error(
+          "Replacement must be losslessly representable as UTF-8 (no unpaired surrogates).",
+        ),
+      });
+    }
+    return result.range ? [{ index, ...result.range, inserted: edit.replacement }] : [];
+  });
+  const sorted = [...entries].sort((a, b) => a.from - b.from || a.to - b.to);
+  let previous: (typeof sorted)[number] | undefined;
+  let insertion: (typeof sorted)[number] | undefined;
+  for (const entry of sorted) {
+    // Adjacent regions and insertions at edges are independent. Duplicate
+    // insertion points are rejected rather than imposing an array-order policy.
+    const conflict =
+      entry.from === entry.to && insertion?.from === entry.from
+        ? insertion
+        : previous && entry.from < previous.to
+          ? previous
+          : undefined;
+    if (conflict) {
+      errors.push({
+        index: entry.index,
+        error: new Error(
+          `Replacement region overlaps edit ${conflict.index + 1}. Merge the edits or choose disjoint regions; shared context anchors are allowed.`,
+        ),
+      });
+    }
+    if (entry.from === entry.to) insertion = entry;
+    if (!previous || entry.to > previous.to) previous = entry;
+  }
+  if (errors.length) return { errors };
+
+  let cursor = 0;
+  const parts: string[] = [];
+  for (const entry of sorted) {
+    parts.push(text.slice(cursor, entry.from), entry.inserted);
+    cursor = entry.to;
+  }
+  parts.push(text.slice(cursor));
   return {
-    ...range,
-    selected: blockStats(text.slice(range.from, range.to)),
-    replacement: blockStats(inserted),
-    text: text.slice(0, range.from) + inserted + text.slice(range.to),
+    text: parts.join(""),
+    entries: entries.map(({ inserted, ...entry }) => ({
+      ...entry,
+      selected: blockStats(text.slice(entry.from, entry.to)),
+      replacement: blockStats(inserted),
+      outcome:
+        text.slice(entry.from, entry.to) === inserted
+          ? ("unchanged" as const)
+          : inserted === ""
+            ? ("deleted" as const)
+            : ("replaced" as const),
+    })),
   };
 }
