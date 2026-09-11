@@ -36,7 +36,7 @@ export default function compactExtension(pi: ExtensionAPI): void {
     field: "instructions",
     label: "Guided compaction",
     description:
-      "Compact context using Pi's native summarizer in the same session and runtime, then continue on success unless another continuation is observable through Pi's supported events/state. Allow the operation to finish before submitting new input; earlier async input hooks can hide an incoming prompt from continuation arbitration. Call this tool alone, without sibling tool calls. Supply brief, nonblank instructions identifying what matters most to preserve from the conversation. Refer to relevant context rather than retelling it; restate only essential facts that need emphasis. Use concrete references rather than vague labels. Do not write a handoff or replacement summary, or start a separate kickoff, planning, alignment, or review cycle just to compact.",
+      "Compact context using Pi's native summarizer in the same session and runtime, then continue. Call this tool alone, without sibling tool calls. Supply brief, nonblank instructions identifying what matters most to preserve from the conversation. Refer to relevant context rather than retelling it; restate only essential facts that need emphasis. Use concrete references rather than vague labels. Do not write a handoff or replacement summary, or start a separate kickoff, planning, alignment, or review cycle just to compact.",
     randomUUID,
     async run(instructions, context, current) {
       const startingVersion = continuationVersion;
