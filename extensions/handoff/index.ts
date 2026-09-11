@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { registerContextOperation } from "../context-lifecycle.js";
+import { extensionContext } from "../extension-context.js";
 import {
   HANDOFF_CONTINUITY_ENTRY,
   HANDOFF_CONTINUITY_REQUEST,
@@ -15,7 +16,7 @@ export interface HandoffDependencies {
 }
 
 export function handoffEnvelope(kickoff: string): string {
-  return `Handoff context from the previous session; this is not user input:\n\n${kickoff}`;
+  return extensionContext("handoff", kickoff);
 }
 
 function isSessionContinuation(value: unknown): value is HandoffSessionContinuation {

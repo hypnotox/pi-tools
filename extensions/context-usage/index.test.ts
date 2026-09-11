@@ -8,18 +8,12 @@ describe("context usage extension", () => {
       contextUsageLine({
         getContextUsage: () => ({ tokens: 118_200, contextWindow: 272_000 }),
       }),
-    ).toBe(
-      "[session context] tokens=~118200; context-window=272000; remaining=~153800; used=~43.46%",
-    );
+    ).toBe("tokens=~118200; context-window=272000; remaining=~153800; used=~43.46%");
   });
 
   it.each([
-    [0, 4_000, "[session context] tokens=~0; context-window=4000; remaining=~4000; used=~0.00%"],
-    [
-      5_000,
-      4_000,
-      "[session context] tokens=~5000; context-window=4000; remaining=~-1000; used=~125.00%",
-    ],
+    [0, 4_000, "tokens=~0; context-window=4000; remaining=~4000; used=~0.00%"],
+    [5_000, 4_000, "tokens=~5000; context-window=4000; remaining=~-1000; used=~125.00%"],
   ])("marks valid estimated arithmetic for tokens=%s", (tokens, contextWindow, expected) => {
     expect(contextUsageLine({ getContextUsage: () => ({ tokens, contextWindow }) })).toBe(expected);
   });
@@ -32,9 +26,7 @@ describe("context usage extension", () => {
     { tokens: 10.5, contextWindow: 4_000 },
     { tokens: 10, contextWindow: 0 },
   ])("reports unavailable for unavailable source values %#", (usage) => {
-    expect(contextUsageLine({ getContextUsage: () => usage })).toBe(
-      "[session context] unavailable",
-    );
+    expect(contextUsageLine({ getContextUsage: () => usage })).toBe("unavailable");
   });
 
   it("injects a fresh hidden message without scanning session history", async () => {
@@ -53,7 +45,7 @@ describe("context usage extension", () => {
           role: "custom",
           customType: "context-usage",
           content: expect.stringContaining(
-            "[session context] tokens=~2000; context-window=4000; remaining=~2000; used=~50.00%",
+            "tokens=~2000; context-window=4000; remaining=~2000; used=~50.00%",
           ),
           display: false,
         },
@@ -124,23 +116,26 @@ describe("pressure policy", () => {
   });
 
   it.each([[], ["compact_session"], ["handoff_session"], ["compact_session", "handoff_session"]])(
-    "only advertises active tools %j",
+    "delimits declarative guidance and only advertises active tools %j",
     async (...active: string[]) => {
       const harness = createExtensionHarness();
       Object.assign(harness.api, { getActiveTools: () => active });
       registerContextUsage(harness.api);
-      const results = JSON.stringify(
-        await harness.invoke(
+      for (const tokens of [undefined, 1_000, 70_000, 80_000, 90_000]) {
+        const [result] = await harness.invoke(
           "context",
           { messages: [] },
-          {
-            getContextUsage: () => ({ tokens: 90_000, contextWindow: 100_000 }),
-          },
-        ),
-      );
-      expect(results.includes("compact_session")).toBe(active.includes("compact_session"));
-      expect(results.includes("handoff_session")).toBe(active.includes("handoff_session"));
-      expect(results).toContain("Does this live session need to survive?");
+          { getContextUsage: () => ({ tokens, contextWindow: 100_000 }) },
+        );
+        const { messages } = result as { messages: Array<{ content: string }> };
+        const content = messages[0]?.content;
+        expect(content).toMatch(
+          /^<extension-context source="pi-tools\/context-usage">\n[\s\S]+\n<\/extension-context>$/,
+        );
+        expect(content?.includes("compact_session")).toBe(active.includes("compact_session"));
+        expect(content?.includes("handoff_session")).toBe(active.includes("handoff_session"));
+        expect(content).not.toMatch(/\?|ask the user/i);
+      }
     },
   );
 });
