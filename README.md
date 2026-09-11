@@ -18,6 +18,20 @@ pi update --extensions
 
 Installs and updates resolve current dependencies; a running installation does not update itself.
 
+## Injected context
+
+Extension-injected context must have paired tags identifying its source:
+
+```xml
+<extension-context source="pi-tools/compact">
+Guided compaction completed. Continue the preserved objective and next action.
+</extension-context>
+```
+
+This covers context-pressure guidance, handoff kickoffs, and compaction outcome/continuation messages. Extension-written framing and guidance must be terse and declarative: relevant facts and necessary instructions, without questions or requests for a response. Handoff payloads remain intact inside the wrapper.
+
+Already identified tool descriptions/results, skills, and user-invoked prompts need no additional wrapper. Pi's native summarization input and summary format remain unchanged. These tags label the source; they do not change Pi's message role.
+
 ## Extensions
 
 ### Working title

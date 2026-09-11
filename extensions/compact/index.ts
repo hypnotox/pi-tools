@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerContextOperation } from "../context-lifecycle.js";
+import { extensionContext } from "../extension-context.js";
 
 export default function compactExtension(pi: ExtensionAPI): void {
   let continuationVersion = 0;
@@ -64,11 +65,14 @@ export default function compactExtension(pi: ExtensionAPI): void {
                 pi.sendMessage(
                   {
                     customType: "session-guided-compaction",
-                    content: nativeAttempt.signal?.aborted
-                      ? "Guided compaction completed, but automatic continuation was canceled. The saved native checkpoint was not rolled back."
-                      : pendingMessages
-                        ? "Guided compaction completed. Process the pending messages and continue the preserved objective as appropriate."
-                        : "Guided compaction completed. Continue the preserved objective and next action from the compacted context.",
+                    content: extensionContext(
+                      "compact",
+                      nativeAttempt.signal?.aborted
+                        ? "Guided compaction completed; automatic continuation canceled. Checkpoint retained."
+                        : pendingMessages
+                          ? "Guided compaction completed. Process pending messages before continuing the preserved objective."
+                          : "Guided compaction completed. Continue the preserved objective and next action.",
+                    ),
                     display: true,
                   },
                   { triggerTurn: resume },
@@ -85,7 +89,10 @@ export default function compactExtension(pi: ExtensionAPI): void {
                 pi.sendMessage(
                   {
                     customType: "session-guided-compaction",
-                    content: `Guided compaction did not complete: ${error.message}. No automatic retry was requested.`,
+                    content: extensionContext(
+                      "compact",
+                      `Guided compaction did not complete: ${error.message}. No automatic retry.`,
+                    ),
                     display: true,
                   },
                   { triggerTurn: false },

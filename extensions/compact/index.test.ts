@@ -53,6 +53,57 @@ function fixture() {
 }
 
 describe("guided compaction adapter", () => {
+  it.each(["complete", "pending", "canceled", "failed"] as const)(
+    "delimits the %s outcome without changing continuation",
+    async (outcome) => {
+      const f = fixture();
+      f.ctx.hasPendingMessages = () => outcome === "pending";
+      await f.start();
+      await f.execute();
+      const command = f.command();
+      await Promise.resolve();
+      const options = f.compact.mock.calls[0]?.[0];
+      expect(options).toBeDefined();
+      if (outcome === "canceled") {
+        const controller = new AbortController();
+        await f.invoke(
+          "session_before_compact",
+          {
+            reason: "manual",
+            customInstructions: options?.customInstructions,
+            signal: controller.signal,
+          },
+          f.ctx,
+        );
+        controller.abort();
+      }
+      if (outcome === "failed") options?.onError?.(new Error("Native failure"));
+      else
+        options?.onComplete?.({
+          summary: "Saved summary.",
+          firstKeptEntryId: "kept",
+          tokensBefore: 1_000,
+        });
+      await command;
+      expect(f.messages).toEqual([
+        [
+          expect.objectContaining({
+            customType: "session-guided-compaction",
+            content: expect.stringMatching(
+              /^<extension-context source="pi-tools\/compact">\n[\s\S]+\n<\/extension-context>$/,
+            ),
+            display: true,
+          }),
+          { triggerTurn: outcome === "complete" || outcome === "pending" },
+        ],
+      ]);
+      if (outcome === "failed")
+        expect(f.messages[0]?.[0]).toMatchObject({
+          content: expect.stringContaining("Native failure"),
+        });
+    },
+  );
+
   it("keeps the owned lease until the terminal callback and rejects competing handoff", async () => {
     const f = fixture();
     await f.start();
